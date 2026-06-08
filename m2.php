@@ -291,6 +291,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Nullpunkts</title>
+    <link rel="shortcut icon" href="/img/logomonochrome.ico" type="image/x-icon">
     <link rel="preload" href="img/<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>.mp3" as="audio" type="audio/mpeg">
     <link rel="preload" href="img/<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>.gif" as="image" type="image/gif">
     <link rel="preload" href="/m/img/BabelStoneHan.ttf" as="font" type="font/ttf" crossorigin>
@@ -724,7 +725,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
         #seekWrap {
-            height: 55vh;
+            height: 45vh;
             flex-shrink: 0;
             width: 3px;
             background: rgba(255, 255, 255, .2);
@@ -1805,7 +1806,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 </div>
                 <div class="mLbl">M</div>
                 <div class="mSwSlot">
-                    <div class="mSw"><img id="mK" class="mSwimg" src="img/sc.png" data-asset="sc.png" draggable="false" alt="K"></div>
+                    <div class="mSw"><img id="mK" class="mSwimg" src="img/sd.png" data-asset="sd.png" draggable="false" alt="K"></div>
                 </div>
                 <div class="mLbl">K</div>
             </div>
@@ -1904,7 +1905,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 el.src = aimg(el.dataset.asset);
             });
         }
-        ASSET_READY.then(applyAssetBlobs);
+        ASSET_READY.then(() => { applyAssetBlobs(); mSyncControls(); });
 
         function playUi(name) {
             const a = uiAudio[name];
@@ -1912,6 +1913,25 @@ $chosenLoader = 'waiting' . ($n ?: '');
             try {
                 a.currentTime = 0;
                 a.play().catch(() => {});
+            } catch (e) {}
+        }
+
+        function startAlarm() {
+            const a = uiAudio.firealarm;
+            if (!a) return;
+            try {
+                a.loop = true;
+                a.currentTime = 0;
+                a.play().catch(() => {});
+            } catch (e) {}
+        }
+
+        function stopAlarm() {
+            const a = uiAudio.firealarm;
+            if (!a) return;
+            try {
+                a.pause();
+                a.currentTime = 0;
             } catch (e) {}
         }
 
@@ -2131,6 +2151,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         const seekDot = document.getElementById('seekDot');
         const seekTime = document.getElementById('seekTime');
         let lrcMode = true;
+        window.__npK = () => lrcMode;
 
         let renderSpeedKnob = () => {},
             renderRevKnob = () => {},
@@ -2433,15 +2454,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
             let lArmed = false;
             let lSuppressClick = false;
 
-            const lStopAlarm = () => {
-                const a = uiAudio.firealarm;
-                if (a) {
-                    try {
-                        a.pause();
-                        a.currentTime = 0;
-                    } catch (e) {}
-                }
-            };
+            const lStopAlarm = stopAlarm;
             const lCleanupHold = () => {
                 if (lHoldTimer) {
                     clearTimeout(lHoldTimer);
@@ -2461,7 +2474,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 lArmed = false;
                 lb.style.color = '';
                 lb.classList.add('lFlashing');
-                playUi('firealarm');
+                startAlarm();
                 lHoldTimer = setTimeout(() => {
                     lHoldTimer = null;
                     lStopAlarm();
@@ -2713,24 +2726,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
             const arm = () => playUi('arm');
             const playSingelPress = () => playUi('singelpress');
             const playChimeTwice = () => playUi('chimetwice');
-            let fireAlarm = null;
-            const startFire = () => {
-                if (!fireAlarm) {
-                    fireAlarm = new Audio(aimg('fire-alarm.mp3'));
-                    fireAlarm.loop = true;
-                }
-                try {
-                    fireAlarm.currentTime = 0;
-                    fireAlarm.play().catch(() => {});
-                } catch (e) {}
-            };
-            const stopFire = () => {
-                if (fireAlarm) {
-                    try {
-                        fireAlarm.pause();
-                    } catch (e) {}
-                }
-            };
+            const startFire = startAlarm;
+            const stopFire = stopAlarm;
 
 
             function makeRotary(el, onTwist, onDown, onUp) {
@@ -3060,26 +3057,38 @@ $chosenLoader = 'waiting' . ($n ?: '');
             const mK = $('mK');
             const paintK = () => {
                 if (!mK) return;
-                const on = kBtn.style.color === 'yellow';
-                const s = on ? ST.D : ST.C;
+                const s = lrcMode ? ST.D : ST.C;
                 mK.src = aimg(s.f);
                 mK.style.transform = 'translate(-49.2%, ' + s.ty + '%)';
             };
             if (mK) {
-                const toggleK = () => {
-                    if (kBtn.onclick) kBtn.onclick();
-                    arm();
-                    paintK();
-                };
-                mK.addEventListener('click', toggleK);
+                mK.addEventListener('click', () => {
+                    if (lrcMode) {
+                        lrcMode = false;
+                        kBtn.style.color = 'yellow';
+                        arm();
+                        paintK();
+                    }
+                });
                 mK.addEventListener('contextmenu', e => {
                     e.preventDefault();
-                    toggleK();
+                    if (!lrcMode) {
+                        lrcMode = true;
+                        kBtn.style.color = 'white';
+                        arm();
+                        paintK();
+                    }
                 });
                 mK.addEventListener('wheel', e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    toggleK();
+                    const goOn = e.deltaY < 0;
+                    if (goOn !== lrcMode) {
+                        lrcMode = goOn;
+                        kBtn.style.color = lrcMode ? 'white' : 'yellow';
+                        arm();
+                        paintK();
+                    }
                 }, {
                     passive: false
                 });
@@ -3915,6 +3924,100 @@ $chosenLoader = 'waiting' . ($n ?: '');
         })();
     </script>
     <iframe id="comFrame" src="about:blank"></iframe>
+    <script>
+        (function () {
+            const PRESENCE_PORT = 6700;
+            const ENDPOINT = 'http://127.0.0.1:' + PRESENCE_PORT + '/np';
+            const ART_BASE = (location.hostname === 'nullpunkts.com.pr')
+                ? 'https://nullpunkts.share.zrok.io'
+                : location.origin;
+
+            const isCardAudio = el =>
+                el && el.tagName === 'AUDIO' && el.id !== 'loaderAudio' && el.closest('.card');
+
+            function collageInfo(audio) {
+                if (!(window.__npK && window.__npK())) return null;
+                const card = audio.closest('.card');
+                if (!card) return null;
+                const dur = audio.duration;
+                if (!dur || !isFinite(dur)) return null;
+                const lines = card.querySelectorAll('.lrcLine');
+                if (lines.length < 2) return null;
+                const segs = [];
+                for (let i = 0; i < lines.length; i++) {
+                    const start = parseFloat(lines[i].dataset.t);
+                    if (isNaN(start)) continue;
+                    let end = dur;
+                    const next = lines[i + 1];
+                    if (next) { const ns = parseFloat(next.dataset.t); if (!isNaN(ns)) end = ns; }
+                    if (end - start > 45) segs.push([start, end, (lines[i].textContent || '').trim()]);
+                }
+                if (!segs.length) return null;
+                const t = audio.currentTime;
+                let cur = segs[segs.length - 1];
+                for (const s of segs) { if (t >= s[0] && t < s[1]) { cur = s; break; } }
+                return { part: cur[2], start: cur[0], end: cur[1] };
+            }
+
+            function buildState(audio, paused) {
+                const card = audio.closest('.card');
+                if (!card) return null;
+                let name = (card.querySelector('.cName')?.textContent || '').trim();
+                const category = (card.closest('.cardWrap')?.dataset.category || '').trim();
+                let art = '';
+                const imgEl = card.querySelector('.cImg img');
+                const raw = imgEl ? (imgEl.dataset.src || imgEl.getAttribute('src') || '') : '';
+                if (raw && !raw.startsWith('blob:')) {
+                    try { art = new URL(raw, ART_BASE).href; } catch (e) { art = ''; }
+                }
+                let startMs = 0, endMs = 0;
+                const dur = audio.duration;
+                const col = collageInfo(audio);
+                if (col) {
+                    if (col.part) name = name ? (name + ' — ' + col.part) : col.part;
+                    startMs = Math.round(Date.now() - (audio.currentTime - col.start) * 1000);
+                    endMs = Math.round(startMs + (col.end - col.start) * 1000);
+                } else if (dur && isFinite(dur)) {
+                    startMs = Math.round(Date.now() - audio.currentTime * 1000);
+                    endMs = Math.round(startMs + dur * 1000);
+                }
+                return { name, category, art, startMs, endMs, paused: !!paused };
+            }
+
+            function push(obj) {
+                try {
+                    fetch(ENDPOINT, {
+                        method: 'POST',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify(obj),
+                        keepalive: true
+                    }).catch(() => {});
+                } catch (e) {}
+            }
+
+            let lastKey = '', lastSentAt = 0;
+            function send(audio, paused) {
+                const st = buildState(audio, paused);
+                if (!st || !st.name) return;
+                if (!paused && !st.endMs) return;
+                const k = (paused ? 'P|' : '') + st.name + '|' + Math.round(st.startMs / 1000) + '|' + Math.round(st.endMs / 1000);
+                const now = Date.now();
+                if (k === lastKey && now - lastSentAt < 15000) return;
+                lastKey = k;
+                lastSentAt = now;
+                push(st);
+            }
+
+            ['play', 'playing', 'loadedmetadata', 'durationchange', 'seeked'].forEach(ev =>
+                document.addEventListener(ev, e => {
+                    if (isCardAudio(e.target) && !e.target.paused) send(e.target, false);
+                }, true));
+            document.addEventListener('pause', e => { if (isCardAudio(e.target)) send(e.target, true); }, true);
+            document.addEventListener('ended', e => { if (isCardAudio(e.target)) { lastKey = ''; push({ clear: true }); } }, true);
+            document.addEventListener('timeupdate', e => { if (isCardAudio(e.target) && !e.target.paused) send(e.target, false); }, true);
+            window.addEventListener('pagehide', () => { lastKey = ''; push({ clear: true }); });
+        })();
+    </script>
 </body>
 
 </html>
