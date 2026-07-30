@@ -18,18 +18,21 @@ function Log($msg) {
 }
 
 $script:pipe = $null
+$script:nextConnect = [DateTime]::MinValue
 
 function Connect-Discord {
     if ($script:pipe -and $script:pipe.IsConnected) { return $true }
+    if ([DateTime]::UtcNow -lt $script:nextConnect) { return $false }
     if ($ClientId -eq 'PASTE_YOUR_DISCORD_APPLICATION_ID_HERE' -or [string]::IsNullOrWhiteSpace($ClientId)) {
         Log 'ERROR: $ClientId is not set — edit presence.ps1 and paste your Discord Application ID.'
+        $script:nextConnect = [DateTime]::UtcNow.AddSeconds(30)
         return $false
     }
     for ($i = 0; $i -le 9; $i++) {
         try {
             $p = New-Object System.IO.Pipes.NamedPipeClientStream('.', "discord-ipc-$i", `
                     [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::Asynchronous)
-            $p.Connect(800)
+            $p.Connect(200)
             $script:pipe = $p
             Write-Frame 0 ('{"v":1,"client_id":"' + $ClientId + '"}')
             $ready = Read-Frame
@@ -39,6 +42,7 @@ function Connect-Discord {
         }
     }
     $script:pipe = $null
+    $script:nextConnect = [DateTime]::UtcNow.AddSeconds(10)
     return $false
 }
 
@@ -88,10 +92,23 @@ function Clear-Activity {
     Send-Activity $null
 }
 
+function Limit-Text([string]$s) {
+    if ([string]::IsNullOrEmpty($s)) { return $s }
+    if ($s.Length -le 128) { return $s }
+    $sep = ' — '
+    $idx = $s.LastIndexOf($sep)
+    if ($idx -gt 0) {
+        $y = $s.Substring($idx)
+        $budget = 127 - $y.Length
+        if ($budget -ge 1) { return $s.Substring(0, $budget) + '…' + $y }
+    }
+    return $s.Substring(0, 127) + '…'
+}
+
 function Build-Activity($d) {
     $activity = @{ type = 2 }
-    if ($d.name)     { $activity.details = [string]$d.name }
-    if ($d.category) { $activity.state   = [string]$d.category }
+    if ($d.name)     { $activity.details = Limit-Text ([string]$d.name) }
+    if ($d.category) { $activity.state   = Limit-Text ([string]$d.category) }
 
     $assets = @{}
     if ($d.art -and ([string]$d.art).StartsWith('http')) {

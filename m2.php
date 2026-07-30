@@ -1,6 +1,274 @@
 <?php
 
 declare(strict_types=1);
+
+const M2_BROWSER_CACHE_VERSION = '5';
+const M2_PAGE_CODE_VERSION = '41';
+const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
+const M2_ARCHIVE_SAMPLE_BYTES = 65536;
+
+require_once dirname(__DIR__) . '/wiki/vendor/autoload.php';
+
+function m2_code_variant(): string
+{
+    $variant = $_GET['v'] ?? M2_PAGE_CODE_VERSION;
+    if (!is_string($variant)) return M2_PAGE_CODE_VERSION;
+    $variant = trim($variant);
+    if ($variant === '' || strlen($variant) > 96) return M2_PAGE_CODE_VERSION;
+    return $variant;
+}
+
+function m2_xor_script(string $source, int $state): string
+{
+    $result = '';
+    $length = strlen($source);
+    for ($i = 0; $i < $length; $i++) {
+        $state = (($state * 1664525) + 1013904223) & 0xffffffff;
+        $result .= chr(ord($source[$i]) ^ (($state >> 24) & 0xff));
+    }
+    return $result;
+}
+
+function m2_encode_script(string $source, string $variant, int $index): string
+{
+    try {
+        $source = Wikimedia\Minify\JavaScriptMinifier::minify($source);
+    } catch (Throwable) {
+    }
+    $digest = hash('sha256', M2_PAGE_CODE_VERSION . "\0" . $variant . "\0" . $index, true);
+    $state = unpack('N', substr($digest, 0, 4))[1] ?: 1;
+    $suffix = substr(bin2hex($digest), 8, 12);
+    $stateName = '_s' . $suffix;
+    $bytesName = '_b' . $suffix;
+    $charName = '_c' . $suffix;
+    $indexName = '_i' . $suffix;
+    $textName = '_t' . $suffix;
+    $payload = base64_encode(m2_xor_script($source, $state));
+    return '<script>(()=>{let ' . $stateName . '=' . $state . ',' . $bytesName
+        . '=Uint8Array.from(atob(\'' . $payload . '\'),' . $charName . '=>'
+        . $charName . '.charCodeAt(0));for(let ' . $indexName . '=0;' . $indexName
+        . '<' . $bytesName . '.length;' . $indexName . '++){' . $stateName
+        . '=(Math.imul(' . $stateName . ',1664525)+1013904223)>>>0;'
+        . $bytesName . '[' . $indexName . ']^=' . $stateName
+        . '>>>24}let ' . $textName . '=new TextDecoder().decode(' . $bytesName
+        . ');(0,eval)(' . $textName . ')})()</script>';
+}
+
+function m2_transform_document(string $html): string
+{
+    $variant = m2_code_variant();
+    $scriptIndex = 0;
+    $html = preg_replace_callback(
+        '~<script\b([^>]*)>(.*?)</script\s*>~is',
+        static function (array $match) use ($variant, &$scriptIndex): string {
+            if (preg_match('/\bsrc\s*=/i', $match[1])) return $match[0];
+            if (preg_match('/\btype\s*=\s*([\'\"])(?!text\/javascript\1|application\/javascript\1)/i', $match[1])) {
+                return $match[0];
+            }
+            return m2_encode_script($match[2], $variant, $scriptIndex++);
+        },
+        $html
+    ) ?? $html;
+    $html = preg_replace_callback(
+        '~<style\b([^>]*)>(.*?)</style\s*>~is',
+        static function (array $match): string {
+            try {
+                $css = Wikimedia\Minify\CSSMin::minify($match[2]);
+            } catch (Throwable) {
+                $css = $match[2];
+            }
+            return '<style' . $match[1] . '>' . $css . '</style>';
+        },
+        $html
+    ) ?? $html;
+    return preg_replace('/>\s+</u', '> <', $html) ?? $html;
+}
+
+function m2_versioned_asset(string $url): string
+{
+    $separator = str_contains($url, '?') ? '&' : '?';
+    return $url . $separator . 'v=' . rawurlencode(M2_BROWSER_CACHE_VERSION);
+}
+
+function m2_archive_mime(string $path): string
+{
+    $types = [
+        'mp3' => 'audio/mpeg',
+        'mp4' => 'video/mp4',
+        'webm' => 'video/webm',
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'gif' => 'image/gif',
+        'svg' => 'image/svg+xml',
+        'ico' => 'image/x-icon',
+        'woff' => 'font/woff',
+        'woff2' => 'font/woff2',
+        'ttf' => 'font/ttf',
+        'otf' => 'font/otf',
+        'css' => 'text/css',
+        'js' => 'text/javascript'
+    ];
+    $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    if (isset($types[$extension])) return $types[$extension];
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = $finfo->file($path);
+    return is_string($mime) && $mime !== '' ? strtolower($mime) : 'application/octet-stream';
+}
+
+function m2_archive_read_bytes($handle, int $length): string
+{
+    $data = '';
+    while (strlen($data) < $length && !feof($handle)) {
+        $chunk = fread($handle, $length - strlen($data));
+        if ($chunk === false) throw new RuntimeException('Unable to read archive fingerprint sample');
+        if ($chunk === '') break;
+        $data .= $chunk;
+    }
+    if (strlen($data) !== $length) throw new RuntimeException('Archive fingerprint sample was incomplete');
+    return $data;
+}
+
+function m2_archive_fingerprint(string $path, string $key, string $mime, int $size): string
+{
+    $firstLength = min(M2_ARCHIVE_SAMPLE_BYTES, $size);
+    $lastStart = max($firstLength, $size - M2_ARCHIVE_SAMPLE_BYTES);
+    $lastLength = $size - $lastStart;
+    $metadata = json_encode([
+        'protocol' => M2_ARCHIVE_FINGERPRINT_PROTOCOL,
+        'key' => $key,
+        'mime' => $mime,
+        'size' => $size,
+        'sampleBytes' => M2_ARCHIVE_SAMPLE_BYTES
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
+    $handle = fopen($path, 'rb');
+    if ($handle === false) throw new RuntimeException('Unable to open archive fingerprint source');
+    try {
+        $context = hash_init('sha256');
+        hash_update($context, $metadata);
+        if ($firstLength > 0) hash_update($context, m2_archive_read_bytes($handle, $firstLength));
+        if ($lastLength > 0) {
+            if (fseek($handle, $lastStart) !== 0) throw new RuntimeException('Unable to seek archive fingerprint source');
+            hash_update($context, m2_archive_read_bytes($handle, $lastLength));
+        }
+        return hash_final($context);
+    } finally {
+        fclose($handle);
+    }
+}
+
+function m2_archive_url_path(string $root, string $path): string
+{
+    $relative = ltrim(str_replace('\\', '/', substr($path, strlen($root))), '/');
+    return '/' . implode('/', array_map('rawurlencode', explode('/', $relative)));
+}
+
+function m2_archive_inventory(): array
+{
+    $root = realpath((string)$_SERVER['DOCUMENT_ROOT']);
+    if ($root === false) throw new RuntimeException('Document root is unavailable');
+    $allowed = '/\.(?:mp3|mp4|webm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf|css|js)$/i';
+    $files = [];
+    foreach (['/m/m', '/m/img', '/css/fonts'] as $relativeDirectory) {
+        $directory = realpath($root . str_replace('/', DIRECTORY_SEPARATOR, $relativeDirectory));
+        if ($directory === false || !is_dir($directory)) continue;
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS)
+        );
+        foreach ($iterator as $file) {
+            if (!$file->isFile()) continue;
+            $path = $file->getRealPath();
+            if ($path === false || preg_match($allowed, $path) !== 1) continue;
+            $files[m2_archive_url_path($root, $path)] = $path;
+        }
+    }
+    foreach (['/img/logomonochrome.ico', '/m/serv/npfp.png'] as $relativeFile) {
+        $path = realpath($root . str_replace('/', DIRECTORY_SEPARATOR, $relativeFile));
+        if ($path !== false && is_file($path)) $files[$relativeFile] = $path;
+    }
+    ksort($files, SORT_STRING);
+    return $files;
+}
+
+function m2_refresh_archive_list(): void
+{
+    set_time_limit(0);
+    $m2Root = __DIR__;
+    $listPath = $m2Root . '/m2list.json';
+    $indexPath = $m2Root . '/.m2-archive-fingerprints.json';
+    if (is_file($listPath)) {
+        $current = json_decode((string)file_get_contents($listPath), true);
+        if (is_array($current) && ($current['v'] ?? null) === (int)M2_BROWSER_CACHE_VERSION &&
+            is_array($current['list'] ?? null)) return;
+    }
+    $lock = fopen($indexPath . '.lock', 'c+');
+    if ($lock === false || !flock($lock, LOCK_EX)) throw new RuntimeException('Archive fingerprint index is unavailable');
+    try {
+        if (is_file($listPath)) {
+            $current = json_decode((string)file_get_contents($listPath), true);
+            if (is_array($current) && ($current['v'] ?? null) === (int)M2_BROWSER_CACHE_VERSION &&
+                is_array($current['list'] ?? null)) return;
+        }
+        $index = [];
+        if (is_file($indexPath)) {
+            $decoded = json_decode((string)file_get_contents($indexPath), true);
+            if (is_array($decoded)) $index = $decoded;
+        }
+        $nextIndex = [];
+        $list = [];
+        foreach (m2_archive_inventory() as $key => $path) {
+            clearstatcache(true, $path);
+            $size = filesize($path);
+            $mtime = filemtime($path);
+            if ($size === false || $mtime === false) continue;
+            $mime = m2_archive_mime($path);
+            $stored = is_array($index[$key] ?? null) ? $index[$key] : [];
+            $valid = ($stored['protocol'] ?? null) === M2_ARCHIVE_FINGERPRINT_PROTOCOL &&
+                ($stored['sampleBytes'] ?? null) === M2_ARCHIVE_SAMPLE_BYTES &&
+                ($stored['size'] ?? null) === $size &&
+                ($stored['mtime'] ?? null) === $mtime &&
+                ($stored['mime'] ?? null) === $mime &&
+                is_string($stored['fingerprint'] ?? null) &&
+                preg_match('/^[a-f0-9]{64}$/', $stored['fingerprint']) === 1;
+            if (!$valid) {
+                $stored = [
+                    'protocol' => M2_ARCHIVE_FINGERPRINT_PROTOCOL,
+                    'sampleBytes' => M2_ARCHIVE_SAMPLE_BYTES,
+                    'size' => $size,
+                    'mtime' => $mtime,
+                    'mime' => $mime,
+                    'fingerprint' => m2_archive_fingerprint($path, $key, $mime, $size)
+                ];
+            }
+            $nextIndex[$key] = $stored;
+            $list[$key] = $stored['fingerprint'];
+        }
+        $encodedIndex = json_encode(
+            $nextIndex,
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        );
+        $encodedList = json_encode(
+            ['v' => (int)M2_BROWSER_CACHE_VERSION, 'list' => $list],
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        );
+        $currentIndex = is_file($indexPath) ? (string)file_get_contents($indexPath) : '';
+        $currentList = is_file($listPath) ? (string)file_get_contents($listPath) : '';
+        if ($currentIndex !== $encodedIndex && file_put_contents($indexPath, $encodedIndex, LOCK_EX) === false) {
+            throw new RuntimeException('Unable to update archive fingerprint index');
+        }
+        if ($currentList !== $encodedList && file_put_contents($listPath, $encodedList, LOCK_EX) === false) {
+            throw new RuntimeException('Unable to update archive list');
+        }
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
+m2_refresh_archive_list();
+
+ob_start('m2_transform_document');
+
 session_start();
 require_once $_SERVER['DOCUMENT_ROOT'] . '/api/db.php';
 
@@ -21,18 +289,6 @@ if (is_dir($imgDir)) {
         }
     }
 }
-$preloadAssets = [];
-$pdir = $_SERVER['DOCUMENT_ROOT'] . '/m/img';
-if (is_dir($pdir)) {
-    foreach (scandir($pdir) as $f) {
-        if ($f === '.' || $f === '..') continue;
-        $ext = strtolower(pathinfo($f, PATHINFO_EXTENSION));
-        if (in_array($ext, ['png', 'gif', 'svg', 'mp3', 'jpg', 'jpeg', 'webp', 'wav', 'ogg'], true)) {
-            $preloadAssets[] = $f;
-        }
-    }
-}
-
 $data_stmt = $pdo->prepare('SELECT category,link_id,title,lyrics,location,url,is_yes FROM song_links');
 
 $data_stmt->execute();
@@ -149,7 +405,59 @@ function normalize_german($text)
     }, (string)$text);
 }
 
+function normalize_m_song_link_text($text)
+{
+    $map = [
+        'Tzsch' => 'Č', 'tzsch' => 'č',
+        'Zsch'  => 'Č', 'zsch'  => 'č',
+        'Tsch'  => 'Č', 'tsch'  => 'č',
+        'TSCH'  => 'Č',
+        'Sch' => 'Ș', 'sch' => 'ș',
+        'SCH' => 'Ș',
+        'Tz' => 'Ț', 'tz' => 'ț',
+        'TZ' => 'Ț',
+        'Z' => 'Ț', 'z' => 'ț'
+    ];
+
+    $text = (string)$text;
+    if (strpos($text, '<') !== false && strpos($text, '>') !== false) {
+        $text = preg_replace_callback('/(<[^>]*>)|([^<]+)/', function ($matches) use ($map) {
+            if (!empty($matches[1])) return $matches[1];
+            return strtr($matches[2], $map);
+        }, $text);
+    } else {
+        $text = strtr($text, $map);
+    }
+
+    return convert_st_sp_word_starts($text);
+}
+
+function create_m_song_item_id(array $row): string
+{
+    $title = normalize_m_song_link_text($row['title'] ?? '');
+    $category = normalize_m_song_link_text($row['category'] ?? '');
+    $url = (string)($row['url'] ?? '');
+
+    $bytes = unpack('C*', mb_convert_encoding($title, 'ISO-8859-1', 'UTF-8'));
+    $digits = '';
+    foreach ($bytes as $byte) {
+        $digits .= ($byte * 186216) % 8;
+    }
+    $num = str_pad(substr($digits, -2), 2, '0');
+
+    $combo = $category . '&' . $title;
+    $letters = '';
+    for ($i = 0; $i < 2; $i++) {
+        $cp = mb_ord(mb_substr($combo, $i % mb_strlen($combo), 1, 'UTF-8'));
+        $letters .= chr(65 + (($cp + 0xFA) % 26));
+    }
+
+    $id = (string)($row['link_id'] ?? '') . '_' . $num . substr($url, -5) . $letters;
+    return preg_replace('/[^\x20-\x7E]/', '', $id);
+}
+
 foreach ($results as &$row) {
+    $row['_m_song_item_id'] = create_m_song_item_id($row);
     $row['category'] = normalize_german($row['category']);
     $row['title'] = normalize_german($row['title']);
 }
@@ -273,15 +581,6 @@ $cats = $cat_stmt->fetchAll(PDO::FETCH_COLUMN);
 $cats = array_map('normalize_german', $cats);
 $cats = array_unique($cats);
 usort($cats, 'customStrCmp');
-$max = 3;
-$choices = [];
-for ($i = 0; $i <= $max; $i++) {
-    if ($i !== 1) {
-        $choices[] = $i;
-    }
-}
-$n = $choices[array_rand($choices)];
-$chosenLoader = 'waiting' . ($n ?: '');
 ?>
 
 <!DOCTYPE html>
@@ -291,30 +590,27 @@ $chosenLoader = 'waiting' . ($n ?: '');
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Nullpunkts</title>
-    <link rel="shortcut icon" href="/img/logomonochrome.ico" type="image/x-icon">
-    <link rel="preload" href="img/<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>.mp3" as="audio" type="audio/mpeg">
-    <link rel="preload" href="img/<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>.gif" as="image" type="image/gif">
-    <link rel="preload" href="/m/img/BabelStoneHan.ttf" as="font" type="font/ttf" crossorigin>
+    <link rel="shortcut icon" href="<?= htmlspecialchars(m2_versioned_asset('/img/logomonochrome.ico'), ENT_QUOTES, 'UTF-8') ?>" type="image/x-icon">
     <style>
         @font-face {
             font-family: junicode;
-            src: url(/css/fonts/JunicodeVF-Roman.woff2);
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/JunicodeVF-Roman.woff2'), ENT_QUOTES, 'UTF-8') ?>');
         }
 
         @font-face {
             font-family: junicode;
-            src: url(/css/fonts/JunicodeVF-Italic.woff2);
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/JunicodeVF-Italic.woff2'), ENT_QUOTES, 'UTF-8') ?>');
             font-style: italic;
         }
 
         @font-face {
             font-family: 'BabelStone Han';
-            src: url(/m/img/BabelStoneHan.ttf);
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/BabelStoneHan.ttf'), ENT_QUOTES, 'UTF-8') ?>');
         }
 
         @font-face {
             font-family: nullpunktsenergie;
-            src: url(/css/fonts/nullpunktsenergiefont-Regular.ttf);
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/nullpunktsenergiefont-Regular.ttf'), ENT_QUOTES, 'UTF-8') ?>');
         }
 
         @counter-style ca {
@@ -325,8 +621,16 @@ $chosenLoader = 'waiting' . ($n ?: '');
             fallback: lower-alpha;
         }
 
+        :root {
+            --page-font-stack: 'Junicode', 'nullpunktsenergiefont', 'Amiri', serif;
+        }
+
+        body.babelstone-ready {
+            --page-font-stack: 'Junicode', 'nullpunktsenergiefont', 'BabelStone Han', 'Amiri', serif;
+        }
+
         *:not(.katex):not(.katex *) {
-            font-family: 'Junicode', 'nullpunktsenergiefont', 'BabelStone Han', 'Amiri';
+            font-family: var(--page-font-stack);
             letter-spacing: 0;
             box-sizing: border-box;
             text-rendering: auto;
@@ -341,11 +645,13 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
         body {
+            --m2-song-left-edge: 60px;
+            --m2-song-right-edge: 130px;
             background: black;
             color: white;
             margin: 0;
             padding-right: 130px;
-            padding-left: 36px;
+            padding-left: 60px;
             box-sizing: border-box;
             overflow-x: hidden
         }
@@ -396,9 +702,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         #rBar,
         #rBarWrapper,
         #lBar,
-        #seekWrap,
-        #seekFill,
-        #seekDot,
+        #seekRadial,
         #volWrap,
         .tJump {
             width: auto;
@@ -433,6 +737,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         #songList {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    border-left: 1px solid white;
             gap: 15px;
             padding: 10px
         }
@@ -661,7 +966,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
         #rBar {
-            width: 68px;
+            width: 97px;
             font-size: 1.8em;
             border-left: 1px solid white;
             background: black;
@@ -714,7 +1019,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
 
-        #seekTime,
         #speedTime,
         #revTime {
             font-size: .6em;
@@ -722,16 +1026,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
             margin: 2px 0;
             pointer-events: none;
             text-align: center
-        }
-
-        #seekWrap {
-            height: 45vh;
-            flex-shrink: 0;
-            width: 3px;
-            background: rgba(255, 255, 255, .2);
-            margin: 4px 0;
-            position: relative;
-            cursor: pointer;
         }
 
         #speedWrap,
@@ -786,7 +1080,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
             padding: 2px 0;
         }
 
-        #seekWrap::before,
         #speedWrap::before,
         #revWrap::before {
             content: '';
@@ -799,7 +1092,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
             z-index: 1
         }
 
-        #seekFill,
         #speedFill,
         #revFill {
             position: absolute;
@@ -810,7 +1102,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
             background: white
         }
 
-        #seekDot,
         #speedDot,
         #revDot {
             position: absolute;
@@ -1008,7 +1299,211 @@ $chosenLoader = 'waiting' . ($n ?: '');
             color: #00ff00 !important;
         }
 
+        #seekRadial {
+            display: block;
+            width: 98%;
+            height: auto;
+            flex: 0 0 auto;
+            margin: 0 auto;
+            overflow: visible;
+            touch-action: none;
+            user-select: none;
+            font-family: Arial, Helvetica, sans-serif;
+            filter: drop-shadow(0 13px 22px rgba(0, 0, 0, .55));
+        }
 
+        .seekRadialBezelOuter {
+            fill: #121412;
+            stroke: #626660;
+            stroke-width: 5;
+        }
+
+        .seekRadialBezelInner {
+            fill: #060706;
+            stroke: #252825;
+            stroke-width: 3;
+        }
+
+        .seekRadialGlass {
+            fill: url(#seekRadialGlassShade);
+            stroke: rgba(235, 239, 231, .18);
+            stroke-width: 1.5;
+        }
+
+        .seekRadialOuterTick,
+        .seekRadialInnerTick {
+            stroke: #f2f1e9;
+            stroke-linecap: square;
+            pointer-events: none;
+        }
+
+        .seekRadialOuterTick.minor {
+            stroke-width: 1.3;
+            opacity: .8;
+        }
+
+        .seekRadialOuterTick.major {
+            stroke-width: 3.2;
+        }
+
+        .seekRadialInnerTick {
+            stroke-width: 1.7;
+        }
+
+        .seekRadialInnerTick.major {
+            stroke-width: 2.7;
+        }
+
+        .seekRadialDialNumber {
+            fill: #f1f0e8;
+            font-size: 22px;
+            font-weight: 700;
+            text-anchor: middle;
+            dominant-baseline: middle;
+            pointer-events: none;
+        }
+
+        .seekRadialInnerNumber {
+            font-size: 16px;
+        }
+
+        .seekRadialControl {
+            cursor: crosshair;
+            outline: none;
+        }
+
+        .seekRadialControl:focus-visible .seekRadialGlass {
+            stroke: #fff;
+            stroke-width: 2.5;
+        }
+
+        .seekRadialHit {
+            fill: transparent;
+            pointer-events: all;
+        }
+
+        .seekRadialTargetHand {
+            fill: #f2f1e9;
+            stroke: #bfc1bb;
+            stroke-width: .8;
+            filter: url(#seekRadialHandShadow);
+            pointer-events: none;
+        }
+
+        .seekRadialSectionHand {
+            fill: #d8d8d1;
+            stroke: #9d9f99;
+            stroke-width: .8;
+            filter: url(#seekRadialHandShadow);
+            pointer-events: none;
+        }
+
+        .seekRadialHubOuter {
+            fill: #202220;
+            stroke: #656862;
+            stroke-width: 2;
+            pointer-events: none;
+        }
+
+        .seekRadialHubInner {
+            fill: #090a09;
+            stroke: #2c2e2b;
+            stroke-width: 1.5;
+            pointer-events: none;
+        }
+
+        .seekRadialDisplayLabel {
+            fill: #f3f3ed;
+            font-size: 40px;
+            font-weight: 700;
+            letter-spacing: .14em;
+            text-anchor: middle;
+        }
+
+        .seekRadialDisplaySegment,
+        .seekRadialDisplayColon {
+            fill: #f7f8f4;
+        }
+
+        .seekRadialDisplaySegment.is-off,
+        .seekRadialDisplayColon.is-off {
+            fill: #151715;
+        }
+
+        .seekRadialSet {
+            cursor: pointer;
+            outline: none;
+        }
+
+        .seekRadialButtonFace {
+            fill: #494949;
+            stroke: #343434;
+            stroke-width: 1.4;
+        }
+
+        .seekRadialButtonCap {
+            fill: #3b3b3b;
+            stroke: #686868;
+            stroke-width: 1;
+        }
+
+        .seekRadialButtonCopy {
+            fill: #fff;
+            font-family: Arial, Helvetica, sans-serif !important;
+            font-size: 24px;
+            font-weight: 700;
+            text-anchor: middle;
+            pointer-events: none;
+        }
+
+        .seekRadialSet:hover .seekRadialButtonCap,
+        .seekRadialSet:focus-visible .seekRadialButtonCap {
+            stroke: #f1f1ed;
+        }
+
+        .seekRadialSet.is-pressed .seekRadialButtonCap {
+            fill: #202020;
+        }
+
+        .seekRadialKnobControl {
+            cursor: ns-resize;
+            outline: none;
+        }
+
+        .seekRadialKnobControl:focus-visible .seekRadialTuningOuterRing,
+        .seekRadialKnobControl:focus-visible .seekRadialTuningInnerRing {
+            stroke: #fff;
+        }
+
+        .seekRadialTuningOuterRing {
+            fill: #b4b6b4;
+            stroke: #d6d8d6;
+            stroke-width: 1.5;
+        }
+
+        .seekRadialTuningOuterBase {
+            fill: #666866;
+            stroke: #858785;
+            stroke-width: 1.5;
+            pointer-events: none;
+        }
+
+        .seekRadialTuningInnerRing {
+            fill: #a4a6a4;
+            stroke: #d5d7d5;
+            stroke-width: 1.5;
+        }
+
+        .seekRadialTuningInnerBase {
+            fill: #707270;
+            stroke: #8c8e8c;
+            stroke-width: 1.5;
+            pointer-events: none;
+        }
+
+        .seekRadialTuningHit {
+            fill: transparent;
+        }
 
         #rBar {
             --knob-h: 27px;
@@ -1019,7 +1514,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         .mKnob {
             height: var(--knob-h);
             aspect-ratio: 102 / 115;
-            background: url(img/knob.png) center / contain no-repeat;
+            background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform-origin: 49.5% 55.2%;
             transform: rotate(0deg);
             cursor: grab;
@@ -1034,7 +1529,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         .mKnob2 {
             width: var(--knob-h);
             height: var(--knob-h);
-            background: url(img/rotate.png) center / contain no-repeat;
+            background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/rotate.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform-origin: 50% 50%;
             transform: rotate(0deg);
             cursor: grab;
@@ -1049,7 +1544,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
         .mKnobsWrap {
             height: calc(var(--knob-h) * 255 / 115);
             aspect-ratio: 226 / 255;
-            background: url(img/knobswrap.png) center / contain no-repeat;
+            background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/knobswrap.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             position: relative;
             margin: 4px auto;
         }
@@ -1060,7 +1555,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
             top: 50%;
             height: var(--knob-h);
             aspect-ratio: 102 / 115;
-            background: url(img/knob.png) center / contain no-repeat;
+            background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform-origin: 49.5% 55.2%;
             transform: translate(-49.5%, -55.2%) rotate(0deg);
             cursor: pointer;
@@ -1074,6 +1569,72 @@ $chosenLoader = 'waiting' . ($n ?: '');
             align-items: center;
             gap: 3px;
             margin: 4px 0;
+            width: var(--swh);
+        }
+
+        .mDcAmpsDisplay {
+            display: block;
+            width: var(--swh);
+            height: auto;
+            margin: 0 0 1px;
+            overflow: visible;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .mDcAmpsSegment {
+            fill: #f7f8f4;
+        }
+
+        .mDcAmpsSegment.is-off {
+            fill: #151715;
+        }
+
+        .mSwitchCol {
+            width: var(--swh);
+        }
+
+        .mKControlRow {
+            position: relative;
+            width: var(--swh);
+            height: calc(var(--knob-h) + 12pt + 1px);
+        }
+
+        .mKControlRow > .mCol:first-child {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: var(--knob-h);
+        }
+
+        .mKControlRow > .mSwitchCol {
+            position: absolute;
+            right: 0;
+            top: 0;
+            pointer-events: none;
+        }
+
+        .mKControlRow > .mSwitchCol .mSwimg {
+            pointer-events: auto;
+        }
+
+        .mSwitchCol.mRightOnly .mSwSlot .mSw {
+            left: 67%;
+        }
+
+        .mSwitchCol.mRightOnly .mLbl {
+            transform: translateX(calc(var(--swh) * .17));
+        }
+
+        .mKControlFace {
+            height: var(--knob-h);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mKControlFace .mKnob2 {
+            margin: 0;
         }
 
 
@@ -1234,16 +1795,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
             z-index: 10;
         }
 
-        #loaderInfoScroll p {
-            display: none;
-        }
-
-        #loaderInfoScroll.waiting p.waiting,
-        #loaderInfoScroll.waiting2 p.waiting2,
-        #loaderInfoScroll.waiting3 p.waiting3 {
-            display: block;
-        }
-
         .mob-copy-btn,
         .mob-com-btn {
             display: none !important;
@@ -1252,7 +1803,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
         @media (max-width: 700px) {
             body {
-                padding-right: 100px;
+                --m2-song-left-edge: 0px;
+                padding-right: 130px;
                 padding-left: 0;
             }
 
@@ -1261,7 +1813,12 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 padding: 4px 8px;
             }
 
-
+            #uliverie,
+            #umusik2,
+            #oyrslogo {
+                display: none;
+                visibility: hidden;
+            }
             #songList {
                 display: flex;
                 flex-direction: column;
@@ -1503,10 +2060,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
             }
 
 
-            #seekWrap {
-                height: 15vh;
-            }
-
             .cardWrap.mob-open .mob-copy-btn,
             .cardWrap.mob-open .mob-com-btn {
                 display: flex !important;
@@ -1550,27 +2103,258 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 transform: scale(0.95);
             }
         }
+        body.loading-overlay-active {
+            overflow: hidden !important;
+        }
+
+        #m2StrobeField {
+            position: fixed;
+            inset: 0;
+            z-index: 100001;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .m2Strobe {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            opacity: 0;
+            transform: translate(-50%, -50%);
+            background: currentColor;
+        }
+
+        .m2Strobe.is-lit {
+            opacity: 1;
+            box-shadow:
+                0 0 3px 2px currentColor,
+                0 0 10px 5px currentColor,
+                0 0 22px 9px currentColor;
+        }
+
+        .m2StrobeTop {
+            left: 50%;
+            top: 5px;
+            color: #ff1b12;
+        }
+
+        .m2StrobeLeft {
+            left: var(--m2-song-left-edge);
+            top: 50%;
+            color: #ffffff;
+        }
+
+        .m2StrobeRight {
+            right: var(--m2-song-right-edge);
+            top: 50%;
+            color: #ffffff;
+            transform: translate(50%, -50%);
+        }
+
+        .m2StrobeBottomLeft {
+            left: var(--m2-song-left-edge);
+            bottom: 5px;
+            color: #2dff46;
+            transform: translate(-50%, 50%);
+        }
+
+        .m2StrobeBottomRight {
+            right: var(--m2-song-right-edge);
+            bottom: 5px;
+            color: #ff1b12;
+            transform: translate(50%, 50%);
+        }
+
+        .pageBusControl {
+            position: relative;
+            --knob-h: 27px;
+            --readie-blue: #2095e8;
+            --display-green: #78ff63;
+            --display-amber: #ff9f32;
+            width: min(230px, calc(100vw - 32px));
+            user-select: none;
+            outline: none;
+        }
+
+        .pageBusDial {
+            position: relative;
+            width: calc(var(--knob-h) * 226 / 115);
+            height: calc(var(--knob-h) * 255 / 115);
+            aspect-ratio: 226 / 255;
+            margin-inline: auto;
+            background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/kboswrapforalign.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
+        }
+
+        .pageBusKnob {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: auto;
+            height: var(--knob-h);
+            transform: translate(-49.5%, -55.2%) rotate(0deg);
+            transform-origin: 50% 50%;
+            cursor: pointer;
+            touch-action: none;
+        }
+
+        .pageBusLight {
+            display: block;
+            width: calc(var(--knob-h) * 194 / 115);
+            height: auto;
+            margin: 1% auto 0;
+            pointer-events: none;
+            transition: filter 120ms linear;
+        }
+
+        .pageBusLight.is-on {
+            filter:
+                brightness(1.16)
+                drop-shadow(0 0 2px var(--readie-blue))
+                drop-shadow(0 0 6px var(--readie-blue))
+                drop-shadow(0 0 13px rgba(32, 149, 232, 0.82));
+        }
+
+        .pageBusInstrument {
+            box-sizing: border-box;
+            width: 100%;
+            margin: 8px auto 0;
+            padding: 7px 10px 9px;
+            color: var(--display-amber);
+            background: #465158;
+            border: 2px solid #313b41;
+            border-radius: 2px;
+            box-shadow:
+                inset 0 1px 0 rgba(255, 255, 255, 0.1),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+                0 2px 6px rgba(0, 0, 0, 0.35);
+            font-family: "Arial Narrow", "Roboto Condensed", Arial, sans-serif;
+        }
+
+        .pageBusInstrumentLabels,
+        .pageBusInstrumentValues {
+            display: grid;
+            align-items: center;
+            text-align: center;
+        }
+
+        .pageBusInstrumentLabels {
+            font-size: 9px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.35px;
+            text-shadow:
+                0 0 2px var(--display-amber),
+                0 0 6px rgba(255, 159, 50, 0.55);
+        }
+
+        .pageBusInstrumentLabels.top,
+        .pageBusInstrumentValues.top {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .pageBusInstrumentLabels.bottom,
+        .pageBusInstrumentValues.bottom {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .pageBusInstrumentLabels.top {
+            margin-bottom: 5px;
+        }
+
+        .pageBusInstrumentLabels.bottom {
+            margin-top: 5px;
+        }
+
+        .pageBusInstrumentScreen {
+            position: relative;
+            height: 74px;
+            overflow: hidden;
+            background:
+                #07100d;
+            border: 2px solid #222b2f;
+            border-radius: 9px;
+            box-shadow:
+                inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+                inset 0 0 13px rgba(0, 0, 0, 0.95);
+        }
+
+        .pageBusInstrumentValues {
+            position: absolute;
+            left: 6px;
+            right: 6px;
+            color: var(--display-green);
+            font-family: "Courier New", monospace;
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.5px;
+            font-variant-numeric: tabular-nums;
+            text-shadow:
+                0 0 2px var(--display-green),
+                0 0 7px rgba(120, 255, 99, 0.72);
+        }
+
+        .pageBusInstrumentValues.top {
+            top: 11px;
+        }
+
+        .pageBusInstrumentValues.bottom {
+            bottom: 10px;
+            font-size: 14px;
+        }
+
+        .pageBusInstrument.is-fault .pageBusInstrumentValues {
+            color: var(--display-amber);
+            text-shadow:
+                0 0 2px var(--display-amber),
+                0 0 7px rgba(255, 159, 50, 0.72);
+        }
+
+        .tJump {
+            overscroll-behavior: contain;
+        }
     </style>
 </head>
 
-<body>
-    <div id="loaderOverlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:black;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'BabelStone Han','Junicode',sans-serif;color:white;transition:opacity 0.5s ease;">
-        <img src="img/<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>.gif" alt="Loading" style="width:30vw;margin-bottom:20px;">
-        <div style="font-size:2em;margin-bottom:10px;text-align:center;">仕対始為使中我々，𬐘有你々。</div>
-        <div id="loaderPct" style="font-size:1.2em;color:#a7a7a7;">0%</div>
-        <div id="loaderInfo" style="height:220px;width:80%;max-width:400px;margin-top:20px;overflow:hidden;opacity:0;transition:opacity 1s ease;font-size:1em;line-height:1.5;text-align:center;">
-            <div id="loaderInfoScroll" class="<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>" style="transition:transform 0.1s linear;">
-                <p class="waiting" style="margin: 5px 0; color: #ffffff; opacity: 0; transition: opacity 4s ease;">知中乎済你々？其今繋鳴現歌之名其vivaldi , antonio之𡶘有「始春候」協奏曲其確ーvivaldi，此作之入様提琴音々対手鳥々之啼鳴其対写作命確。</p>
-                <p class="waiting" style="margin: 5px 0; color: #ffffff; opacity: 0; transition: opacity 4s ease;">其今聞的你々作之曲家其vivaldi，antonio根対於或聖職済！緋髪々其以依対彼向「il prete roßo」，風斯「緋聖職」，言常々済唁喘息病人其有的其爲磔聖堂於仕作事地其向全時其対歌教員態其向䣏曲家態其向奉命済。</p>
-
-                <p class="waiting2" style="margin: 5px 0; color: #ffffff; opacity: 0; transition: opacity 4s ease;">知中乎済你々？delibes，leo之„ flowerduet „曲其根対於１８８３年其作産其lakme歌劇其従或連吟ー唯二女之川岸其於花集法其対解現安有或場面有法其向𤆩…</p>
-                <p class="waiting2" style="margin: 5px 0; color: #ffffff; opacity: 0; transition: opacity 4s ease;">年々来広告々以映画々向程毎所於鳴被的其爲界之最的現歌劇分々其以或其状其向継済。古以BRITISH　AIRWAYS広告々其於也用被事於済！</p>
-
-                <p class="waiting3" style="margin: 5px 0; color: #ffffff; opacity: 0; transition: opacity 4s ease;">知中乎済你々？mozart之eine kleine nachtmusikー小或夜歌其ー作其根対於唯或„ 楽態 „有状曲獲命済。此作対或演奏会爲鄦：ー友辺其於鳴被将軽愉有或室歌其有状書命済，𠾖；</p>
-                <p class="waiting3" style="margin: 5px 0; color: #ffffff; opacity: 0; transition: opacity 4s ease;">手紙々其対記的其己人性単覧其向此分其唯« 或小夜歌其 »言状有程般或状於記作命済ー風斯此日界之最民山有古典作々其以或其有将其対推作不命済。</p>
+<body class="loading-overlay-active">
+    <div id="m2StrobeField" aria-hidden="true">
+        <span class="m2Strobe m2StrobeTop" data-strobe="top"></span>
+        <span class="m2Strobe m2StrobeLeft" data-strobe="left"></span>
+        <span class="m2Strobe m2StrobeRight" data-strobe="right"></span>
+        <span class="m2Strobe m2StrobeBottomLeft" data-strobe="bottomLeft"></span>
+        <span class="m2Strobe m2StrobeBottomRight" data-strobe="bottomRight"></span>
+    </div>
+    <div id="loaderOverlay" style="position:fixed;inset:0;background:black;z-index:99999;display:flex;align-items:center;justify-content:center;">
+        <div id="pageBusControl" class="pageBusControl" role="application" tabindex="0" aria-label="Page control bus selector" aria-busy="true">
+            <div class="pageBusDial">
+                <img id="pageBusKnob" class="pageBusKnob" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>" draggable="false" alt="">
             </div>
+            <img id="pageBusLight" class="pageBusLight" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/lightforalignoff.png'), ENT_QUOTES, 'UTF-8') ?>" draggable="false" alt="READIE">
+            <div id="pageBusInstrument" class="pageBusInstrument" role="group" aria-label="Page control electrical instruments">
+                <div class="pageBusInstrumentLabels top" aria-hidden="true">
+                    <span data-bus-signal="dcAmps">DC AMPS</span>
+                    <span>DOWN‑LOAD %</span>
+                </div>
+                <div class="pageBusInstrumentScreen" aria-live="polite">
+                    <div class="pageBusInstrumentValues top">
+                        <output data-bus-meter="dcAmps">0.000</output>
+                        <output data-bus-meter="archivePercent">0.0</output>
+                    </div>
+                    <div class="pageBusInstrumentValues bottom">
+                        <output data-bus-meter="dcVolts">0.0</output>
+                        <output data-bus-meter="archiveCompleted">0</output>
+                        <output data-bus-meter="archiveTotal">0</output>
+                    </div>
+                </div>
+                <div class="pageBusInstrumentLabels bottom" aria-hidden="true">
+                    <span>DC VOLTS</span>
+                    <span>KOMPLETE</span>
+                    <span>TOTAL</span>
+                </div>
+            </div>
+            <img id="pageArchiveR2" class="mBtn" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/r2off.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="r2off.png" data-avionics-type="momentary-button" data-avionics-id="PAGE_ARCHIVE_R2" data-avionics-power="archive" data-avionics-command="ARCHIVE.INSTALL" draggable="false" alt="download archive">
         </div>
-        <audio id="loaderAudio" src="img/<?= htmlspecialchars($chosenLoader, ENT_QUOTES, 'UTF-8') ?>.mp3" loop autoplay style="display:none;"></audio>
     </div>
     <div class="tBar">
         <a id="npTitle" style="color:inherit;text-decoration:none;cursor:pointer">―</a>
@@ -1578,9 +2362,39 @@ $chosenLoader = 'waiting' . ($n ?: '');
     </div>
     <div class="uBox">
         <div id="progressZone"></div>
+        <div class="rowgrp"><textarea id="jsonBox" rows="1" placeholder="json" style="flex:1;resize:vertical"></textarea><button type="button" id="jsonBtn" class="ctlBtn">J</button></div>
         <div id="entryZone"></div>
     </div>
     <div id="songList">
+        
+<img id="uliverie" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/100liverie.png'), ENT_QUOTES, 'UTF-8') ?>" alt="100liverie." style="
+    position: fixed;
+    left: 0;
+    top: min(116px, calc(100vh - 829px)); 
+    width: 641px;
+    height: 200px; 
+    margin-left: -247.8px;
+    transform: rotate(274deg) scaleX(1.1) scaleY(0.8);
+    transform-origin: bottom;
+">
+
+<img id="umusik2" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/100musik2.png'), ENT_QUOTES, 'UTF-8') ?>" alt="100 % Musik." style="
+    position: fixed;
+    left: 0;
+    top: min(719px, calc(100vh - 226px));
+    width: 180.5px;
+    margin-left: -64px;
+    transform: rotate(275deg);
+">
+
+<img id="oyrslogo" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/1yrslogo.png'), ENT_QUOTES, 'UTF-8') ?>" alt="1 YRS TOGEÞER." style="
+    position: fixed;
+    left: 0;
+    bottom: 20px; 
+    width: 108.2px;
+    margin-left: -25px;
+    transform: rotate(272deg);
+">
         <?php
         $current = null;
         $uniqueCats = [];
@@ -1616,10 +2430,25 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 $current = $row['category'];
             }
             $url = (string)$row['url'];
-            $idRaw = (string)$row['link_id'] . '_' . substr($url, -5);
-            $id = htmlspecialchars(preg_replace('/[^\x20-\x7E]/', '', $idRaw), ENT_QUOTES, 'UTF-8');
+            $id = htmlspecialchars((string)$row['_m_song_item_id'], ENT_QUOTES, 'UTF-8');
             $src = '/m/m/' . rawurlencode($url) . '.mp3';
             $imgBase = 'm/img/' . rawurlencode($url);
+
+            $artExt = $indexdb[$url] ?? '';
+            $artPath = '';
+            if ($artExt !== '') {
+                $coverRel = '/m/m/img/' . rawurlencode($url) . '.' . $artExt;
+                $posterRel = '/m/m/img/poster/' . rawurlencode($url) . '.jpg';
+                $posterAbs = $imgDir . '/poster/' . $url . '.jpg';
+                if (in_array($artExt, ['mp4', 'webm'], true)) {
+                    $artPath = is_file($posterAbs) ? $posterRel : '';
+                } elseif ($artExt === 'gif') {
+                    $artPath = is_file($posterAbs) ? $posterRel : $coverRel;
+                } else {
+                    $artPath = $coverRel;
+                }
+            }
+
             $lyrRaw = (string)($row['lyrics'] ?? '');
             $isSRT = (bool)preg_match('/\d{2}:\d{2}:\d{2}[,.]\d+\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d+/m', $lyrRaw);
             $isLRC = !$isSRT && (bool)preg_match('/^\[\d{2}:\d{2}\.\d+\]/m', $lyrRaw);
@@ -1637,9 +2466,9 @@ $chosenLoader = 'waiting' . ($n ?: '');
             $cLeftHTML .= '</div>';
         ?><div class="cardWrap" data-category="<?= htmlspecialchars($rowCat, ENT_QUOTES, 'UTF-8') ?>">
                 <?= $cLeftHTML ?>
-                <div class="card" id="<?= $id ?>" data-title="<?= htmlspecialchars((string)$row['title'], ENT_QUOTES, 'UTF-8') ?>">
+                <div class="card" id="<?= $id ?>" data-title="<?= htmlspecialchars((string)$row['title'], ENT_QUOTES, 'UTF-8') ?>" data-art="<?= htmlspecialchars($artPath, ENT_QUOTES, 'UTF-8') ?>">
                     <button class="mob-copy-btn" onclick="event.stopPropagation();copyLinkId('<?= $id ?>')">§</button>
-                    <a href="serv/com.php?no=Союз Советских Социалистических Республик , Министерство Иностранных Дел СССР , Комитет Государственной Безопасности СССР , Шестнадцатое Главное Управление (Перехват и анализ международных коммуникаций) — Дипломатический Канал № <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?> под совместным наблюдением. Þͤ GOVERNMENT OF UNITED STATES OF AMERICA , DEPARTMENT OF STATE , BUREAU OF INTELLIGENCE AND RESEARCH , NATIONAL SECURITY AGENCY — SIGNALS INTELLIGENCE DIRECTORATE" class="mob-com-btn" onclick="openCom(event, this)">C</a>
+                    <a href="serv/com.php?no=№ <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" class="mob-com-btn" onclick="openCom(event, this)">C</a>
                     <div class="cMain">
                         <div class="cImg">
                             <?php
@@ -1649,7 +2478,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                                 if (in_array($ext, ['mp4', 'webm'])):
                                     $isSync = !empty($row['is_yes']);
                             ?>
-                                    <video <?= $isSync ? 'loop muted playsinline data-sync="true"' : 'autoplay loop muted playsinline' ?> style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1" data-src="<?= $fullPath ?>"></video>
+                                    <video <?= $isSync ? 'loop muted playsinline preload="none" data-sync="true"' : 'autoplay loop muted playsinline' ?> style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1" data-src="<?= $fullPath ?>"></video>
                                 <?php else: ?>
                                     <img data-src="<?= $fullPath ?>" style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1">
                             <?php
@@ -1744,9 +2573,9 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 <div class="cSide">
                     <span onclick="event.stopPropagation();copyLinkId('<?= $id ?>')">§</span>
                     <span class="delBtn" data-anchor="<?= $id ?>" style="display:none">T</span>
-                    <a href="editm.php?id=<?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" class="editBtn" onclick="event.stopPropagation()" style="display:none">E</a>
+                    <a href="editm.php?id=<?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" class="editBtn" onclick="event.stopPropagation()">E</a>
 
-                    <a href="serv/com.php?no=Союз Советских Социалистических Республик , Министерство Иностранных Дел СССР , Комитет Государственной Безопасности СССР , Шестнадцатое Главное Управление (Перехват и анализ международных коммуникаций) — Дипломатический Канал № <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?> под совместным наблюдением. Þͤ GOVERNMENT OF UNITED STATES OF AMERICA , DEPARTMENT OF STATE , BUREAU OF INTELLIGENCE AND RESEARCH , NATIONAL SECURITY AGENCY — SIGNALS INTELLIGENCE DIRECTORATE" id="comBtn" onclick="openCom(event, this)">C</a>
+                    <a href="serv/com.php?no=№ <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" id="comBtn" onclick="openCom(event, this)">C</a>
                     <div class="loadBox">00:00</div>
                 </div>
             </div>
@@ -1773,9 +2602,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                         $firstChar = mb_strtoupper($canonicalLower, 'UTF-8');
                     }
                     if (!isset($catLetters[$cat][$firstChar])) {
-                        $url = (string)$row['url'];
-                        $idRaw = (string)$row['link_id'] . '_' . substr($url, -5);
-                        $id = htmlspecialchars(preg_replace('/[^\x20-\x7E]/', '', $idRaw), ENT_QUOTES, 'UTF-8');
+                        $id = htmlspecialchars((string)$row['_m_song_item_id'], ENT_QUOTES, 'UTF-8');
                         $catLetters[$cat][$firstChar] = $id;
                     }
                 }
@@ -1794,23 +2621,128 @@ $chosenLoader = 'waiting' . ($n ?: '');
             </div>
         </div>
         <div id="rBar">
-            <img id="mPl" class="mBtn" src="img/ploff.png" data-asset="ploff.png" draggable="false" alt="play">
-            <div id="seekTime">0:00</div>
-            <div id="seekWrap">
-                <div id="seekFill"></div>
-                <div id="seekDot"></div>
-            </div>
+            <img id="mPl" class="mBtn" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/ploff.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="ploff.png" draggable="false" alt="play">
+            <svg id="seekRadial" viewBox="0 0 390 735" role="group" aria-label="Active and standby seek instrument">
+                <defs>
+                    <radialGradient id="seekRadialGlassShade" cx="35%" cy="22%" r="78%">
+                        <stop offset="0" stop-color="#222522"/>
+                        <stop offset=".4" stop-color="#0b0c0b"/>
+                        <stop offset="1" stop-color="#030403"/>
+                    </radialGradient>
+                    <filter id="seekRadialHandShadow" x="-30%" y="-30%" width="160%" height="160%">
+                        <feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity=".85"/>
+                    </filter>
+                    <mask id="seekRadialTuningOuterScoopMask" x="-42" y="-42" width="84" height="84" maskUnits="userSpaceOnUse">
+                        <rect x="-42" y="-42" width="84" height="84" fill="#000"/>
+                        <circle cx="0" cy="0" r="37" fill="#fff"/>
+                        <g fill="#000">
+                            <circle cx="0" cy="-37" r="3.7"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(30)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(60)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(90)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(120)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(150)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(180)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(210)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(240)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(270)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(300)"/>
+                            <circle cx="0" cy="-37" r="3.7" transform="rotate(330)"/>
+                        </g>
+                    </mask>
+                    <mask id="seekRadialTuningInnerScoopMask" x="-30" y="-30" width="60" height="60" maskUnits="userSpaceOnUse">
+                        <rect x="-30" y="-30" width="60" height="60" fill="#000"/>
+                        <circle cx="0" cy="0" r="24" fill="#fff"/>
+                        <g fill="#000">
+                            <circle cx="0" cy="-24" r="3.6"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(45)"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(90)"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(135)"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(180)"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(225)"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(270)"/>
+                            <circle cx="0" cy="-24" r="3.6" transform="rotate(315)"/>
+                        </g>
+                    </mask>
+                </defs>
+                <g id="seekRadialGauge">
+                    <circle class="seekRadialBezelOuter" cx="195" cy="190" r="171"/>
+                    <circle class="seekRadialBezelInner" cx="195" cy="190" r="160"/>
+                    <g id="seekRadialControl" class="seekRadialControl" tabindex="0" role="slider" aria-label="Active seek position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                        <circle class="seekRadialGlass" cx="195" cy="190" r="153"/>
+                        <g id="seekRadialOuterTicks"></g>
+                        <g id="seekRadialOuterLabels"></g>
+                        <circle class="seekRadialHit" cx="195" cy="190" r="153"/>
+                    </g>
+                    <circle cx="195" cy="190" r="86" fill="none" stroke="#777b75" stroke-width="1.2" opacity=".62" pointer-events="none"/>
+                    <g id="seekRadialInnerTicks"></g>
+                    <g id="seekRadialInnerLabels"></g>
+                    <g id="seekRadialTargetHand"><path class="seekRadialTargetHand" d="M191.5 207L193.2 55L195 36L196.8 55L198.5 207Z"/></g>
+                    <g id="seekRadialSectionHand"><path class="seekRadialSectionHand" d="M189 207L191.5 119L195 101L198.5 119L201 207Z"/></g>
+                    <circle class="seekRadialHubOuter" cx="195" cy="190" r="17"/>
+                    <circle class="seekRadialHubInner" cx="195" cy="190" r="9"/>
+                </g>
+                <g>
+                    <text class="seekRadialDisplayLabel" x="195" y="400">AKTIV</text>
+                    <g id="seekRadialActiveDigits" transform="translate(22 410) scale(2.2 1.6)" role="img"></g>
+                    <text class="seekRadialDisplayLabel" x="195" y="545">STANDBY</text>
+                    <g id="seekRadialStandbyDigits" transform="translate(22 555) scale(2.2 1.6)" role="img"></g>
+                    <g id="seekRadialSet" class="seekRadialSet" transform="translate(109 709) scale(2.2) translate(-124 -675)" tabindex="0" role="button" aria-label="Transfer standby target to active position" aria-pressed="false">
+                        <rect class="seekRadialButtonFace" x="86" y="650" width="76" height="50" rx="8"/>
+                        <rect class="seekRadialButtonCap" x="92" y="656" width="64" height="38" rx="4"/>
+                        <text class="seekRadialButtonCopy" x="124" y="684">SET</text>
+                    </g>
+                    <g transform="translate(296 709) scale(1.7)">
+                        <circle class="seekRadialTuningOuterBase" cx="0" cy="0" r="39"/>
+                        <g id="seekRadialSectionKnob" class="seekRadialKnobControl" tabindex="0" role="slider" aria-label="Standby section" aria-valuemin="0" aria-valuemax="99" aria-valuenow="0">
+                            <circle class="seekRadialTuningHit" cx="0" cy="0" r="39"/>
+                            <g id="seekRadialSectionRotor">
+                                <circle class="seekRadialTuningOuterRing" cx="0" cy="0" r="37" mask="url(#seekRadialTuningOuterScoopMask)"/>
+                            </g>
+                        </g>
+                        <circle class="seekRadialTuningInnerBase" cx="0" cy="0" r="26"/>
+                        <g id="seekRadialTimeKnob" class="seekRadialKnobControl" tabindex="0" role="slider" aria-label="Standby time" aria-valuemin="0" aria-valuemax="59939" aria-valuenow="0" aria-valuetext="1:01">
+                            <circle class="seekRadialTuningHit" cx="0" cy="0" r="26"/>
+                            <g id="seekRadialTimeRotor">
+                                <circle class="seekRadialTuningInnerRing" cx="0" cy="0" r="24" mask="url(#seekRadialTuningInnerScoopMask)"/>
+                            </g>
+                        </g>
+                    </g>
+                </g>
+            </svg>
+                        <hr style="width: 84%;">
+
             <div class="mSwGroup">
-                <div class="mSwSlot">
-                    <div class="mSw"><img id="mNav" class="mSwimg" src="img/sc.png" data-asset="sc.png" draggable="false" alt="prev/next"></div>
+                <svg id="mDcAmpsDisplay" class="mDcAmpsDisplay" viewBox="0 0 140 43" role="img" aria-live="polite" aria-label="DC amps 0.000"></svg>
+                <div class="mCol mSwitchCol">
+                    <div class="mSwSlot">
+                        <div class="mSw"><img id="mNav" class="mSwimg" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/sc.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="sc.png" draggable="false" alt="prev/next"></div>
+                    </div>
+                    <div class="mLbl">M</div>
                 </div>
-                <div class="mLbl">M</div>
-                <div class="mSwSlot">
-                    <div class="mSw"><img id="mK" class="mSwimg" src="img/sd.png" data-asset="sd.png" draggable="false" alt="K"></div>
+                <div class="mKControlRow">
+                    <div class="mCol">
+                        <div class="mKControlFace"><span id="mR3" class="mKnob2" data-bg="rotate.png"></span></div>
+                        <div class="mLbl">R3</div>
+                    </div>
+                    <div class="mCol mSwitchCol mRightOnly">
+                        <div class="mKControlFace">
+                            <div class="mSwSlot">
+                                <div class="mSw"><img id="mK" class="mSwimg" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/sd.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="sd.png" draggable="false" alt="K"></div>
+                            </div>
+                        </div>
+                        <div class="mLbl">K</div>
+                    </div>
                 </div>
-                <div class="mLbl">K</div>
+                <div class="mCol mSwitchCol mRightOnly">
+                    <div class="mSwSlot">
+                        <div class="mSw"><img id="mKR" class="mSwimg" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/sc.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="sc.png" draggable="false" alt="KR"></div>
+                    </div>
+                    <div class="mLbl">KR</div>
+                </div>
             </div>
             <div class="mKnobsWrap" data-bg="knobswrap.png"><span id="mISR" class="mKdial" data-bg="knob.png"></span></div>
+            <hr style="width: 84%;">
             <div class="mRow">
                 <div class="mCol"><span id="mRev" class="mKnob" data-bg="knob.png" title="reverb"></span>
                     <div class="mLbl">R</div>
@@ -1820,7 +2752,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 </div>
             </div>
             <button id="lBtn" style="color: yellow">L</button>
-            <img id="mR2" class="mBtn" src="img/r2off.png" data-asset="r2off.png" draggable="false" alt="reset speed">
+            <img id="mR2" class="mBtn" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/r2off.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="r2off.png" draggable="false" alt="reset speed">
             <span id="mVol" class="mKnob" data-bg="knob.png" title="volume"></span>
             <div class="mLbl">V</div>
         </div>
@@ -1835,6 +2767,113 @@ $chosenLoader = 'waiting' . ($n ?: '');
         } ?>
     </datalist>
     <script>
+        const M2_BROWSER_CACHE_VERSION = <?= json_encode(M2_BROWSER_CACHE_VERSION, JSON_UNESCAPED_SLASHES) ?>;
+        const M2_PAGE_CODE_VERSION = <?= json_encode(M2_PAGE_CODE_VERSION, JSON_UNESCAPED_SLASHES) ?>;
+
+        function m2VersionedAssetUrl(rawUrl) {
+            if (!rawUrl || /^(?:blob:|data:|about:)/i.test(rawUrl)) return rawUrl;
+            try {
+                const url = new URL(rawUrl, document.baseURI);
+                if (url.origin === location.origin) {
+                    url.searchParams.set('v', M2_BROWSER_CACHE_VERSION);
+                }
+                return url.href;
+            } catch (error) {
+                return rawUrl;
+            }
+        }
+
+        let m2WorkerRegistrationPromise = null;
+
+        function m2ArchiveWorkerUrl() {
+            const workerUrl = new URL('/m2-cache-worker.js', location.origin);
+            workerUrl.searchParams.set('v', M2_BROWSER_CACHE_VERSION);
+            workerUrl.searchParams.set('p', M2_PAGE_CODE_VERSION);
+            return workerUrl;
+        }
+
+        function waitForM2WorkerActivation(worker) {
+            if (worker.state === 'activated') return Promise.resolve(worker);
+            return new Promise((resolve, reject) => {
+                const onStateChange = () => {
+                    if (worker.state === 'activated') {
+                        worker.removeEventListener('statechange', onStateChange);
+                        resolve(worker);
+                    } else if (worker.state === 'redundant') {
+                        worker.removeEventListener('statechange', onStateChange);
+                        reject(new Error('Browser archive worker became redundant'));
+                    }
+                };
+                worker.addEventListener('statechange', onStateChange);
+                onStateChange();
+            });
+        }
+
+        function ensureM2WorkerRegistration() {
+            if (m2WorkerRegistrationPromise) return m2WorkerRegistrationPromise;
+            m2WorkerRegistrationPromise = (async () => {
+                if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+                    throw new Error('Service Worker requires HTTPS');
+                }
+                const workerUrl = m2ArchiveWorkerUrl();
+                let registration = await navigator.serviceWorker.getRegistration('/');
+                const currentWorkerUrls = [
+                    registration?.installing?.scriptURL,
+                    registration?.waiting?.scriptURL,
+                    registration?.active?.scriptURL
+                ].filter(Boolean);
+                if (!registration || !currentWorkerUrls.includes(workerUrl.href)) {
+                    registration = await navigator.serviceWorker.register(workerUrl.href, {
+                        scope: '/',
+                        updateViaCache: 'none'
+                    });
+                }
+                let worker = [registration.installing, registration.waiting, registration.active]
+                    .find(candidate => candidate?.scriptURL === workerUrl.href) ||
+                    registration.installing || registration.waiting || registration.active;
+                if (!worker) throw new Error('Browser archive worker was not created');
+                worker = await waitForM2WorkerActivation(worker);
+                return { registration, worker };
+            })().catch(error => {
+                m2WorkerRegistrationPromise = null;
+                throw error;
+            });
+            return m2WorkerRegistrationPromise;
+        }
+
+        function armM2SurvivalShell() {
+            const root = document.documentElement;
+            root.dataset.m2SurvivalState = 'arming';
+            return ensureM2WorkerRegistration().then(({ worker }) => new Promise((resolve, reject) => {
+                const requestId = 'm2-survival-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+                const onMessage = event => {
+                    const message = event.data;
+                    if (!message || message.requestId !== requestId) return;
+                    if (message.type === 'M2_SURVIVAL_READY') {
+                        navigator.serviceWorker.removeEventListener('message', onMessage);
+                        root.dataset.m2SurvivalState = 'ready';
+                        resolve(message);
+                    } else if (message.type === 'M2_SURVIVAL_ERROR') {
+                        navigator.serviceWorker.removeEventListener('message', onMessage);
+                        root.dataset.m2SurvivalState = 'fault';
+                        reject(new Error(message.error || 'Survival shell failed'));
+                    }
+                };
+                navigator.serviceWorker.addEventListener('message', onMessage);
+                worker.postMessage({
+                    type: 'M2_SURVIVAL_ARM',
+                    requestId,
+                    pageVersion: M2_PAGE_CODE_VERSION,
+                    documentUrl: location.href
+                });
+            })).catch(error => {
+                root.dataset.m2SurvivalState = 'fault';
+                throw error;
+            });
+        }
+
+        armM2SurvivalShell().catch(() => {});
+
         function openComFromPfp(e, cid, el) {
             e.stopPropagation();
             e.preventDefault();
@@ -1859,10 +2898,943 @@ $chosenLoader = 'waiting' . ($n ?: '');
             dryGain = null,
             wetGain = null,
             wetInputGain = null,
+            masterGain = null,
             convolverConnected = false;
-        let currentRevPct = 0.0;
-        let lMode = true;
         const sourceMap = new WeakMap();
+
+        const freezeTelemetry = value => {
+            if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+            Object.values(value).forEach(freezeTelemetry);
+            return Object.freeze(value);
+        };
+
+        const publishReadOnlyWindow = (name, value) => {
+            const descriptor = Object.getOwnPropertyDescriptor(window, name);
+            if (descriptor && !descriptor.configurable) return false;
+            Object.defineProperty(window, name, {
+                value,
+                writable: false,
+                configurable: false
+            });
+            return true;
+        };
+
+        class CircuitContact extends EventTarget {
+            #closed;
+            #authority;
+
+            constructor(name, closed = false, authority = null) {
+                super();
+                this.name = name;
+                this.#closed = !!closed;
+                this.#authority = authority;
+                Object.defineProperty(this, 'closed', {
+                    enumerable: true,
+                    configurable: false,
+                    get: () => this.#closed
+                });
+                Object.preventExtensions(this);
+            }
+
+            setClosed(closed, authority = null) {
+                if (this.#authority !== null && authority !== this.#authority) {
+                    throw new Error('Unauthorized contact operation: ' + this.name);
+                }
+                const next = !!closed;
+                if (next === this.#closed) return false;
+                this.#closed = next;
+                this.dispatchEvent(new Event('change'));
+                return true;
+            }
+        }
+
+        class CommandRegistry {
+            #commands = new Map();
+
+            define(label, { version = 1, validate = () => true } = {}) {
+                if (typeof label !== 'string' || !label.length) throw new TypeError('Command label required');
+                if (this.#commands.has(label)) throw new Error('Duplicate command label: ' + label);
+                if (!Number.isInteger(version) || version < 1) throw new TypeError('Invalid command version: ' + label);
+                if (typeof validate !== 'function') throw new TypeError('Command validator required: ' + label);
+                this.#commands.set(label, Object.freeze({ label, version, validate }));
+                return this;
+            }
+
+            has(label) {
+                return this.#commands.has(label);
+            }
+
+            get(label) {
+                return this.#commands.get(label) || null;
+            }
+
+            validate(label, payload, version = null) {
+                const command = this.get(label);
+                if (!command) return { valid: false, fault: 'UNKNOWN_COMMAND' };
+                if (version !== null && version !== command.version) {
+                    return { valid: false, fault: 'UNSUPPORTED_VERSION', expected: command.version };
+                }
+                try {
+                    return command.validate(payload)
+                        ? { valid: true, version: command.version }
+                        : { valid: false, fault: 'INVALID_PAYLOAD', version: command.version };
+                } catch (error) {
+                    return { valid: false, fault: 'INVALID_PAYLOAD', version: command.version, error };
+                }
+            }
+
+            get labels() {
+                return [...this.#commands.keys()];
+            }
+        }
+
+        class AvionicsDataBus extends EventTarget {
+            #receivers = new Map();
+            #sequence = 0;
+
+            constructor(commands = null) {
+                super();
+                this.commands = commands;
+            }
+
+            register(label, receiver, powered = () => true) {
+                if (typeof label !== 'string' || !label.length) throw new TypeError('Avionics label required');
+                if (typeof receiver !== 'function') throw new TypeError('Avionics receiver required: ' + label);
+                if (this.commands && !this.commands.has(label)) throw new Error('Unregistered avionics command: ' + label);
+                const endpoint = { receiver, powered };
+                if (!this.#receivers.has(label)) this.#receivers.set(label, new Set());
+                this.#receivers.get(label).add(endpoint);
+                return () => this.#receivers.get(label)?.delete(endpoint);
+            }
+
+            hasReceiver(label) {
+                return (this.#receivers.get(label)?.size || 0) > 0;
+            }
+
+            hasCommand(label) {
+                return this.commands ? this.commands.has(label) : this.hasReceiver(label);
+            }
+
+            get labels() {
+                return [...this.#receivers.keys()];
+            }
+
+            transmit(label, payload = {}, source = null, version = null) {
+                const validation = this.commands
+                    ? this.commands.validate(label, payload, version)
+                    : { valid: true, version: version || 1 };
+                const frame = {
+                    label,
+                    version: validation.version || version || null,
+                    payload,
+                    source,
+                    sourceId: source?.id || source?.name || null,
+                    sequence: ++this.#sequence,
+                    timestamp: Date.now(),
+                    handled: false,
+                    deliveries: 0,
+                    results: [],
+                    errors: []
+                };
+                if (!validation.valid) {
+                    frame.errors.push(Object.assign(new Error(validation.fault), validation));
+                    this.dispatchEvent(new CustomEvent('message', { detail: frame }));
+                    return frame;
+                }
+                for (const endpoint of this.#receivers.get(label) || []) {
+                    if (!endpoint.powered()) continue;
+                    try {
+                        const result = endpoint.receiver(payload, frame);
+                        if (result !== false) {
+                            frame.handled = true;
+                            frame.deliveries++;
+                            frame.results.push(result);
+                            if (result && typeof result.catch === 'function') {
+                                result.catch(error => frame.errors.push(error));
+                            }
+                        }
+                    } catch (error) {
+                        frame.errors.push(error);
+                    }
+                }
+                this.dispatchEvent(new CustomEvent('message', { detail: frame }));
+                return frame;
+            }
+        }
+
+        class DiscreteInput extends EventTarget {
+            #closed;
+            #electricalInput = null;
+
+            constructor(name, { closed = false, power = null } = {}) {
+                super();
+                this.name = name;
+                this.power = power;
+                this.#closed = !!closed;
+                power?.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+            }
+
+            get closed() {
+                return this.#closed;
+            }
+
+            get powered() {
+                return !this.power || this.power.closed;
+            }
+
+            get active() {
+                return this.powered && this.#closed && (!this.#electricalInput || this.#electricalInput.active);
+            }
+
+            get state() {
+                if (!this.powered) return 'OPEN';
+                if (this.#electricalInput) return this.#electricalInput.state;
+                return this.#closed ? 'POWERED' : 'OPEN';
+            }
+
+            get voltage() {
+                return this.#electricalInput?.voltage || 0;
+            }
+
+            get current() {
+                return this.#electricalInput?.current || 0;
+            }
+
+            bindElectricalInput(input) {
+                if (this.#electricalInput) throw new Error('Discrete input already wired: ' + this.name);
+                this.#electricalInput = input;
+                input.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+                input.setClosed(this.#closed);
+                this.dispatchEvent(new Event('change'));
+                return this;
+            }
+
+            setClosed(closed) {
+                const next = !!closed;
+                if (next && !this.powered) return false;
+                if (next === this.#closed) return false;
+                this.#closed = next;
+                this.#electricalInput?.setClosed(next);
+                this.dispatchEvent(new Event('mechanicalchange'));
+                this.dispatchEvent(new Event('change'));
+                return true;
+            }
+        }
+
+        Object.freeze(CircuitContact.prototype);
+        Object.freeze(CircuitContact);
+
+        class AvionicsSelector extends EventTarget {
+            #position;
+            #electricalInputs = new Map();
+
+            constructor(name, positions, initialPosition, { power = null } = {}) {
+                super();
+                this.name = name;
+                this.positions = [...positions];
+                this.power = power;
+                this.#position = this.positions.includes(initialPosition) ? initialPosition : this.positions[0];
+                power?.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+            }
+
+            get position() {
+                return this.#position;
+            }
+
+            get powered() {
+                return !this.power || this.power.closed;
+            }
+
+            get effectivePosition() {
+                if (!this.powered) return null;
+                if (!this.#electricalInputs.size) return this.#position;
+                return this.#electricalInputs.get(this.#position)?.active ? this.#position : null;
+            }
+
+            get state() {
+                if (!this.powered) return 'OPEN';
+                const active = [...this.#electricalInputs.entries()].filter(([, input]) => input.active);
+                if (!this.#electricalInputs.size) return 'POWERED';
+                if (active.length !== 1 || active[0][0] !== this.#position) return 'FAULT';
+                return 'POWERED';
+            }
+
+            bindElectricalPosition(position, input) {
+                if (!this.positions.includes(position)) throw new Error('Invalid selector pole: ' + this.name + ':' + position);
+                if (this.#electricalInputs.has(position)) throw new Error('Selector pole already wired: ' + this.name + ':' + position);
+                this.#electricalInputs.set(position, input);
+                input.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+                input.setClosed(position === this.#position);
+                this.dispatchEvent(new Event('change'));
+                return this;
+            }
+
+            setPosition(position) {
+                if (!this.positions.includes(position)) throw new Error('Invalid selector position: ' + this.name + ':' + position);
+                if (position === this.#position) return false;
+                const previous = this.#position;
+                this.#electricalInputs.get(previous)?.setClosed(false);
+                this.#position = position;
+                this.#electricalInputs.get(position)?.setClosed(true);
+                this.dispatchEvent(new CustomEvent('change', { detail: { previous, position } }));
+                return true;
+            }
+        }
+
+        class AvionicsPermissive extends EventTarget {
+            constructor(name, inputs, test) {
+                super();
+                this.name = name;
+                this.inputs = [...inputs];
+                this.test = test;
+                this.energized = !!test();
+                this.inputs.forEach(input => input.addEventListener('change', () => this.recompute()));
+            }
+
+            recompute() {
+                const energized = !!this.test();
+                if (energized === this.energized) return false;
+                this.energized = energized;
+                this.dispatchEvent(new Event('change'));
+                return true;
+            }
+        }
+
+        class AnalogControl extends EventTarget {
+            #value;
+            #electricalInput = null;
+
+            constructor(name, value, { power = null, referenceVoltage = 5 } = {}) {
+                super();
+                this.name = name;
+                this.power = power;
+                this.referenceVoltage = referenceVoltage;
+                this.#value = value;
+                power?.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+            }
+
+            get value() {
+                return this.#value;
+            }
+
+            get powered() {
+                return !this.power || this.power.closed;
+            }
+
+            get signalVoltage() {
+                return this.#electricalInput
+                    ? this.#electricalInput.signalVoltage
+                    : (this.powered ? this.#value * this.referenceVoltage : 0);
+            }
+
+            get state() {
+                if (!this.powered) return 'OPEN';
+                return this.#electricalInput?.state || 'POWERED';
+            }
+
+            bindElectricalInput(input) {
+                if (this.#electricalInput) throw new Error('Analog input already wired: ' + this.name);
+                this.#electricalInput = input;
+                input.setValue(this.#value);
+                input.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+                this.dispatchEvent(new Event('change'));
+                return this;
+            }
+
+            setValue(value) {
+                const next = Math.max(0, Math.min(1, Number(value)));
+                if (!isFinite(next) || next === this.#value) return false;
+                this.#value = next;
+                this.#electricalInput?.setValue(next);
+                this.dispatchEvent(new Event('change'));
+                return true;
+            }
+        }
+
+        class AvionicsMomentaryButton extends DiscreteInput {
+            constructor(name, { power = null, bus, command, payload = {} } = {}) {
+                super(name, { power });
+                this.bus = bus;
+                this.command = command;
+                this.payload = payload;
+            }
+
+            pulse(payload = this.payload) {
+                if (!this.setClosed(true)) return false;
+                const frame = this.bus.transmit(this.command, payload, this);
+                this.setClosed(false);
+                return frame;
+            }
+        }
+
+        class AvionicsDeviceRegistry {
+            #factories = new Map();
+
+            register(type, factory) {
+                if (this.#factories.has(type)) throw new Error('Duplicate avionics device type: ' + type);
+                this.#factories.set(type, factory);
+                return this;
+            }
+
+            create(spec, context) {
+                const factory = this.#factories.get(spec.type);
+                if (!factory) throw new Error('Unknown avionics device type: ' + spec.type);
+                return factory(spec, context);
+            }
+        }
+
+        class AvionicsBoard {
+            #devices = new Map();
+            #specs = new Map();
+            #electricalNetlist = null;
+            #electricalOptions = {};
+
+            constructor(registry, bus, powerContacts = {}) {
+                this.registry = registry;
+                this.bus = bus;
+                this.powerContacts = powerContacts;
+            }
+
+            add(spec) {
+                if (!spec.id || this.#devices.has(spec.id)) throw new Error('Duplicate or missing avionics device id: ' + spec.id);
+                const device = this.registry.create(spec, {
+                    bus: this.bus,
+                    powerContacts: this.powerContacts
+                });
+                device.id = spec.id;
+                this.#devices.set(spec.id, device);
+                this.#specs.set(spec.id, { ...spec });
+                this.#electricalNetlist?.attachAvionicsDevice(spec, device, this.#electricalOptions);
+                return device;
+            }
+
+            install(specs) {
+                return Object.fromEntries(specs.map(spec => [spec.id, this.add(spec)]));
+            }
+
+            get(id) {
+                return this.#devices.get(id) || null;
+            }
+
+            get entries() {
+                return [...this.#devices.entries()];
+            }
+
+            get specs() {
+                return [...this.#specs.entries()].map(([id, spec]) => [id, { ...spec }]);
+            }
+
+            connectElectricalNetlist(netlist, options = {}) {
+                if (this.#electricalNetlist && this.#electricalNetlist !== netlist) {
+                    throw new Error('Avionics board already connected to another electrical netlist');
+                }
+                this.#electricalNetlist = netlist;
+                this.#electricalOptions = { ...options };
+                this.#specs.forEach((spec, id) => {
+                    netlist.attachAvionicsDevice(spec, this.#devices.get(id), this.#electricalOptions);
+                });
+                return this;
+            }
+
+            validate() {
+                const faults = [];
+                this.#specs.forEach((spec, id) => {
+                    if (spec.power && !(spec.power in this.powerContacts)) {
+                        faults.push({ id, fault: 'UNKNOWN_POWER', value: spec.power });
+                    }
+                    if (spec.command && !this.bus.hasCommand(spec.command)) {
+                        faults.push({ id, fault: 'UNKNOWN_COMMAND', value: spec.command });
+                    } else if (spec.command && !this.bus.hasReceiver(spec.command)) {
+                        faults.push({ id, fault: 'NO_COMMAND_RECEIVER', value: spec.command });
+                    }
+                });
+                return faults;
+            }
+
+            mount(root = document) {
+                root.querySelectorAll('[data-avionics-type][data-avionics-id]').forEach(element => {
+                    const id = element.dataset.avionicsId;
+                    if (this.#devices.has(id)) return;
+                    let payload = {};
+                    try {
+                        if (element.dataset.avionicsPayload) payload = JSON.parse(element.dataset.avionicsPayload);
+                    } catch (error) {}
+                    const device = this.add({
+                        id,
+                        name: element.getAttribute('aria-label') || id,
+                        type: element.dataset.avionicsType,
+                        power: element.dataset.avionicsPower || 'main',
+                        command: element.dataset.avionicsCommand || '',
+                        payload
+                    });
+                    if (device instanceof AvionicsMomentaryButton) {
+                        element.addEventListener('click', event => {
+                            event.preventDefault();
+                            device.pulse();
+                        });
+                    }
+                });
+                return this;
+            }
+        }
+
+        class BoardValidator {
+            validate({ boards = [], netlists = [] } = {}) {
+                return [
+                    ...boards.flatMap(board => board.validate()),
+                    ...netlists.flatMap(netlist => netlist.validate())
+                ];
+            }
+        }
+
+        const commandPayloadIsObject = payload => payload !== null && typeof payload === 'object' && !Array.isArray(payload);
+        const avionicsCommands = new CommandRegistry();
+        [
+            'PLAYBACK.REPEAT.WHOLE',
+            'PLAYBACK.REPEAT.SECTION',
+            'PLAYBACK.CARD.PREVIOUS',
+            'PLAYBACK.STOP',
+            'PLAYBACK.CARD.NEXT',
+            'PLAYBACK.RANDOM.CATEGORY.WHOLE',
+            'PLAYBACK.RANDOM.CATEGORY.SECTION',
+            'PLAYBACK.RANDOM.VISIBLE.WHOLE',
+            'PLAYBACK.RANDOM.VISIBLE.SECTION',
+            'SOUND.SPEED.CENTRE',
+            'SOUND.ALARM.START',
+            'SOUND.ALARM.STOP',
+            'ARCHIVE.INSTALL'
+        ].forEach(label => avionicsCommands.define(label, {
+            version: 1,
+            validate: commandPayloadIsObject
+        }));
+        avionicsCommands.define('PANEL.MECHANICAL.PLAY', {
+            version: 1,
+            validate: payload => commandPayloadIsObject(payload) &&
+                typeof payload.name === 'string' && payload.name.length > 0
+        });
+        avionicsCommands.define('SOUND.UI.PLAY', {
+            version: 1,
+            validate: payload => commandPayloadIsObject(payload) &&
+                typeof payload.name === 'string' && payload.name.length > 0
+        });
+        const avionicsBus = new AvionicsDataBus(avionicsCommands);
+        const avionicsDeviceRegistry = new AvionicsDeviceRegistry();
+        const boardValidator = new BoardValidator();
+        const resolveAvionicsPower = (spec, context) => {
+            if (!spec.power) return null;
+            if (!(spec.power in context.powerContacts)) {
+                throw new Error('Unknown avionics power bus: ' + spec.power);
+            }
+            return context.powerContacts[spec.power];
+        };
+        avionicsDeviceRegistry
+            .register('maintained-discrete', (spec, context) => new DiscreteInput(
+                spec.name || spec.id,
+                {
+                    closed: spec.closed,
+                    power: resolveAvionicsPower(spec, context)
+                }
+            ))
+            .register('selector', (spec, context) => new AvionicsSelector(
+                spec.name || spec.id,
+                spec.positions,
+                spec.initial,
+                { power: resolveAvionicsPower(spec, context) }
+            ))
+            .register('analog-control', (spec, context) => new AnalogControl(
+                spec.name || spec.id,
+                spec.value,
+                {
+                    power: resolveAvionicsPower(spec, context),
+                    referenceVoltage: spec.referenceVoltage || 5
+                }
+            ))
+            .register('momentary-button', (spec, context) => new AvionicsMomentaryButton(
+                spec.name || spec.id,
+                {
+                    power: resolveAvionicsPower(spec, context),
+                    bus: context.bus,
+                    command: spec.command,
+                    payload: spec.payload
+                }
+            ));
+
+        class SoundAvionicsUnit extends EventTarget {
+            #activities = new Set();
+
+            constructor(bus, powerContact) {
+                super();
+                this.name = 'SOUND AVIONICS UNIT';
+                this.powerContact = powerContact;
+                this.volume = new AnalogControl('VOLUME', 1, { power: powerContact });
+                this.speed = new AnalogControl('SPEED', 0.5, { power: powerContact });
+                this.reverb = new AnalogControl('REVERB', 0, { power: powerContact });
+                this.coupling = new AvionicsSelector(
+                    'L COUPLING', ['OFF', 'ON'], 'ON', { power: powerContact }
+                );
+                this.bus = bus;
+                this.bus.register(
+                    'SOUND.SPEED.CENTRE',
+                    () => this.speed.setValue(0.5),
+                    () => this.powerContact.closed
+                );
+                this.bus.register(
+                    'SOUND.UI.PLAY',
+                    payload => driveElectricalSound(payload.name),
+                    () => this.powerContact.closed
+                );
+                this.bus.register(
+                    'SOUND.ALARM.START',
+                    () => driveStartAlarm(),
+                    () => this.powerContact.closed
+                );
+                this.bus.register(
+                    'SOUND.ALARM.STOP',
+                    () => driveStopAlarm(),
+                    () => this.powerContact.closed
+                );
+            }
+
+            get active() {
+                return this.#activities.size > 0;
+            }
+
+            setActivity(source, active) {
+                const before = this.active;
+                if (active) this.#activities.add(source);
+                else this.#activities.delete(source);
+                if (before === this.active) return false;
+                this.dispatchEvent(new Event('activitychange'));
+                return true;
+            }
+
+            clearActivity() {
+                if (!this.#activities.size) return false;
+                this.#activities.clear();
+                this.dispatchEvent(new Event('activitychange'));
+                return true;
+            }
+
+            get playbackRate() {
+                const y = (0.5 - this.speed.value) * 100;
+                const x = Math.abs(y);
+                const delta = x <= 10 ? 0.01 * x : 0.1 + 0.01 * (x - 10) + Math.pow(x - 10, 2) / 900;
+                return Math.max(0.05, y >= 0 ? 1 + delta : 1 - delta);
+            }
+
+            pulseR2() {
+                return this.bus.transmit('SOUND.SPEED.CENTRE', {}, this);
+            }
+        }
+
+        class PlaybackAvionicsUnit extends EventTarget {
+            #activities = new Set();
+            #sectionWindowPowerAuthority = Symbol('K R3 POWER');
+
+            constructor(loads, powerContact) {
+                super();
+                this.name = 'PLAYBACK AVIONICS UNIT';
+                this.bus = avionicsBus;
+                this.sectionWindowPower = new CircuitContact(
+                    'K R3 ANALOG POWER',
+                    false,
+                    this.#sectionWindowPowerAuthority
+                );
+                this.board = new AvionicsBoard(avionicsDeviceRegistry, this.bus, {
+                    main: powerContact,
+                    r3: this.sectionWindowPower
+                });
+                const devices = this.board.install([
+                    { id: 'PAGE', type: 'maintained-discrete', name: 'PAGE CONTROL DISCRETE', power: 'main', electrical: false },
+                    { id: 'PL', type: 'maintained-discrete', name: 'PL PLAY DISCRETE', power: 'main' },
+                    { id: 'ISR', type: 'selector', name: 'ISR', power: 'main', positions: ['OFF', 'R', 'I', 'S'], initial: 'OFF' },
+                    { id: 'K', type: 'selector', name: 'K', power: 'main', positions: ['OFF', 'ON'], initial: 'ON' },
+                    { id: 'R3', type: 'analog-control', name: 'R3 SECTION WINDOW', power: 'r3', dcSupply: 'k', value: 0.25, inputResistance: 56000 },
+                    { id: 'KR', type: 'selector', name: 'KR', power: 'main', positions: ['OFF', 'ON'], initial: 'OFF' },
+                    { id: 'M', type: 'selector', name: 'M', power: 'main', positions: ['U', 'C', 'D'], initial: 'C' }
+                ]);
+                this.pageContact = devices.PAGE;
+                this.plContact = devices.PL;
+                this.isr = devices.ISR;
+                this.k = devices.K;
+                this.sectionWindow = devices.R3;
+                this.kr = devices.KR;
+                this.m = devices.M;
+                this.routes = Object.freeze([
+                    { positions: { ISR: 'OFF', K: 'OFF' }, command: 'PLAYBACK.REPEAT.WHOLE' },
+                    { positions: { ISR: 'OFF', K: 'ON', KR: 'OFF' }, command: 'PLAYBACK.REPEAT.WHOLE' },
+                    { positions: { ISR: 'OFF', K: 'ON', KR: 'ON' }, command: 'PLAYBACK.REPEAT.SECTION' },
+                    { positions: { ISR: 'R', M: 'U' }, command: 'PLAYBACK.CARD.PREVIOUS' },
+                    { positions: { ISR: 'R', M: 'C' }, command: 'PLAYBACK.STOP' },
+                    { positions: { ISR: 'R', M: 'D' }, command: 'PLAYBACK.CARD.NEXT' },
+                    { positions: { ISR: 'I', K: 'OFF' }, command: 'PLAYBACK.RANDOM.CATEGORY.WHOLE' },
+                    { positions: { ISR: 'I', K: 'ON' }, command: 'PLAYBACK.RANDOM.CATEGORY.SECTION' },
+                    { positions: { ISR: 'S', K: 'OFF' }, command: 'PLAYBACK.RANDOM.VISIBLE.WHOLE' },
+                    { positions: { ISR: 'S', K: 'ON' }, command: 'PLAYBACK.RANDOM.VISIBLE.SECTION' }
+                ]);
+                const commands = {
+                    'PLAYBACK.REPEAT.WHOLE': loads.wholeRepeat,
+                    'PLAYBACK.REPEAT.SECTION': loads.sectionRepeat,
+                    'PLAYBACK.CARD.PREVIOUS': loads.previousCard,
+                    'PLAYBACK.STOP': loads.stop,
+                    'PLAYBACK.CARD.NEXT': loads.nextCard,
+                    'PLAYBACK.RANDOM.CATEGORY.WHOLE': loads.categoryWhole,
+                    'PLAYBACK.RANDOM.CATEGORY.SECTION': loads.categorySection,
+                    'PLAYBACK.RANDOM.VISIBLE.WHOLE': loads.visibleWhole,
+                    'PLAYBACK.RANDOM.VISIBLE.SECTION': loads.visibleSection
+                };
+                Object.entries(commands).forEach(([label, receiver]) => {
+                    this.bus.register(label, receiver, () => this.pageContact.active);
+                });
+                this.sectionRepeatFeed = new AvionicsPermissive(
+                    'KR EFFECTIVE PERMISSIVE',
+                    [this.pageContact, this.plContact, this.isr, this.k, this.kr],
+                    () => this.pageContact.active &&
+                        this.plContact.active &&
+                        this.isr.effectivePosition === 'OFF' &&
+                        this.k.effectivePosition === 'ON' &&
+                        this.kr.effectivePosition === 'ON'
+                );
+                const synchronizeSectionWindowPower = () => this.sectionWindowPower.setClosed(
+                    powerContact.closed && this.k.effectivePosition === 'ON',
+                    this.#sectionWindowPowerAuthority
+                );
+                this.k.addEventListener('change', synchronizeSectionWindowPower);
+                powerContact.addEventListener('change', () => {
+                    this.pageContact.setClosed(powerContact.closed);
+                    synchronizeSectionWindowPower();
+                    if (!powerContact.closed) {
+                        this.dropPl();
+                        this.clearActivity();
+                    }
+                });
+                this.pageContact.setClosed(powerContact.closed);
+                synchronizeSectionWindowPower();
+            }
+
+            get sectionWindowEffectiveValue() {
+                return this.sectionWindow.signalVoltage / this.sectionWindow.referenceVoltage;
+            }
+
+            get active() {
+                return this.#activities.size > 0;
+            }
+
+            setActivity(source, active) {
+                const before = this.active;
+                if (active) this.#activities.add(source);
+                else this.#activities.delete(source);
+                if (before === this.active) return false;
+                this.dispatchEvent(new Event('activitychange'));
+                return true;
+            }
+
+            clearActivity() {
+                if (!this.#activities.size) return false;
+                this.#activities.clear();
+                this.dispatchEvent(new Event('activitychange'));
+                return true;
+            }
+
+            energizePl() {
+                return this.plContact.setClosed(true);
+            }
+
+            dropPl() {
+                return this.plContact.setClosed(false);
+            }
+
+            pulseBoundary(detail) {
+                const signal = { ...detail, handled: false };
+                if (!this.pageContact.active || !this.plContact.active) return signal;
+                const positions = {
+                    ISR: this.isr.effectivePosition,
+                    K: this.k.effectivePosition,
+                    KR: this.kr.effectivePosition,
+                    M: this.m.effectivePosition
+                };
+                const route = this.routes.find(candidate => Object.entries(candidate.positions)
+                    .every(([selector, position]) => positions[selector] === position));
+                if (!route) return signal;
+                signal.handled = this.bus.transmit(route.command, signal, this).handled;
+                return signal;
+            }
+        }
+
+        class ArchiveAvionicsUnit extends EventTarget {
+            #checkPromise = null;
+            #installPromise = null;
+
+            constructor(bus, powerContact, checker, installer) {
+                super();
+                this.name = 'ARCHIVE AVIONICS UNIT';
+                this.bus = bus;
+                this.powerContact = powerContact;
+                this.checker = checker;
+                this.installer = installer;
+                this.state = 'standby';
+                this.active = false;
+                this.bus.register('ARCHIVE.INSTALL', () => this.install(), () => powerContact.closed);
+                powerContact.addEventListener('change', () => {
+                    if (powerContact.closed) queueMicrotask(() => {
+                        const operation = this.check();
+                        if (operation && typeof operation.catch === 'function') operation.catch(() => {});
+                    });
+                    else {
+                        this.state = 'standby';
+                        this.setActive(false);
+                        this.dispatchEvent(new Event('statechange'));
+                    }
+                });
+            }
+
+            setActive(active) {
+                const next = !!active;
+                if (next === this.active) return false;
+                this.active = next;
+                this.dispatchEvent(new Event('activitychange'));
+                return true;
+            }
+
+            check() {
+                if (!this.powerContact.closed) return false;
+                if (this.#installPromise) return this.#installPromise;
+                if (this.#checkPromise) return this.#checkPromise;
+                this.state = 'checking';
+                this.setActive(true);
+                this.dispatchEvent(new Event('statechange'));
+                const operation = Promise.resolve()
+                    .then(() => this.checker())
+                    .then(result => {
+                        if (this.powerContact.closed && !this.#installPromise) {
+                            this.state = result?.complete ? 'ready' : 'incomplete';
+                            this.dispatchEvent(new Event('statechange'));
+                        }
+                        return result;
+                    })
+                    .catch(error => {
+                        if (this.powerContact.closed && !this.#installPromise) {
+                            this.state = 'fault';
+                            this.dispatchEvent(new Event('statechange'));
+                        }
+                        throw error;
+                    })
+                    .finally(() => {
+                        if (this.#checkPromise === operation) this.#checkPromise = null;
+                        if (!this.#installPromise) this.setActive(false);
+                    });
+                this.#checkPromise = operation;
+                return operation;
+            }
+
+            install() {
+                if (!this.powerContact.closed) return false;
+                if (this.#installPromise) return this.#installPromise;
+                this.state = 'installing';
+                this.setActive(true);
+                this.dispatchEvent(new Event('statechange'));
+                const pendingCheck = this.#checkPromise;
+                const operation = Promise.resolve()
+                    .then(() => pendingCheck?.catch(() => null))
+                    .then(() => {
+                        if (!this.powerContact.closed) throw new Error('ARCHIVE AVIONICS UNIT lost S0 power');
+                        return this.installer();
+                    })
+                    .then(result => {
+                        this.state = result?.complete === false ? 'incomplete' : 'ready';
+                        this.dispatchEvent(new Event('statechange'));
+                        return result;
+                    })
+                    .catch(error => {
+                        this.state = 'fault';
+                        this.dispatchEvent(new Event('statechange'));
+                        throw error;
+                    })
+                    .finally(() => {
+                        if (this.#installPromise === operation) this.#installPromise = null;
+                        if (!this.#checkPromise) this.setActive(false);
+                    });
+                this.#installPromise = operation;
+                return operation;
+            }
+        }
+
+        const PAGE_CONTROL_AUTHORITY = Symbol('PAGE CONTROL BUS');
+        const pageMainSystemsPower = new CircuitContact('MAIN SYSTEMS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const panelAvionicsPower = new CircuitContact('PANEL AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const playbackAvionicsPower = new CircuitContact('PLAYBACK AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const soundAvionicsPower = new CircuitContact('SOUND AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const archiveAvionicsPower = new CircuitContact('ARCHIVE AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const timeBusPower = new CircuitContact('TIME BUS POWER', false, PAGE_CONTROL_AUTHORITY);
+        let timeBusInputs = null;
+        const timeBusIsPowered = () => timeBusPower.closed;
+        const setTimeBusInputValue = (id, value) => timeBusInputs?.[id]?.setValue(value) || false;
+        const setTimeBusSetClosed = closed => timeBusInputs?.setInput?.setClosed(closed) || false;
+        const timeBusSetIsActive = () => !!timeBusInputs?.setInput?.active;
+        const soundCircuit = new SoundAvionicsUnit(avionicsBus, soundAvionicsPower);
+        avionicsBus.register(
+            'PANEL.MECHANICAL.PLAY',
+            payload => driveMechanicalSound(payload.name)
+        );
+        const archiveCircuit = new ArchiveAvionicsUnit(
+            avionicsBus,
+            archiveAvionicsPower,
+            () => checkM2BrowserArchive(),
+            () => installM2BrowserArchive()
+        );
+        const lIsOn = () => soundCircuit.coupling.effectivePosition === 'ON';
+        const mainSystemsEvents = new EventTarget();
+        pageMainSystemsPower.addEventListener('change', () => {
+            if (!pageMainSystemsPower.closed) return;
+            mainSystemsEvents.dispatchEvent(new Event('ready'));
+            window.dispatchEvent(new Event('m2mainready'));
+        });
+        const m2ExpansionBoard = new AvionicsBoard(avionicsDeviceRegistry, avionicsBus, {
+            main: pageMainSystemsPower,
+            panel: panelAvionicsPower,
+            playback: playbackAvionicsPower,
+            sound: soundAvionicsPower,
+            archive: archiveAvionicsPower,
+            time: timeBusPower
+        });
+        window.addEventListener('DOMContentLoaded', () => m2ExpansionBoard.mount(document));
+        publishReadOnlyWindow('m2Avionics', Object.freeze({
+            get powers() {
+                return freezeTelemetry({
+                    main: pageMainSystemsPower.closed,
+                    panel: panelAvionicsPower.closed,
+                    playback: playbackAvionicsPower.closed,
+                    sound: soundAvionicsPower.closed,
+                    archive: archiveAvionicsPower.closed,
+                    time: timeBusPower.closed
+                });
+            },
+            get units() {
+                return freezeTelemetry({
+                    sound: {
+                        powered: soundAvionicsPower.closed,
+                        active: soundCircuit.active,
+                        coupling: soundCircuit.coupling.effectivePosition,
+                        volume: soundCircuit.volume.value,
+                        speed: soundCircuit.speed.value,
+                        reverb: soundCircuit.reverb.value
+                    },
+                    archive: {
+                        powered: archiveAvionicsPower.closed,
+                        active: archiveCircuit.active,
+                        state: archiveCircuit.state
+                    }
+                });
+            },
+            get commands() {
+                return Object.freeze(avionicsCommands.labels);
+            },
+            validate() {
+                return freezeTelemetry(boardValidator.validate({
+                    boards: [m2ExpansionBoard]
+                }).map(fault => ({ ...fault })));
+            }
+        }));
 
 
 
@@ -1876,26 +3848,314 @@ $chosenLoader = 'waiting' . ($n ?: '');
             firealarm: '/m/img/fire-alarm.mp3',
             singelpress: '/m/img/singelpress.mp3'
         };
+        const MECHANICAL_SOUND_NAMES = new Set([
+            'arm', 'click', 'singelpress'
+        ]);
+        const ELECTRICAL_SOUND_NAMES = new Set([
+            'chime', 'chimetwice', 'noava'
+        ]);
         const uiAudio = {};
-        Object.keys(UI_SOUND_FILES).forEach(name => {
-            fetch(UI_SOUND_FILES[name])
-                .then(r => r.blob())
-                .then(b => {
-                    const a = new Audio(URL.createObjectURL(b));
-                    a.preload = 'auto';
-                    uiAudio[name] = a;
-                })
-                .catch(() => {});
-        });
-
         const ASSET = {};
-        const aimg = f => ASSET[f] || ('img/' + f);
-        const ASSET_FILES = <?= json_encode($preloadAssets, JSON_UNESCAPED_SLASHES) ?>;
-        const ASSET_READY = Promise.all(ASSET_FILES.map(f =>
-            fetch('img/' + f).then(r => r.blob()).then(b => {
-                ASSET[f] = URL.createObjectURL(b);
-            }).catch(() => {})
-        ));
+        const aimg = f => ASSET[f] || ('/m/img/' + f);
+        const CONTROL_ASSET_FILES = [
+            'ploff.png', 'plon.png', 'plpresstoon.png', 'plpresstooff.png',
+            'sc.png', 'sd.png', 'st.png', 'knobswrap.png', 'knob.png',
+            'rotate.png', 'r2off.png', 'r2on.png', 'kboswrapforalign.png',
+            'lightforalignoff.png', 'lightforalignon.png'
+        ];
+        function fetchRequiredBlob(url) {
+            const versionedUrl = m2VersionedAssetUrl(url);
+            return fetch(versionedUrl).then(response => {
+                if (!response.ok) throw new Error('HTTP ' + response.status + ' for ' + url);
+                return response.blob();
+            });
+        }
+
+        function prepareUiAudio(objectUrl) {
+            return new Promise((resolve, reject) => {
+                const sound = new Audio();
+                const ready = () => {
+                    sound.removeEventListener('loadeddata', ready);
+                    sound.removeEventListener('error', failed);
+                    resolve(sound);
+                };
+                const failed = () => {
+                    sound.removeEventListener('loadeddata', ready);
+                    sound.removeEventListener('error', failed);
+                    reject(sound.error || new Error('Control sound failed to decode'));
+                };
+                sound.preload = 'auto';
+                sound.addEventListener('loadeddata', ready);
+                sound.addEventListener('error', failed);
+                sound.src = objectUrl;
+                sound.load();
+                if (sound.readyState >= 2) ready();
+            });
+        }
+
+        let tierOneResourcePromise = null;
+        function loadTierOneResources(report = () => {}) {
+            if (tierOneResourcePromise) return tierOneResourcePromise;
+            const controlEntries = CONTROL_ASSET_FILES.map(name => ({ kind: 'control', name, url: '/m/img/' + name }));
+            const soundEntries = Object.entries(UI_SOUND_FILES).map(([name, url]) => ({ kind: 'sound', name, url }));
+            const entries = [...controlEntries, ...soundEntries];
+            let completed = 0;
+            tierOneResourcePromise = Promise.all(entries.map(entry =>
+                fetchRequiredBlob(entry.url).then(async blob => {
+                    const objectUrl = URL.createObjectURL(blob);
+                    if (entry.kind === 'control') {
+                        ASSET[entry.name] = objectUrl;
+                    } else if (entry.kind === 'sound') {
+                        uiAudio[entry.name] = await prepareUiAudio(objectUrl);
+                    }
+                    completed += 1;
+                    report(completed, entries.length);
+                })
+            )).then(() => {
+                applyAssetBlobs();
+                mSyncControls();
+            });
+            return tierOneResourcePromise;
+        }
+
+        const M2_ARCHIVE_FIXED_ASSETS = [
+            '/img/logomonochrome.ico',
+            '/css/fonts/JunicodeVF-Roman.woff2',
+            '/css/fonts/JunicodeVF-Italic.woff2',
+            '/css/fonts/nullpunktsenergiefont-Regular.ttf',
+            '/m/img/BabelStoneHan.ttf',
+            '/m/serv/npfp.png',
+            ...CONTROL_ASSET_FILES.map(name => '/m/img/' + name),
+            ...Object.values(UI_SOUND_FILES)
+        ];
+
+        function collectM2ArchiveManifest() {
+            const rawUrls = new Set(M2_ARCHIVE_FIXED_ASSETS);
+            document.querySelectorAll('[src], [data-src], [poster], [data-art]').forEach(element => {
+                ['src', 'data-src', 'poster', 'data-art'].forEach(attribute => {
+                    const value = element.getAttribute(attribute);
+                    if (value) rawUrls.add(value);
+                });
+            });
+
+            return [...new Set([...rawUrls]
+                .filter(url => url && !/^(?:blob:|data:|about:)/i.test(url))
+                .map(m2VersionedAssetUrl))];
+        }
+
+        function m2ArchiveAssetKey(rawUrl) {
+            const url = new URL(rawUrl, document.baseURI);
+            url.hash = '';
+            if (url.origin === location.origin) {
+                url.searchParams.delete('v');
+                return url.pathname + url.search;
+            }
+            return url.href;
+        }
+
+        async function requestM2ArchiveCatalogue() {
+            const response = await fetch(new URL('/m/m2list.json', location.origin).href, {
+                cache: 'no-store',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) throw new Error('Archive catalogue HTTP ' + response.status);
+            const result = await response.json();
+            if (!result || typeof result.list !== 'object' || Array.isArray(result.list)) {
+                throw new Error('Archive catalogue is incompatible');
+            }
+            return result;
+        }
+
+        function reconcileM2ArchiveManifest(manifest, catalogue) {
+            return manifest.map(url => {
+                const key = m2ArchiveAssetKey(url);
+                const fingerprint = typeof catalogue?.list?.[key] === 'string' &&
+                    /^[a-f0-9]{64}$/i.test(catalogue.list[key])
+                    ? catalogue.list[key].toLowerCase()
+                    : null;
+                return {
+                    url,
+                    key,
+                    fingerprint,
+                    sampleBytes: 65536
+                };
+            });
+        }
+
+        function runM2BrowserArchive(installMissing) {
+            return (async () => {
+                const root = document.documentElement;
+                root.dataset.m2ArchiveVersion = M2_BROWSER_CACHE_VERSION;
+                if (!('serviceWorker' in navigator) || !window.isSecureContext) {
+                    root.dataset.m2ArchiveState = 'unsupported';
+                    throw new Error('Service Worker requires HTTPS');
+                }
+
+                const manifest = collectM2ArchiveManifest();
+                const initialTotal = manifest.length + 1;
+                const initialCompleted = Math.min(
+                    Number(root.dataset.m2ArchiveCompleted || 0),
+                    initialTotal
+                );
+                const initialState = installMissing ? 'preparing' : 'checking';
+                root.dataset.m2ArchiveState = initialState;
+                root.dataset.m2ArchiveCompleted = String(initialCompleted);
+                root.dataset.m2ArchiveTotal = String(initialTotal);
+                window.dispatchEvent(new CustomEvent('m2archiveprogress', {
+                    detail: {
+                        version: M2_BROWSER_CACHE_VERSION,
+                        state: initialState,
+                        completed: initialCompleted,
+                        total: initialTotal,
+                        reused: 0,
+                        fetched: 0,
+                        failures: 0
+                    }
+                }));
+                let catalogue = null;
+                try {
+                    catalogue = await requestM2ArchiveCatalogue();
+                } catch (error) {
+                    root.dataset.m2ArchiveState = 'offline';
+                }
+                if (catalogue && String(catalogue.v) !== M2_BROWSER_CACHE_VERSION) {
+                    root.dataset.m2ArchiveLatestVersion = String(catalogue.v);
+                    throw new Error('Archive catalogue version ' + catalogue.v +
+                        ' does not match page version ' + M2_BROWSER_CACHE_VERSION);
+                }
+                const assets = reconcileM2ArchiveManifest(manifest, catalogue);
+                const { worker } = await ensureM2WorkerRegistration();
+
+                let persistent = false;
+                let storageEstimate = null;
+                if (navigator.storage) {
+                    try {
+                        persistent = await navigator.storage.persisted();
+                        if (!persistent && navigator.storage.persist) {
+                            persistent = await navigator.storage.persist();
+                        }
+                        if (navigator.storage.estimate) storageEstimate = await navigator.storage.estimate();
+                    } catch (error) {}
+                }
+
+                const requestId = 'm2-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+                const documentUrl = new URL(location.href);
+                documentUrl.hash = '';
+                return await new Promise((resolve, reject) => {
+                    let reconciliationStarted = false;
+                    const finish = result => {
+                        navigator.serviceWorker.removeEventListener('message', onMessage);
+                        resolve(result);
+                    };
+                    const fail = error => {
+                        navigator.serviceWorker.removeEventListener('message', onMessage);
+                        root.dataset.m2ArchiveState = 'fault';
+                        reject(error instanceof Error ? error : new Error(String(error)));
+                    };
+                    const onMessage = event => {
+                        const message = event.data;
+                        if (!message || message.requestId !== requestId) return;
+                        if (message.type === 'M2_ARCHIVE_CHECK_PROGRESS') {
+                            const completed = Math.max(
+                                Number(root.dataset.m2ArchiveCompleted || 0),
+                                Number(message.completed || 0)
+                            );
+                            root.dataset.m2ArchiveState = 'checking';
+                            root.dataset.m2ArchiveCompleted = String(completed);
+                            root.dataset.m2ArchiveTotal = String(message.total);
+                            window.dispatchEvent(new CustomEvent('m2archiveprogress', {
+                                detail: { ...message, state: 'checking', completed }
+                            }));
+                            return;
+                        }
+                        if (message.type === 'M2_ARCHIVE_RECONCILE_REQUIRED') {
+                            const state = installMissing ? 'reconciling' : 'incomplete';
+                            root.dataset.m2ArchiveState = state;
+                            root.dataset.m2ArchiveCompleted = String(message.completed || 0);
+                            root.dataset.m2ArchiveTotal = String(message.total || manifest.length);
+                            const result = {
+                                ...message,
+                                state,
+                                complete: false,
+                                persistent,
+                                storageEstimate
+                            };
+                            window.dispatchEvent(new CustomEvent('m2archiveprogress', { detail: result }));
+                            if (!installMissing) {
+                                finish(result);
+                                return;
+                            }
+                            if (reconciliationStarted) return;
+                            reconciliationStarted = true;
+                            worker.postMessage({
+                                type: 'M2_ARCHIVE_INSTALL',
+                                requestId,
+                                version: M2_BROWSER_CACHE_VERSION,
+                                assets,
+                                documents: [documentUrl.href],
+                                concurrency: 3
+                            });
+                            return;
+                        }
+                        if (message.type === 'M2_ARCHIVE_PROGRESS') {
+                            root.dataset.m2ArchiveState = 'installing';
+                            root.dataset.m2ArchiveCompleted = String(message.completed);
+                            root.dataset.m2ArchiveTotal = String(message.total);
+                            window.dispatchEvent(new CustomEvent('m2archiveprogress', { detail: message }));
+                            return;
+                        }
+                        if (message.type === 'M2_ARCHIVE_COMPLETE') {
+                            root.dataset.m2ArchiveState = 'complete';
+                            root.dataset.m2ArchiveCompleted = String(message.total);
+                            root.dataset.m2ArchiveTotal = String(message.total);
+                            const result = { ...message, state: 'complete', complete: true, persistent, storageEstimate };
+                            window.dispatchEvent(new CustomEvent('m2archivecomplete', { detail: result }));
+                            finish(result);
+                            return;
+                        }
+                        if (message.type === 'M2_ARCHIVE_ERROR') {
+                            fail(new Error(message.error || 'Browser archive installation failed'));
+                        }
+                    };
+                    navigator.serviceWorker.addEventListener('message', onMessage);
+                    worker.postMessage({
+                        type: 'M2_ARCHIVE_CHECK',
+                        requestId,
+                        version: M2_BROWSER_CACHE_VERSION,
+                        assets,
+                        documents: [documentUrl.href]
+                    });
+                });
+            })().catch(error => {
+                window.dispatchEvent(new CustomEvent('m2archivefault', {
+                    detail: {
+                        state: document.documentElement.dataset.m2ArchiveState || 'fault',
+                        completed: Number(document.documentElement.dataset.m2ArchiveCompleted || 0),
+                        total: Number(document.documentElement.dataset.m2ArchiveTotal || 0),
+                        error: String(error?.message || error)
+                    }
+                }));
+                throw error;
+            });
+        }
+
+        function checkM2BrowserArchive() {
+            return runM2BrowserArchive(false);
+        }
+
+        function installM2BrowserArchive() {
+            return runM2BrowserArchive(true);
+        }
+
+        window.m2Archive = Object.freeze({
+            version: M2_BROWSER_CACHE_VERSION,
+            manifest: collectM2ArchiveManifest,
+            install: () => {
+                const frame = avionicsBus.transmit('ARCHIVE.INSTALL', {}, 'M2 ARCHIVE API');
+                if (!frame.handled) return Promise.reject(frame.errors[0] || new Error('ARCHIVE AVIONICS UNIT is not powered'));
+                return Promise.resolve(frame.results[0]);
+            }
+        });
 
         function applyAssetBlobs() {
             document.querySelectorAll('[data-bg]').forEach(el => {
@@ -1905,34 +4165,96 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 el.src = aimg(el.dataset.asset);
             });
         }
-        ASSET_READY.then(() => { applyAssetBlobs(); mSyncControls(); });
-
-        function playUi(name) {
-            const a = uiAudio[name];
-            if (!a) return;
-            try {
-                a.currentTime = 0;
-                a.play().catch(() => {});
-            } catch (e) {}
+        function bindUiSoundActivity(audio) {
+            if (audio.__m2ActivityBound) return;
+            audio.__m2ActivityBound = true;
+            const inactive = () => soundCircuit.setActivity(audio, false);
+            audio.addEventListener('pause', inactive);
+            audio.addEventListener('ended', inactive);
+            audio.addEventListener('error', inactive);
         }
 
-        function startAlarm() {
+        function driveMechanicalSound(name) {
+            const a = uiAudio[name];
+            if (!a || !MECHANICAL_SOUND_NAMES.has(name)) return false;
+            try {
+                a.loop = false;
+                a.currentTime = 0;
+                const result = a.play();
+                if (result && typeof result.catch === 'function') {
+                    result.catch(() => {});
+                }
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function playMechanicalSound(name) {
+            return avionicsBus.transmit('PANEL.MECHANICAL.PLAY', { name }, 'PAGE PANEL').handled;
+        }
+
+        function driveElectricalSound(name) {
+            const a = uiAudio[name];
+            if (!a || !ELECTRICAL_SOUND_NAMES.has(name) || !soundCircuit.powerContact.closed) return false;
+            bindUiSoundActivity(a);
+            try {
+                a.loop = false;
+                a.currentTime = 0;
+                soundCircuit.setActivity(a, true);
+                const result = a.play();
+                if (result && typeof result.catch === 'function') {
+                    result.catch(() => soundCircuit.setActivity(a, false));
+                }
+                return true;
+            } catch (e) {
+                soundCircuit.setActivity(a, false);
+                return false;
+            }
+        }
+
+        function playElectricalSound(name) {
+            return avionicsBus.transmit('SOUND.UI.PLAY', { name }, 'PAGE PANEL').handled;
+        }
+
+        function driveStartAlarm() {
             const a = uiAudio.firealarm;
-            if (!a) return;
+            if (!a || !soundCircuit.powerContact.closed) return false;
+            bindUiSoundActivity(a);
             try {
                 a.loop = true;
                 a.currentTime = 0;
-                a.play().catch(() => {});
-            } catch (e) {}
+                soundCircuit.setActivity(a, true);
+                const result = a.play();
+                if (result && typeof result.catch === 'function') {
+                    result.catch(() => soundCircuit.setActivity(a, false));
+                }
+                return true;
+            } catch (e) {
+                soundCircuit.setActivity(a, false);
+                return false;
+            }
         }
 
-        function stopAlarm() {
+        function startAlarm() {
+            return avionicsBus.transmit('SOUND.ALARM.START', {}, 'PAGE PANEL').handled;
+        }
+
+        function driveStopAlarm() {
             const a = uiAudio.firealarm;
-            if (!a) return;
+            if (!a) return false;
             try {
                 a.pause();
                 a.currentTime = 0;
-            } catch (e) {}
+                soundCircuit.setActivity(a, false);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function stopAlarm() {
+            return avionicsBus.transmit('SOUND.ALARM.STOP', {}, 'PAGE PANEL').handled;
         }
 
 
@@ -1957,26 +4279,6 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
 
 
-        function snapshotSettings() {
-            try {
-                localStorage.setItem('m2settings', JSON.stringify({
-                    vol: PAGE_VOLUME,
-                    speed: currentPct,
-                    rev: currentRevPct,
-                    l: lMode,
-                    k: lrcMode,
-                    i: iBtn.style.color === 'yellow',
-                    s: sBtn.style.color === 'yellow',
-                    r: loopBtn.style.color === 'yellow'
-                }));
-            } catch (e) {}
-        }
-        window.addEventListener('pagehide', snapshotSettings);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') snapshotSettings();
-        });
-
-
         if ('mediaSession' in navigator) {
             const ms = navigator.mediaSession;
             const h = (name, fn) => {
@@ -1985,21 +4287,24 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 } catch (e) {}
             };
             h('play', () => {
-                if (currentAudio) currentAudio.play();
+                if (currentAudio) playAudio(currentAudio, 'media session');
             });
             h('pause', () => {
-                if (currentAudio) currentAudio.pause();
+                if (currentAudio) {
+                    playbackCircuit?.dropPl();
+                    currentAudio.pause();
+                }
             });
             h('previoustrack', () => prevBtn.click());
             h('nexttrack', () => nextBtn.click());
             h('seekbackward', (d) => {
-                if (currentAudio) currentAudio.currentTime = Math.max(0, currentAudio.currentTime - (d.seekOffset || 5));
+                if (currentAudio) seekPlayback(currentAudio, Math.max(0, playbackTime(currentAudio) - (d.seekOffset || 5)));
             });
             h('seekforward', (d) => {
-                if (currentAudio) currentAudio.currentTime = Math.min(currentAudio.duration || 0, currentAudio.currentTime + (d.seekOffset || 5));
+                if (currentAudio) seekPlayback(currentAudio, Math.min(playbackDuration(currentAudio), playbackTime(currentAudio) + (d.seekOffset || 5)));
             });
             h('seekto', (d) => {
-                if (currentAudio && d.seekTime != null) currentAudio.currentTime = d.seekTime;
+                if (currentAudio && d.seekTime != null) seekPlayback(currentAudio, d.seekTime);
             });
         }
 
@@ -2007,35 +4312,32 @@ $chosenLoader = 'waiting' . ($n ?: '');
             const revTime = document.getElementById('revTime');
             const revFill = document.getElementById('revFill');
             const revDot = document.getElementById('revDot');
-            if (revDot) revDot.style.top = ((1 - currentRevPct) * 100) + '%';
+            const reverb = soundCircuit.reverb.value;
+            if (revDot) revDot.style.top = ((1 - reverb) * 100) + '%';
             if (revFill) {
-                revFill.style.top = ((1 - currentRevPct) * 100) + '%';
-                revFill.style.height = (currentRevPct * 100) + '%';
+                revFill.style.top = ((1 - reverb) * 100) + '%';
+                revFill.style.height = (reverb * 100) + '%';
             }
-            if (revTime) revTime.textContent = Math.round(currentRevPct * 100) + '%';
+            if (revTime) revTime.textContent = Math.round(reverb * 100) + '%';
             renderRevKnob();
             if (wetGain && dryGain && audioCtx && wetInputGain && convolver) {
-                if (currentRevPct > 0) {
+                if (reverb > 0) {
                     if (!convolverConnected) {
                         try {
                             wetInputGain.connect(convolver);
                             convolver.connect(wetGain);
                             convolverConnected = true;
-                        } catch (e) {
-                            console.error("Error connecting convolver", e);
-                        }
+                        } catch (e) {}
                     }
-                    wetGain.gain.setTargetAtTime(currentRevPct * 1.5, audioCtx.currentTime, 0.05);
-                    dryGain.gain.setTargetAtTime(1 - (currentRevPct * 0.5), audioCtx.currentTime, 0.05);
+                    wetGain.gain.setTargetAtTime(reverb * 1.5, audioCtx.currentTime, 0.05);
+                    dryGain.gain.setTargetAtTime(1 - (reverb * 0.5), audioCtx.currentTime, 0.05);
                 } else {
                     if (convolverConnected) {
                         try {
                             wetInputGain.disconnect(convolver);
                             convolver.disconnect(wetGain);
                             convolverConnected = false;
-                        } catch (e) {
-                            console.error("Error disconnecting convolver", e);
-                        }
+                        } catch (e) {}
                     }
                     wetGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
                     dryGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.05);
@@ -2051,9 +4353,12 @@ $chosenLoader = 'waiting' . ($n ?: '');
             dryGain = audioCtx.createGain();
             wetGain = audioCtx.createGain();
             wetInputGain = audioCtx.createGain();
+            masterGain = audioCtx.createGain();
 
-            dryGain.connect(audioCtx.destination);
-            wetGain.connect(audioCtx.destination);
+            dryGain.connect(masterGain);
+            wetGain.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+            masterGain.gain.value = soundCircuit.powerContact.closed ? 1 : 0;
 
             const revLength = audioCtx.sampleRate * 3.0;
             const impulse = audioCtx.createBuffer(2, revLength, audioCtx.sampleRate);
@@ -2069,23 +4374,79 @@ $chosenLoader = 'waiting' . ($n ?: '');
             updateReverbVisuals();
         }
 
+        const audioRecovery = new WeakMap();
+
+        function resetAudioRecovery(audio) {
+            let state = audioRecovery.get(audio);
+            if (!state) {
+                state = { timer: null, attempts: 0, generation: 0 };
+                audioRecovery.set(audio, state);
+            }
+            if (state.timer) clearTimeout(state.timer);
+            state.timer = null;
+            state.attempts = 0;
+            state.generation++;
+            return state;
+        }
+
+        function clearAudioRecovery(audio) {
+            const state = audioRecovery.get(audio);
+            if (state?.timer) clearTimeout(state.timer);
+            if (state) state.timer = null;
+        }
+
+        function scheduleAudioRecovery(audio, reason) {
+            if (!audio || audio !== currentAudio || audio.paused || audio.ended) return;
+            let state = audioRecovery.get(audio);
+            if (!state) state = resetAudioRecovery(audio);
+            if (state.timer || state.attempts >= 1) return;
+            const generation = state.generation;
+            state.timer = setTimeout(() => {
+                state.timer = null;
+                if (generation !== state.generation || audio !== currentAudio || audio.paused ||
+                    audio.ended || audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return;
+                state.attempts++;
+                const resumeAt = audio.currentTime || 0;
+                const resume = () => {
+                    if (generation !== state.generation || audio !== currentAudio) return;
+                    try {
+                        audio.currentTime = Math.min(resumeAt, audio.duration || resumeAt);
+                    } catch (error) {}
+                    playAudio(audio, 'stall recovery');
+                };
+                audio.addEventListener('loadedmetadata', resume, { once: true });
+                audio.preload = 'auto';
+                audio.load();
+            }, 6000);
+        }
+
         function loadAudio(a) {
+            if (krLoopAudio && krLoopAudio !== a) clearKrSectionLoop();
+            resetAudioRecovery(a);
             initAudioContext();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+            if (soundCircuit.powerContact.closed && audioCtx.state === 'suspended') audioCtx.resume();
             if (!a.getAttribute('src')) {
-                a.setAttribute('src', a.getAttribute('data-src'));
+                a.setAttribute('src', m2VersionedAssetUrl(a.getAttribute('data-src')));
                 a.load();
             }
+            if (a.__virtualSong) {
+                focusMetadataQueue(a.__virtualSong);
+                ensureVirtualMetadata(a.__virtualSong, a).then(ready => {
+                    if (ready) updateVirtualMemberTimes(a.__virtualSong);
+                });
+            } else focusMetadataQueue(null);
+            const card = a.closest('.card');
+            const media = activeMediaForCard(card);
+            if (media && window.loadMediaEl) window.loadMediaEl(media);
             if (!sourceMap.has(a)) {
                 try {
                     const source = audioCtx.createMediaElementSource(a);
                     source.connect(dryGain);
                     source.connect(wetInputGain);
                     sourceMap.set(a, source);
-                } catch (e) {
-                    console.error('Audio node error', e);
-                }
+                } catch (e) {}
             }
+            return true;
         }
 
         function startLoadingAnim(card) {
@@ -2114,12 +4475,35 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
         document.querySelectorAll('audio').forEach(audio => {
-            const card = audio.closest('.cardWrap');
-            audio.addEventListener('waiting', () => startLoadingAnim(card));
-            audio.addEventListener('canplay', () => stopLoadingAnim(card));
-            audio.addEventListener('playing', () => stopLoadingAnim(card));
-            audio.addEventListener('pause', () => stopLoadingAnim(card));
-            audio.addEventListener('error', () => stopLoadingAnim(card));
+            const card = () => audio.closest('.cardWrap');
+            audio.addEventListener('waiting', () => {
+                if (audio !== currentAudio) return;
+                startLoadingAnim(card());
+                scheduleAudioRecovery(audio, 'waiting');
+            });
+            audio.addEventListener('stalled', () => {
+                if (audio !== currentAudio) return;
+                startLoadingAnim(card());
+                scheduleAudioRecovery(audio, 'stalled');
+            });
+            audio.addEventListener('canplay', () => {
+                clearAudioRecovery(audio);
+                if (audio === currentAudio) stopLoadingAnim(card());
+            });
+            audio.addEventListener('playing', () => {
+                clearAudioRecovery(audio);
+                if (audio === currentAudio) stopLoadingAnim(card());
+            });
+            audio.addEventListener('pause', () => {
+                clearAudioRecovery(audio);
+                if (audio === currentAudio) stopLoadingAnim(card());
+            });
+            audio.addEventListener('error', () => {
+                clearAudioRecovery(audio);
+                if (audio === currentAudio) {
+                    stopLoadingAnim(card());
+                }
+            });
         });
         let TOKEN = '';
         const zone = document.getElementById('entryZone');
@@ -2127,8 +4511,460 @@ $chosenLoader = 'waiting' . ($n ?: '');
         const uBox = document.querySelector('.uBox');
         const SALT = 'asfjaƕꜹacvkasjsajfashfasufghjgs';
         let currentAudio = null;
-        let PAGE_VOLUME = 1;
         const np = document.getElementById('npTitle');
+
+        const virtualSongs = [];
+        const METADATA_TIMEOUT_MS = 45000;
+        const metadataQueue = [];
+        const metadataJobs = new WeakMap();
+        let metadataActive = 0;
+        let metadataActiveJob = null;
+
+        function mediaState(audio) {
+            return {
+                src: audio.currentSrc || audio.getAttribute('src') || audio.dataset.src || '',
+                readyState: audio.readyState,
+                networkState: audio.networkState,
+                mediaError: audio.error ? { code: audio.error.code, message: audio.error.message || '' } : null
+            };
+        }
+
+        function playAudio(audio, reason = 'play') {
+            if (!audio) return Promise.resolve(false);
+            if (!soundCircuit.powerContact.closed) {
+                playbackCircuit?.dropPl();
+                if (!audio.paused) audio.pause();
+                return Promise.resolve(false);
+            }
+            playbackCircuit?.energizePl();
+            try {
+                const result = audio.play();
+                if (!result || typeof result.catch !== 'function') return Promise.resolve(true);
+                return result.then(() => true).catch(error => {
+                    playbackCircuit?.dropPl();
+                    return false;
+                });
+            } catch (error) {
+                playbackCircuit?.dropPl();
+                return Promise.resolve(false);
+            }
+        }
+
+        function pumpMetadataQueue() {
+            while (metadataActive < 1 && metadataQueue.length) {
+                const job = metadataQueue.shift();
+                const audio = job.audio;
+                job.status = 'active';
+                metadataActive++;
+                metadataActiveJob = job;
+
+                if (audio.duration && isFinite(audio.duration)) {
+                    metadataJobs.delete(audio);
+                    metadataActive--;
+                    metadataActiveJob = null;
+                    job.resolve(true);
+                    updateVirtualMemberTimes(audio.__virtualSong);
+                    continue;
+                }
+
+                let settled = false;
+                const finish = (ok, reason, reportFailure = true) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timer);
+                    audio.removeEventListener('loadedmetadata', onMetadata);
+                    audio.removeEventListener('error', onError);
+                    audio.removeEventListener('abort', onAbort);
+                    metadataJobs.delete(audio);
+                    metadataActive--;
+                    metadataActiveJob = null;
+                    if (!ok && reportFailure) {
+                        audio.__metadataRetryAfter = Date.now() + 30000;
+                    } else if (ok) audio.__metadataRetryAfter = 0;
+                    job.resolve(ok);
+                    updateVirtualMemberTimes(audio.__virtualSong);
+                    pumpMetadataQueue();
+                };
+                const onMetadata = () => finish(true, 'loaded');
+                const onError = () => finish(false, 'error');
+                const onAbort = () => finish(false, 'aborted');
+                const timer = setTimeout(() => finish(false, 'timed out'), METADATA_TIMEOUT_MS);
+                audio.addEventListener('loadedmetadata', onMetadata, { once: true });
+                audio.addEventListener('error', onError, { once: true });
+                audio.addEventListener('abort', onAbort, { once: true });
+                job.cancel = () => finish(false, 'cancelled', false);
+                if (!audio.getAttribute('src') && audio.dataset.src) {
+                    audio.preload = 'metadata';
+                    audio.setAttribute('src', audio.dataset.src);
+                    audio.load();
+                }
+            }
+        }
+
+        function queueAudioMetadata(audio, priority = false) {
+            if (!audio || (audio.duration && isFinite(audio.duration))) return Promise.resolve(true);
+            const existing = metadataJobs.get(audio);
+            if (existing) {
+                if (priority) existing.priority = true;
+                if (priority && existing.status === 'queued') {
+                    const index = metadataQueue.indexOf(existing);
+                    if (index >= 0) {
+                        metadataQueue.splice(index, 1);
+                        metadataQueue.unshift(existing);
+                    }
+                }
+                return existing.promise;
+            }
+            if (!priority && audio.__metadataRetryAfter > Date.now()) return Promise.resolve(false);
+
+            let resolve;
+            const promise = new Promise(done => { resolve = done; });
+            const job = { audio, resolve, promise, status: 'queued', priority };
+            metadataJobs.set(audio, job);
+            if (priority) metadataQueue.unshift(job);
+            else metadataQueue.push(job);
+            pumpMetadataQueue();
+            return promise;
+        }
+
+        function focusMetadataQueue(info) {
+            for (let i = metadataQueue.length - 1; i >= 0; i--) {
+                const job = metadataQueue[i];
+                if (info && job.audio.__virtualSong === info) continue;
+                metadataQueue.splice(i, 1);
+                metadataJobs.delete(job.audio);
+                job.resolve(false);
+            }
+            if (metadataActiveJob && (!info || metadataActiveJob.audio.__virtualSong !== info)) {
+                metadataActiveJob.cancel?.();
+            }
+        }
+
+        function virtualTitleWords(title) {
+            return (title || '')
+                .normalize('NFKC')
+                .replace(/[\u2010-\u2015\u2212]/g, '-')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLocaleLowerCase()
+                .split(' ')
+                .filter(Boolean);
+        }
+
+        function virtualSeriesTitle(group) {
+            if (!group.length) return 'series';
+            let prefixLength = group[0].words.length;
+            for (let i = 1; i < group.length; i++) {
+                prefixLength = Math.min(prefixLength, group[i].words.length);
+                for (let word = 0; word < prefixLength; word++) {
+                    if (group[i].words[word] !== group[0].words[word]) {
+                        prefixLength = word;
+                        break;
+                    }
+                }
+            }
+
+            const displayWords = group[0].title.replace(/\s+/g, ' ').trim().split(' ');
+            const prefix = displayWords.slice(0, prefixLength);
+            while (prefix.length && /^(?:№|&|[\u2010-\u2015\u2212-]+)$/u.test(prefix[prefix.length - 1])) {
+                prefix.pop();
+            }
+            return (prefix.join(' ') || group[0].title) + ' series';
+        }
+
+        function collectVirtualGroups(items) {
+            const root = { children: new Map(), terminal: [] };
+            items.forEach(item => {
+                let node = root;
+                item.words.forEach(word => {
+                    if (!node.children.has(word)) {
+                        node.children.set(word, { children: new Map(), terminal: [] });
+                    }
+                    node = node.children.get(word);
+                });
+                node.terminal.push(item);
+            });
+
+            const visit = (node, depth) => {
+                let loose = [...node.terminal];
+                let groups = [];
+                let childMadeGroup = false;
+                node.children.forEach(child => {
+                    const result = visit(child, depth + 1);
+                    loose.push(...result.loose);
+                    groups.push(...result.groups);
+                    if (result.madeGroup) childMadeGroup = true;
+                });
+                if (depth > 0 && !childMadeGroup && loose.length > 1) {
+                    return { loose: [], groups: [...groups, loose], madeGroup: true };
+                }
+                return { loose, groups, madeGroup: childMadeGroup };
+            };
+
+            return visit(root, 0).groups;
+        }
+
+        function ensureVirtualMetadata(info, priorityAudio = null) {
+            if (!info) return Promise.resolve(false);
+            const members = [...info.members];
+            if (priorityAudio) {
+                members.sort((a, b) => (b.audio === priorityAudio) - (a.audio === priorityAudio));
+            }
+            return Promise.all(members.map(member =>
+                queueAudioMetadata(member.audio, member.audio === priorityAudio)
+            )).then(() => updateVirtualMemberTimes(info));
+        }
+
+        function updateVirtualMemberTimes(info) {
+            if (!info) return false;
+            let start = 0;
+            let ready = true;
+            info.members.forEach(member => {
+                member.virtualStart = ready ? start : null;
+                if (member.line) member.line.dataset.t = ready ? String(start) : '';
+                const duration = member.audio.duration;
+                if (duration && isFinite(duration) && ready) start += duration;
+                else ready = false;
+            });
+            info.timelineReady = ready;
+            info.virtualDuration = ready ? start : 0;
+            return ready;
+        }
+
+        function activeVirtualMember(info) {
+            return info ? info.members[info.activeIndex] : null;
+        }
+
+        function setActiveVirtualMember(audio) {
+            const info = audio?.__virtualSong;
+            if (!info) return null;
+            const index = audio.__virtualIndex;
+            if (index < 0 || index >= info.members.length) return null;
+            info.activeIndex = index;
+            const active = info.members[index];
+            info.members.forEach(member => {
+                if (!member.media) return;
+                const on = member === active;
+                member.media.style.display = on ? member.mediaDisplay : 'none';
+                if (!on && member.media.tagName === 'VIDEO') member.media.pause();
+            });
+            info.members.forEach(member => {
+                if (member.line) member.line.classList.toggle('lrcActive', member === active);
+            });
+            info.hostCard.dataset.art = active.art || '';
+            if (active.media && window.loadMediaEl) window.loadMediaEl(active.media);
+            return active;
+        }
+
+        function activeMediaForCard(card) {
+            const info = card?.__virtualSong;
+            if (info) return activeVirtualMember(info)?.media || null;
+            return card?.querySelector('.cImg img, .cImg video') || null;
+        }
+
+        function audioForCard(card) {
+            if (!card) return null;
+            if (card.__virtualSong) return activeVirtualMember(card.__virtualSong)?.audio || null;
+            if (card.__virtualMember) return card.__virtualMember.audio;
+            return card.querySelector('audio');
+        }
+
+        function visibleCardFor(card) {
+            return card?.__virtualMember?.info?.hostCard || card;
+        }
+
+        function playbackDuration(audio) {
+            const info = audio?.__virtualSong;
+            if (!info) return audio?.duration || 0;
+            let total = 0;
+            for (const member of info.members) {
+                const duration = member.audio.duration;
+                if (!duration || !isFinite(duration)) return 0;
+                total += duration;
+            }
+            return total;
+        }
+
+        function playbackTime(audio) {
+            const info = audio?.__virtualSong;
+            if (!info) return audio?.currentTime || 0;
+            let time = audio.currentTime || 0;
+            for (let i = 0; i < audio.__virtualIndex; i++) {
+                const duration = info.members[i].audio.duration;
+                if (duration && isFinite(duration)) time += duration;
+            }
+            return time;
+        }
+
+        function playVirtualMember(info, index, localTime = 0, autoplay = true) {
+            if (!info || !info.members[index]) return null;
+            const playIntent = (info.playIntent || 0) + 1;
+            info.playIntent = playIntent;
+            const member = info.members[index];
+            const audio = member.audio;
+            if (currentAudio && currentAudio !== audio) currentAudio.pause();
+            currentAudio = audio;
+            setActiveVirtualMember(audio);
+            loadAudio(audio);
+            audio.volume = soundCircuit.volume.value;
+            audio.playbackRate = soundCircuit.playbackRate;
+            audio.loop = false;
+            const apply = () => {
+                if (info.playIntent !== playIntent || currentAudio !== audio) return;
+                try {
+                    audio.currentTime = Math.max(0, Math.min(localTime, audio.duration || localTime));
+                } catch (e) {}
+                syncKrSectionLoop(audio, playbackTime(audio));
+                updateLoopState();
+                if (autoplay) playAudio(audio, 'virtual member');
+            };
+            if (audio.readyState >= 1) apply();
+            else audio.addEventListener('loadedmetadata', apply, { once: true });
+            return audio;
+        }
+
+        function seekPlayback(audio, time, autoplay = null) {
+            if (!audio) return null;
+            const info = audio.__virtualSong;
+            if (!info) {
+                const targetTime = Math.max(0, Math.min(time, audio.duration || time));
+                audio.currentTime = targetTime;
+                if (audio === currentAudio) syncKrSectionLoop(audio, targetTime);
+                return audio;
+            }
+            const wasPlaying = autoplay === null ? !audio.paused : autoplay;
+            const total = playbackDuration(audio);
+            if (!total) {
+                const seekIntent = (info.seekIntent || 0) + 1;
+                info.seekIntent = seekIntent;
+                ensureVirtualMetadata(info, audio).then(ready => {
+                    if (ready && info.seekIntent === seekIntent && currentAudio?.__virtualSong === info) {
+                        seekPlayback(currentAudio, time, wasPlaying);
+                    }
+                });
+                return audio;
+            }
+            let remaining = Math.max(0, Math.min(time, total));
+            let index = info.members.length - 1;
+            for (let i = 0; i < info.members.length; i++) {
+                const duration = info.members[i].audio.duration;
+                if (remaining < duration || i === info.members.length - 1) {
+                    index = i;
+                    break;
+                }
+                remaining -= duration;
+            }
+            return playVirtualMember(info, index, remaining, wasPlaying);
+        }
+
+        function activeSongId(card) {
+            const info = card?.__virtualSong || card?.__virtualMember?.info;
+            return info ? activeVirtualMember(info).id : card?.id;
+        }
+
+        function advanceVirtualSong(audio) {
+            const info = audio?.__virtualSong;
+            if (!info) return false;
+            const index = audio.__virtualIndex;
+            if (index < info.members.length - 1) {
+                playVirtualMember(info, index + 1, 0, true);
+                return true;
+            }
+            return false;
+        }
+
+        function buildVirtualSongs() {
+            const byCategory = new Map();
+            [...document.querySelectorAll('.cardWrap')].forEach((wrap, order) => {
+                const card = wrap.querySelector('.card');
+                const audio = card?.querySelector('audio');
+                const lyrics = card?.querySelector('.cLyr')?.textContent.trim() || '';
+                const title = card?.querySelector('.cName')?.textContent.trim() || '';
+                if (!card || !audio || lyrics !== '' || title === '') return;
+                const item = { wrap, card, audio, title, words: virtualTitleWords(title), order };
+                if (!item.words.length) return;
+                const category = wrap.dataset.category || '';
+                if (!byCategory.has(category)) byCategory.set(category, []);
+                byCategory.get(category).push(item);
+            });
+
+            byCategory.forEach(items => {
+                collectVirtualGroups(items).forEach(group => {
+                    group.sort((a, b) => a.order - b.order);
+                    const hostItem = group[0];
+                    const info = {
+                        hostCard: hostItem.card,
+                        hostWrap: hostItem.wrap,
+                        seriesTitle: virtualSeriesTitle(group),
+                        activeIndex: 0,
+                        members: []
+                    };
+                    group.forEach((item, index) => {
+                        const media = item.card.querySelector('.cImg img, .cImg video');
+                        const member = {
+                            info,
+                            card: item.card,
+                            wrap: item.wrap,
+                            audio: item.audio,
+                            media,
+                            mediaDisplay: media?.style.display || '',
+                            id: item.card.id,
+                            title: item.title,
+                            art: item.card.dataset.art || '',
+                            index
+                        };
+                        info.members.push(member);
+                        item.card.__virtualMember = member;
+                        item.audio.__virtualSong = info;
+                        item.audio.__virtualIndex = index;
+                        item.audio.dataset.songId = member.id;
+                        item.audio.addEventListener('loadedmetadata', () => updateVirtualMemberTimes(info));
+                        item.audio.addEventListener('durationchange', () => updateVirtualMemberTimes(info));
+                        if (media) {
+                            media.__virtualMember = member;
+                            if (index > 0) {
+                                info.hostCard.querySelector('.cImg').appendChild(media);
+                            }
+                        }
+                        if (index > 0) {
+                            info.hostCard.appendChild(item.audio);
+                            item.wrap.classList.add('virtual-song-member');
+                            item.wrap.style.display = 'none';
+                        }
+                    });
+                    info.hostCard.__virtualSong = info;
+                    info.hostWrap.__virtualSong = info;
+                    info.hostWrap.dataset.virtualMembers = String(info.members.length);
+                    info.hostCard.dataset.title = info.seriesTitle;
+                    const titleEl = info.hostCard.querySelector('.cName');
+                    if (titleEl) titleEl.textContent = info.seriesTitle;
+
+                    const lyricEl = info.hostCard.querySelector('.cLyr');
+                    if (lyricEl) {
+                        lyricEl.textContent = '';
+                        lyricEl.classList.add('virtual-song-lyrics');
+                        info.members.forEach(member => {
+                            const line = document.createElement('span');
+                            line.className = 'lrcLine virtual-song-line';
+                            line.dataset.t = '';
+                            line.dataset.txt = member.title;
+                            line.dataset.songId = member.id;
+                            line.dataset.virtualMember = String(member.index);
+                            line.textContent = member.title;
+                            member.line = line;
+                            lyricEl.appendChild(line);
+                        });
+                    }
+                    virtualSongs.push(info);
+                    setActiveVirtualMember(info.members[0].audio);
+                    updateVirtualMemberTimes(info);
+                });
+            });
+        }
+
+        buildVirtualSongs();
+        window.__npPlaybackDuration = playbackDuration;
+        window.__npPlaybackTime = playbackTime;
 
 
         const stub = () => ({
@@ -2146,51 +4982,918 @@ $chosenLoader = 'waiting' . ($n ?: '');
             sBtn = stub(),
             nextBtn = stub(),
             prevBtn = stub();
-        const seekWrap = document.getElementById('seekWrap');
-        const seekFill = document.getElementById('seekFill');
-        const seekDot = document.getElementById('seekDot');
-        const seekTime = document.getElementById('seekTime');
-        let lrcMode = true;
-        window.__npK = () => lrcMode;
+        const seekRadialSvg = document.getElementById('seekRadial');
+        const seekRadialNamespace = 'http://www.w3.org/2000/svg';
+        const seekRadialSegmentMap = Object.freeze({
+            '0': 'abcdef',
+            '1': 'bc',
+            '2': 'abdeg',
+            '3': 'abcdg',
+            '4': 'bcfg',
+            '5': 'acdfg',
+            '6': 'acdefg',
+            '7': 'abc',
+            '8': 'abcdefg',
+            '9': 'abcdfg',
+            ' ': ''
+        });
+        const seekRadialSegmentPaths = Object.freeze({
+            a: 'M3 1H12L14 3L12 5H3L1 3Z',
+            b: 'M13 4L15 6V16L13 18L11 16V6Z',
+            c: 'M13 20L15 22V32L13 34L11 32V22Z',
+            d: 'M3 33H12L14 35L12 37H3L1 35Z',
+            e: 'M2 20L4 22V32L2 34L0 32V22Z',
+            f: 'M2 4L4 6V16L2 18L0 16V6Z',
+            g: 'M3 17H12L14 19L12 21H3L1 19Z'
+        });
+        const seekRadialNode = (tag, attributes = {}) => {
+            const node = document.createElementNS(seekRadialNamespace, tag);
+            Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, String(value)));
+            return node;
+        };
+        const SEEK_RADIAL_MAX_SECONDS = 999 * 60 - 1;
+        const seekRadialDisplayFields = seconds => {
+            const elapsed = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.floor(seconds || 0)));
+            return {
+                minutes: Math.floor(elapsed / 60) + 1,
+                seconds: elapsed % 60 + 1
+            };
+        };
+        const seekRadialDisplayTime = seconds => {
+            const fields = seekRadialDisplayFields(seconds);
+            return `${fields.minutes}:${String(fields.seconds).padStart(2, '0')}`;
+        };
+
+        class SeekRadialReadout {
+            constructor(group, label) {
+                this.group = group;
+                this.label = label;
+                const positions = [0, 19, 47, 66, 85, 113, 132];
+                positions.forEach((x, slot) => {
+                    const digit = seekRadialNode('g', {
+                        transform: `translate(${x} 0)`,
+                        'data-digit-slot': slot
+                    });
+                    Object.entries(seekRadialSegmentPaths).forEach(([segment, path]) => {
+                        digit.append(seekRadialNode('path', {
+                            class: 'seekRadialDisplaySegment is-off',
+                            d: path,
+                            'data-segment': segment
+                        }));
+                    });
+                    group.append(digit);
+                });
+                [39, 105].forEach(x => {
+                    group.append(seekRadialNode('circle', {
+                        class: 'seekRadialDisplayColon',
+                        cx: x,
+                        cy: 13,
+                        r: 1.7
+                    }));
+                    group.append(seekRadialNode('circle', {
+                        class: 'seekRadialDisplayColon',
+                        cx: x,
+                        cy: 25,
+                        r: 1.7
+                    }));
+                });
+            }
+
+            render(section, seconds, powered) {
+                const safeSection = Math.max(0, Math.min(99, Math.trunc(section || 0)));
+                const fields = seekRadialDisplayFields(seconds);
+                const value = String(safeSection).padStart(2, ' ') +
+                    String(fields.minutes).padStart(3, ' ') +
+                    String(fields.seconds).padStart(2, '0');
+                this.group.querySelectorAll('[data-digit-slot]').forEach((digit, slot) => {
+                    const lit = powered ? seekRadialSegmentMap[value[slot] ?? ' '] ?? '' : '';
+                    digit.querySelectorAll('[data-segment]').forEach(segment => {
+                        segment.classList.toggle('is-off', !lit.includes(segment.dataset.segment));
+                    });
+                });
+                this.group.querySelectorAll('.seekRadialDisplayColon').forEach(colon => {
+                    colon.classList.toggle('is-off', !powered);
+                });
+                this.group.setAttribute(
+                    'aria-label',
+                    powered ?
+                        `${this.label}, section ${safeSection}, ${seekRadialDisplayTime(seconds)}` :
+                        `${this.label}, unpowered`
+                );
+            }
+        }
+
+        class SeekRadialInstrument {
+            constructor(svg, onTarget, onTraverse, onSet, onSectionAdjust, onTimeAdjust) {
+                this.svg = svg;
+                this.onTarget = onTarget;
+                this.onTraverse = onTraverse;
+                this.onSet = onSet;
+                this.onSectionAdjust = onSectionAdjust;
+                this.onTimeAdjust = onTimeAdjust;
+                this.control = svg.querySelector('#seekRadialControl');
+                this.setButton = svg.querySelector('#seekRadialSet');
+                this.targetHand = svg.querySelector('#seekRadialTargetHand');
+                this.sectionHand = svg.querySelector('#seekRadialSectionHand');
+                this.sectionKnob = svg.querySelector('#seekRadialSectionKnob');
+                this.timeKnob = svg.querySelector('#seekRadialTimeKnob');
+                this.sectionRotor = svg.querySelector('#seekRadialSectionRotor');
+                this.timeRotor = svg.querySelector('#seekRadialTimeRotor');
+                this.activeReadout = new SeekRadialReadout(svg.querySelector('#seekRadialActiveDigits'), 'Active position');
+                this.standbyReadout = new SeekRadialReadout(svg.querySelector('#seekRadialStandbyDigits'), 'Standby target');
+                this.pointerId = null;
+                this.pointerAngle = null;
+                this.dragAngle = null;
+                this.dragCycle = 0;
+                this.handCycle = 0;
+                this.manualHandAngle = null;
+                this.renderedHandAngle = -135;
+                this.renderedSectionAngle = -135;
+                this.handMotion = null;
+                this.sectionMotion = null;
+                this.releaseHandMotion = false;
+                this.requestedHandMotion = false;
+                this.powered = false;
+                this.sectionMechanicalAngle = 0;
+                this.timeMechanicalAngle = 0;
+                this.lastOwner = null;
+                this.lastActiveSection = 0;
+                this.lastActivePercent = 0;
+                this.lastSectionMode = false;
+                this.hasRenderedModel = false;
+                this.setPointerId = null;
+                this.buildScales();
+                this.bindControl();
+                this.bindSet();
+                this.bindKnob(this.sectionKnob, this.onSectionAdjust, 'section');
+                this.bindKnob(this.timeKnob, this.onTimeAdjust, 'time');
+                this.render({
+                    activePercent: 0,
+                    activeSection: 0,
+                    targetSection: 0,
+                    activeSeconds: 0,
+                    targetSeconds: 0,
+                    sectionCount: 99,
+                    targetLimitSeconds: SEEK_RADIAL_MAX_SECONDS,
+                    sectionRotorAngle: 0,
+                    timeRotorAngle: 0
+                });
+            }
+
+            point(angle, radius) {
+                const radians = angle * Math.PI / 180;
+                return {
+                    x: 195 + Math.sin(radians) * radius,
+                    y: 190 - Math.cos(radians) * radius
+                };
+            }
+
+            appendTick(layer, angle, innerRadius, outerRadius, className) {
+                const inner = this.point(angle, innerRadius);
+                const outer = this.point(angle, outerRadius);
+                layer.append(seekRadialNode('line', {
+                    class: className,
+                    x1: inner.x,
+                    y1: inner.y,
+                    x2: outer.x,
+                    y2: outer.y
+                }));
+            }
+
+            appendLabel(layer, angle, radius, value, className) {
+                const position = this.point(angle, radius);
+                const label = seekRadialNode('text', {
+                    class: className,
+                    x: position.x,
+                    y: position.y
+                });
+                label.textContent = String(value);
+                layer.append(label);
+            }
+
+            sectionAngle(value) {
+                const bounded = Math.max(0, Math.min(99, value));
+                const ratio = bounded <= 7 ?
+                    bounded / 7 * .55 :
+                    .55 + Math.log(bounded / 7) / Math.log(99 / 7) * .45;
+                return -135 + 270 * ratio;
+            }
+
+            buildScales() {
+                const outerTicks = this.svg.querySelector('#seekRadialOuterTicks');
+                const outerLabels = this.svg.querySelector('#seekRadialOuterLabels');
+                for (let value = 0; value <= 100; value += 2) {
+                    const major = value % 10 === 0;
+                    const angle = -135 + 270 * value / 100;
+                    this.appendTick(
+                        outerTicks,
+                        angle,
+                        major ? 126 : 132,
+                        145,
+                        `seekRadialOuterTick ${major ? 'major' : 'minor'}`
+                    );
+                    if (major) this.appendLabel(outerLabels, angle, 111, value, 'seekRadialDialNumber');
+                }
+                const innerTicks = this.svg.querySelector('#seekRadialInnerTicks');
+                const innerLabels = this.svg.querySelector('#seekRadialInnerLabels');
+                [0, 1, 2, 3, 4, 5, 6, 7, 10, 20, 30, 50, 75, 99].forEach(value => {
+                    const major = value === 0 || value === 7 || value >= 10;
+                    const angle = this.sectionAngle(value);
+                    this.appendTick(
+                        innerTicks,
+                        angle,
+                        major ? 67 : 71,
+                        82,
+                        `seekRadialInnerTick ${major ? 'major' : ''}`
+                    );
+                    this.appendLabel(innerLabels, angle, 57, value, 'seekRadialDialNumber seekRadialInnerNumber');
+                });
+            }
+
+            pointerRawAngle(event) {
+                const point = this.svg.createSVGPoint();
+                point.x = event.clientX;
+                point.y = event.clientY;
+                const local = point.matrixTransform(this.svg.getScreenCTM().inverse());
+                const angle = Math.atan2(local.x - 195, 190 - local.y) * 180 / Math.PI;
+                return (angle + 360) % 360;
+            }
+
+            pointerPercent(rawAngle) {
+                const angle = rawAngle > 180 ? rawAngle - 360 : rawAngle;
+                if (angle < -135 || angle > 135) return null;
+                return Math.round((angle + 135) / 270 * 1000) / 10;
+            }
+
+            nearestTurnAngle(rawAngle, reference) {
+                return rawAngle + 360 * Math.round((reference - rawAngle) / 360);
+            }
+
+            applyDragAngle() {
+                if (!this.powered) {
+                    this.manualHandAngle = this.dragAngle;
+                    this.renderedHandAngle = this.dragAngle;
+                    return;
+                }
+                let start = -135 + this.dragCycle * 360;
+                let end = start + 270;
+                const nextStart = start + 360;
+                const previousEnd = start - 90;
+                if (this.dragAngle >= nextStart) {
+                    if (this.onTraverse(1)) {
+                        this.dragCycle++;
+                        this.handCycle = this.dragCycle;
+                    } else {
+                        this.dragAngle = nextStart - .001;
+                    }
+                    this.manualHandAngle = this.dragAngle;
+                    return;
+                }
+                if (this.dragAngle <= previousEnd) {
+                    if (this.onTraverse(-1)) {
+                        this.dragCycle--;
+                        this.handCycle = this.dragCycle;
+                    } else {
+                        this.dragAngle = previousEnd + .001;
+                    }
+                    this.manualHandAngle = this.dragAngle;
+                    return;
+                }
+                start = -135 + this.dragCycle * 360;
+                end = start + 270;
+                this.manualHandAngle = this.dragAngle;
+                if (this.dragAngle < start) this.onTarget(0);
+                else if (this.dragAngle > end) this.onTarget(100);
+                else this.onTarget(Math.round((this.dragAngle - start) / 270 * 1000) / 10);
+            }
+
+            bindControl() {
+                this.control.addEventListener('pointerdown', event => {
+                    event.preventDefault();
+                    const rawAngle = this.pointerRawAngle(event);
+                    const percent = this.pointerPercent(rawAngle);
+                    if (percent === null && this.powered) return;
+                    this.pointerId = event.pointerId;
+                    this.control.setPointerCapture(this.pointerId);
+                    this.pointerAngle = rawAngle;
+                    this.dragCycle = this.handCycle;
+                    this.dragAngle = percent === null ?
+                        this.nearestTurnAngle(rawAngle, this.renderedHandAngle) :
+                        -135 + percent / 100 * 270 + this.dragCycle * 360;
+                    if (this.powered) this.onTarget(percent);
+                    this.manualHandAngle = this.dragAngle;
+                });
+                this.control.addEventListener('pointermove', event => {
+                    if (event.pointerId !== this.pointerId) return;
+                    const rawAngle = this.pointerRawAngle(event);
+                    let delta = rawAngle - this.pointerAngle;
+                    if (delta > 180) delta -= 360;
+                    if (delta < -180) delta += 360;
+                    this.pointerAngle = rawAngle;
+                    this.dragAngle += delta;
+                    this.applyDragAngle();
+                });
+                const release = event => {
+                    if (event.pointerId !== this.pointerId) return;
+                    if (this.control.hasPointerCapture(this.pointerId)) this.control.releasePointerCapture(this.pointerId);
+                    this.pointerId = null;
+                    this.pointerAngle = null;
+                    this.dragAngle = null;
+                    this.manualHandAngle = null;
+                    this.releaseHandMotion = this.powered;
+                };
+                this.control.addEventListener('pointerup', release);
+                this.control.addEventListener('pointercancel', release);
+                this.control.addEventListener('keydown', event => {
+                    const adjustments = {
+                        ArrowLeft: -1,
+                        ArrowDown: -1,
+                        ArrowRight: 1,
+                        ArrowUp: 1,
+                        PageDown: -5,
+                        PageUp: 5
+                    };
+                    const current = parseFloat(this.control.getAttribute('aria-valuenow')) || 0;
+                    let next = current;
+                    if (event.key === 'Home') next = 0;
+                    else if (event.key === 'End') next = 100;
+                    else if (adjustments[event.key]) next += adjustments[event.key];
+                    else return;
+                    event.preventDefault();
+                    if (!this.powered) return;
+                    if (next > 100) this.onTraverse(1);
+                    else if (next < 0) this.onTraverse(-1);
+                    else this.onTarget(next);
+                });
+            }
+
+            setPressed(pressed) {
+                this.setButton.classList.toggle('is-pressed', pressed);
+                this.setButton.setAttribute('aria-pressed', String(pressed));
+            }
+
+            bindSet() {
+                this.setButton.addEventListener('pointerdown', event => {
+                    event.preventDefault();
+                    this.setPointerId = event.pointerId;
+                    this.setButton.setPointerCapture(this.setPointerId);
+                    this.setPressed(true);
+                    setTimeBusSetClosed(true);
+                });
+                this.setButton.addEventListener('pointerup', event => {
+                    if (event.pointerId !== this.setPointerId) return;
+                    if (this.setButton.hasPointerCapture(this.setPointerId)) this.setButton.releasePointerCapture(this.setPointerId);
+                    const transfer = timeBusSetIsActive();
+                    this.setPointerId = null;
+                    this.setPressed(false);
+                    setTimeBusSetClosed(false);
+                    if (transfer) this.onSet();
+                });
+                this.setButton.addEventListener('pointercancel', () => {
+                    this.setPointerId = null;
+                    this.setPressed(false);
+                    setTimeBusSetClosed(false);
+                });
+                this.setButton.addEventListener('keydown', event => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    if (!event.repeat) {
+                        this.setPressed(true);
+                        setTimeBusSetClosed(true);
+                    }
+                });
+                this.setButton.addEventListener('keyup', event => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    const transfer = timeBusSetIsActive();
+                    this.setPressed(false);
+                    setTimeBusSetClosed(false);
+                    if (transfer) this.onSet();
+                });
+                this.setButton.addEventListener('blur', () => {
+                    this.setPressed(false);
+                    setTimeBusSetClosed(false);
+                });
+            }
+
+            rotateKnob(kind, steps) {
+                const increment = kind === 'section' ? 12 : 8;
+                const property = kind === 'section' ? 'sectionMechanicalAngle' : 'timeMechanicalAngle';
+                const rotor = kind === 'section' ? this.sectionRotor : this.timeRotor;
+                this[property] = ((this[property] + steps * increment) % 360 + 360) % 360;
+                rotor.setAttribute('transform', `rotate(${this[property]})`);
+            }
+
+            bindKnob(element, adjust, kind) {
+                let pointerId = null;
+                let lastY = 0;
+                const turn = steps => {
+                    this.rotateKnob(kind, steps);
+                    adjust(steps);
+                };
+                element.addEventListener('pointerdown', event => {
+                    event.preventDefault();
+                    pointerId = event.pointerId;
+                    lastY = event.clientY;
+                    element.setPointerCapture(pointerId);
+                });
+                element.addEventListener('pointermove', event => {
+                    if (event.pointerId !== pointerId) return;
+                    const delta = lastY - event.clientY;
+                    if (Math.abs(delta) < 2) return;
+                    const steps = delta > 0 ?
+                        Math.max(1, Math.round(delta / 2)) :
+                        Math.min(-1, Math.round(delta / 2));
+                    turn(steps);
+                    lastY = event.clientY;
+                });
+                const release = event => {
+                    if (event.pointerId !== pointerId) return;
+                    if (element.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId);
+                    pointerId = null;
+                };
+                element.addEventListener('pointerup', release);
+                element.addEventListener('pointercancel', () => {
+                    pointerId = null;
+                });
+                element.addEventListener('wheel', event => {
+                    event.preventDefault();
+                    turn(event.deltaY < 0 ? 1 : -1);
+                }, { passive: false });
+                element.addEventListener('keydown', event => {
+                    if (!['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft'].includes(event.key)) return;
+                    event.preventDefault();
+                    turn(event.key === 'ArrowUp' || event.key === 'ArrowRight' ? 1 : -1);
+                });
+            }
+
+            motionValue(motion, target, now) {
+                motion.to = target;
+                const progress = Math.max(0, Math.min(1, (now - motion.start) / motion.duration));
+                const eased = 1 - Math.pow(1 - progress, 3);
+                return {
+                    value: motion.from + (motion.to - motion.from) * eased,
+                    done: progress >= 1
+                };
+            }
+
+            easeNextHandChange() {
+                this.requestedHandMotion = true;
+            }
+
+            crossNextHandBoundary(direction) {
+                this.handCycle += direction < 0 ? -1 : 1;
+                this.requestedHandMotion = true;
+            }
+
+            render(model) {
+                const activePercent = Math.max(0, Math.min(100, model.activePercent || 0));
+                const activeSection = Math.max(0, Math.min(99, model.activeSection || 0));
+                const now = performance.now();
+                const wasPowered = this.powered;
+                this.powered = model.powered === true;
+                const poweringUp = this.powered && !wasPowered;
+                const requestedHandMotion = this.requestedHandMotion;
+                const sectionMode = model.activeDomain?.sectionMode === true;
+                const domainModeChanged = this.hasRenderedModel && sectionMode !== this.lastSectionMode;
+                const sectionChanged = this.hasRenderedModel &&
+                    (model.owner !== this.lastOwner || activeSection !== this.lastActiveSection);
+                let boundaryDirection = 0;
+                if (this.powered && this.pointerId === null && this.hasRenderedModel && sectionChanged) {
+                    if (this.lastActivePercent >= 85 && activePercent <= 15) boundaryDirection = 1;
+                    else if (this.lastActivePercent <= 15 && activePercent >= 85) boundaryDirection = -1;
+                }
+                if (boundaryDirection) this.handCycle += boundaryDirection;
+                const handBase = -135 + 270 * activePercent / 100;
+                if (poweringUp) this.handCycle = Math.round((this.renderedHandAngle - handBase) / 360);
+                const handTarget = handBase + this.handCycle * 360;
+                if (!this.powered) {
+                    this.handMotion = null;
+                    if (this.manualHandAngle !== null) this.renderedHandAngle = this.manualHandAngle;
+                } else if (this.manualHandAngle !== null) {
+                    this.handMotion = null;
+                    this.renderedHandAngle = this.manualHandAngle;
+                } else {
+                    if ((boundaryDirection || this.releaseHandMotion || poweringUp || domainModeChanged || requestedHandMotion) &&
+                        (!this.handMotion || domainModeChanged || requestedHandMotion)) {
+                        this.handMotion = {
+                            from: this.renderedHandAngle,
+                            to: handTarget,
+                            start: now,
+                            duration: 300
+                        };
+                    }
+                    this.releaseHandMotion = false;
+                    this.requestedHandMotion = false;
+                    if (this.handMotion) {
+                        const motion = this.motionValue(this.handMotion, handTarget, now);
+                        this.renderedHandAngle = motion.value;
+                        if (motion.done) this.handMotion = null;
+                    } else {
+                        this.renderedHandAngle = handTarget;
+                    }
+                }
+                const sectionTarget = this.sectionAngle(activeSection);
+                if (!this.powered) {
+                    this.sectionMotion = null;
+                } else if (sectionChanged || poweringUp) {
+                    this.sectionMotion = {
+                        from: this.renderedSectionAngle,
+                        to: sectionTarget,
+                        start: now,
+                        duration: 300
+                    };
+                }
+                if (this.powered && this.sectionMotion) {
+                    const motion = this.motionValue(this.sectionMotion, sectionTarget, now);
+                    this.renderedSectionAngle = motion.value;
+                    if (motion.done) this.sectionMotion = null;
+                } else if (this.powered) {
+                    this.renderedSectionAngle = sectionTarget;
+                }
+                this.targetHand.setAttribute('transform', `rotate(${this.renderedHandAngle} 195 190)`);
+                this.sectionHand.setAttribute('transform', `rotate(${this.renderedSectionAngle} 195 190)`);
+                this.activeReadout.render(activeSection, model.activeSeconds, this.powered);
+                this.standbyReadout.render(model.targetSection, model.targetSeconds, this.powered);
+                this.sectionRotor.setAttribute('transform', `rotate(${this.sectionMechanicalAngle})`);
+                this.timeRotor.setAttribute('transform', `rotate(${this.timeMechanicalAngle})`);
+                this.sectionKnob.setAttribute('aria-valuemax', String(model.sectionCount || 0));
+                this.sectionKnob.setAttribute('aria-valuenow', String(model.targetSection || 0));
+                this.timeKnob.setAttribute('aria-valuemax', String(Math.max(0, Math.floor(model.targetLimitSeconds || 0))));
+                this.timeKnob.setAttribute('aria-valuenow', String(Math.max(0, Math.floor(model.targetSeconds || 0))));
+                this.timeKnob.setAttribute('aria-valuetext', seekRadialDisplayTime(model.targetSeconds));
+                this.control.setAttribute('aria-valuenow', String(activePercent));
+                this.control.setAttribute('aria-valuetext', `${activePercent.toFixed(1)} percent, ${seekRadialDisplayTime(model.activeSeconds)}`);
+                this.svg.dataset.activePercent = String(activePercent);
+                this.svg.dataset.section = String(activeSection);
+                this.svg.dataset.timePowered = String(this.powered);
+                this.lastOwner = model.owner;
+                this.lastActiveSection = activeSection;
+                this.lastActivePercent = activePercent;
+                this.lastSectionMode = sectionMode;
+                this.hasRenderedModel = true;
+            }
+        }
+
+        let playbackCircuit = null;
+        let krLoopAudio = null;
+        let krLoopStart = null;
+        let krLoopEnd = null;
+        let krLoopGeneration = 0;
+        let krBoundaryPendingGeneration = null;
+        const KR_BOUNDARY_LEAD_WALL_SECONDS = 0.05;
+        const SECTION_WINDOW_MAX_SECONDS = 180;
+        const kIsOn = () => playbackCircuit ? playbackCircuit.k.effectivePosition === 'ON' : true;
+        const krIsOn = () => playbackCircuit ? playbackCircuit.kr.effectivePosition === 'ON' : false;
+        const isrAt = position => playbackCircuit ? playbackCircuit.isr.effectivePosition === position : position === 'OFF';
+        const krFeedEnergized = () => !!playbackCircuit?.sectionRepeatFeed.energized;
+        const sectionWindowSeconds = () => playbackCircuit ?
+            playbackCircuit.sectionWindowEffectiveValue * SECTION_WINDOW_MAX_SECONDS : 0;
+        const sectionDurationEligible = duration => Number.isFinite(duration) &&
+            duration > sectionWindowSeconds();
+        window.__npK = kIsOn;
+        window.__npKR = krIsOn;
+        window.__npKrLooping = audio => krFeedEnergized() &&
+            krLoopAudio === audio && currentAudio === audio;
+        publishReadOnlyWindow('__npSectionEligible', sectionDurationEligible);
+        let seekRadialStandbySection = 0;
+        let seekRadialStandbySeconds = 0;
+        const seekRadialInstrument = new SeekRadialInstrument(
+            seekRadialSvg,
+            percent => setSeekRadialTarget(percent),
+            direction => traverseSeekRadialDomain(direction),
+            () => commitSeekRadialTarget(),
+            steps => adjustSeekRadialStandbySection(steps),
+            steps => adjustSeekRadialStandbyTime(steps)
+        );
 
         let renderSpeedKnob = () => {},
             renderRevKnob = () => {},
             renderVolKnob = () => {},
-            mSyncControls = () => {};
+            paintKSwitch = () => {},
+            paintKrSwitch = () => {},
+            mSyncControls = () => {},
+            triggerPl = () => {};
         kBtn.style.color = 'white';
 
         function updateLoopState() {
             if (!currentAudio) return;
-            currentAudio.loop = loopBtn.style.color !== 'yellow';
+            currentAudio.loop = false;
+        }
+
+        function clearKrSectionLoop() {
+            const audio = krLoopAudio;
+            krLoopGeneration++;
+            krBoundaryPendingGeneration = null;
+            krLoopAudio = null;
+            krLoopStart = null;
+            krLoopEnd = null;
+            if (audio && audio === currentAudio) updateLoopState();
+        }
+
+        function collageSegmentAt(audio, time) {
+            const segs = getCollageSegments(audio);
+            if (!segs) return null;
+            for (const seg of segs) {
+                if (time >= seg[0] && time < seg[1]) return seg;
+            }
+            return null;
+        }
+
+        function seekRadialOwner(audio) {
+            return audio?.__virtualSong || audio || null;
+        }
+
+        function seekRadialSectionAt(segments, time) {
+            for (let index = 0; index < segments.length; index++) {
+                const segment = segments[index];
+                if (time >= segment[0] && time < segment[1]) {
+                    return {
+                        number: index + 1,
+                        start: segment[0],
+                        end: segment[1]
+                    };
+                }
+            }
+            const last = segments[segments.length - 1];
+            if (last && Math.abs(time - last[1]) < .01) {
+                return {
+                    number: segments.length,
+                    start: last[0],
+                    end: last[1]
+                };
+            }
+            return null;
+        }
+
+        function seekRadialDomain(audio, time, segments, duration) {
+            const section = seekRadialSectionAt(segments, time);
+            if (kIsOn() && section) {
+                return {
+                    start: section.start,
+                    end: section.end,
+                    section,
+                    sectionMode: true
+                };
+            }
+            return {
+                start: 0,
+                end: duration,
+                section,
+                sectionMode: false
+            };
+        }
+
+        function seekRadialModel(audio, time, duration) {
+            const segments = getCollageSegments(audio) || [];
+            const owner = seekRadialOwner(audio);
+            const safeTime = Math.max(0, Math.min(time, duration));
+            const activeDomain = seekRadialDomain(audio, safeTime, segments, duration);
+            const activeSection = activeDomain.section?.number || 0;
+            seekRadialStandbySection = Number.isFinite(seekRadialStandbySection) ?
+                Math.max(0, Math.min(99, Math.trunc(seekRadialStandbySection))) : 0;
+            seekRadialStandbySeconds = Number.isFinite(seekRadialStandbySeconds) ?
+                Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.trunc(seekRadialStandbySeconds))) : 0;
+            const standbyIndex = seekRadialStandbySection && segments.length ?
+                Math.min(seekRadialStandbySection, segments.length) - 1 : -1;
+            const standbySegment = standbyIndex >= 0 ? segments[standbyIndex] : null;
+            const standbyStart = standbySegment ? standbySegment[0] : 0;
+            const standbyEnd = standbySegment ? standbySegment[1] : duration;
+            const standbyDomainSeconds = Math.max(0, standbyEnd - standbyStart);
+            const standbyEffectiveSeconds = Math.min(seekRadialStandbySeconds, standbyDomainSeconds);
+            const activeSpan = activeDomain.end - activeDomain.start;
+            const activeSeconds = Math.max(0, safeTime - activeDomain.start);
+            const activePercent = activeSpan > 0 ? activeSeconds / activeSpan * 100 : 0;
+            if (timeBusIsPowered()) setTimeBusInputValue('mainSeekSensor', activePercent / 100);
+            return {
+                activePercent,
+                activeSection,
+                targetSection: seekRadialStandbySection,
+                activeSeconds,
+                targetSeconds: seekRadialStandbySeconds,
+                sectionCount: 99,
+                targetLimitSeconds: SEEK_RADIAL_MAX_SECONDS,
+                sectionRotorAngle: seekRadialStandbySection * 12 % 360,
+                timeRotorAngle: seekRadialStandbySeconds * 8 % 360,
+                segments,
+                activeDomain,
+                standbyAbsoluteTime: standbyStart + standbyEffectiveSeconds,
+                standbyStart,
+                standbyEnd,
+                standbyDomainSeconds,
+                owner,
+                powered: timeBusIsPowered()
+            };
+        }
+
+        function renderSeekRadial(audio = currentAudio, time = playbackTime(audio), duration = playbackDuration(audio)) {
+            if (!audio || !Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return null;
+            const model = seekRadialModel(audio, time, duration);
+            seekRadialInstrument.render(model);
+            return model;
+        }
+
+        function setSeekRadialTarget(percent) {
+            if (!timeBusIsPowered() || !currentAudio) return false;
+            const duration = playbackDuration(currentAudio) || currentAudio.duration;
+            const time = playbackTime(currentAudio);
+            if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
+            const model = seekRadialModel(currentAudio, time, duration);
+            const span = model.activeDomain.end - model.activeDomain.start;
+            if (!(span > 0)) return false;
+            const bounded = Math.max(0, Math.min(100, percent));
+            setTimeBusInputValue('mainSeekSensor', bounded / 100);
+            let target = model.activeDomain.start + span * bounded / 100;
+            if (bounded >= 100) {
+                target = Math.max(model.activeDomain.start, model.activeDomain.end - Math.min(.05, span));
+            }
+            const targetAudio = seekPlayback(currentAudio, target) || currentAudio;
+            syncKrSectionLoop(targetAudio, target);
+            return true;
+        }
+
+        function traverseSeekRadialDomain(direction) {
+            if (!timeBusIsPowered() || !currentAudio || (direction !== 1 && direction !== -1)) return false;
+            const duration = playbackDuration(currentAudio) || currentAudio.duration;
+            const time = playbackTime(currentAudio);
+            if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
+            const model = seekRadialModel(currentAudio, time, duration);
+            const sectionIndex = model.activeSection - 1;
+            if (model.activeDomain.sectionMode && sectionIndex >= 0) {
+                const adjacentIndex = sectionIndex + direction;
+                if (adjacentIndex >= 0 && adjacentIndex < model.segments.length) {
+                    const adjacent = model.segments[adjacentIndex];
+                    const targetTime = direction > 0 ?
+                        adjacent[0] : Math.max(adjacent[0], adjacent[1] - .001);
+                    const target = seekPlayback(currentAudio, targetTime) || currentAudio;
+                    syncKrSectionLoop(target, targetTime);
+                    return true;
+                }
+            }
+            const activeSegment = sectionIndex >= 0 ? model.segments[sectionIndex] : null;
+            const signal = playbackCircuit?.pulseBoundary({
+                kind: model.activeDomain.sectionMode ? 'section' : 'card',
+                audio: currentAudio,
+                start: activeSegment?.[0],
+                end: activeSegment?.[1],
+                direction: direction > 0 ? 'forward' : 'reverse',
+                source: 'seek-radial'
+            });
+            return !!signal?.handled && !(isrAt('R') && playbackCircuit.m.effectivePosition === 'C');
+        }
+
+        function commitSeekRadialTarget() {
+            if (!timeBusIsPowered() || !currentAudio) return false;
+            const duration = playbackDuration(currentAudio) || currentAudio.duration;
+            if (!Number.isFinite(duration) || duration <= 0) return false;
+            const time = playbackTime(currentAudio);
+            if (!Number.isFinite(time)) return false;
+            const model = seekRadialModel(currentAudio, time, duration);
+            let targetTime = Math.max(0, Math.min(model.standbyAbsoluteTime, duration));
+            if (model.standbyDomainSeconds > 0 && model.targetSeconds >= model.standbyDomainSeconds) {
+                targetTime = Math.max(model.standbyStart, model.standbyEnd - .001);
+            }
+            const target = seekPlayback(currentAudio, targetTime) || currentAudio;
+            syncKrSectionLoop(target, targetTime);
+            return true;
+        }
+
+        function adjustSeekRadialStandbySection(steps) {
+            if (!timeBusIsPowered() || !currentAudio || !Number.isFinite(steps) || !steps) return false;
+            const duration = playbackDuration(currentAudio) || currentAudio.duration;
+            const time = playbackTime(currentAudio);
+            if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
+            const next = Math.max(0, Math.min(99, seekRadialStandbySection + Math.trunc(steps)));
+            if (next === seekRadialStandbySection) return false;
+            seekRadialStandbySection = next;
+            setTimeBusInputValue('sectionSensor', seekRadialStandbySection / 99);
+            renderSeekRadial(currentAudio, time, duration);
+            return true;
+        }
+
+        function adjustSeekRadialStandbyTime(steps) {
+            if (!timeBusIsPowered() || !currentAudio || !Number.isFinite(steps) || !steps) return false;
+            const duration = playbackDuration(currentAudio) || currentAudio.duration;
+            const time = playbackTime(currentAudio);
+            if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
+            const next = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, seekRadialStandbySeconds + Math.trunc(steps)));
+            if (next === seekRadialStandbySeconds) return false;
+            seekRadialStandbySeconds = next;
+            setTimeBusInputValue('timeSensor', seekRadialStandbySeconds / SEEK_RADIAL_MAX_SECONDS);
+            renderSeekRadial(currentAudio, time, duration);
+            return true;
+        }
+
+        timeBusPower.addEventListener('change', () => renderSeekRadial());
+
+        function syncKrSectionLoop(audio, time = playbackTime(audio)) {
+            if (!krFeedEnergized() || !audio || !isFinite(time)) {
+                clearKrSectionLoop();
+                return null;
+            }
+            const seg = collageSegmentAt(audio, time);
+            if (!seg) {
+                clearKrSectionLoop();
+                return null;
+            }
+            if (krLoopAudio !== audio || krLoopStart !== seg[0] || krLoopEnd !== seg[1]) {
+                armKrSectionLoop(audio, seg[0], seg[1]);
+            } else if (time < krLoopEnd - krBoundaryLeadSeconds(audio)) {
+                krBoundaryPendingGeneration = null;
+            }
+            return seg;
+        }
+
+        function armKrSectionLoop(audio, start, end) {
+            if (!krFeedEnergized() || !audio || !isFinite(start) || !isFinite(end) || end <= start) {
+                clearKrSectionLoop();
+                return;
+            }
+            krLoopGeneration++;
+            krBoundaryPendingGeneration = null;
+            krLoopAudio = audio;
+            krLoopStart = start;
+            krLoopEnd = end;
+            updateLoopState();
+        }
+
+        function krBoundaryLeadSeconds(audio) {
+            const rate = Number(audio?.playbackRate) || 1;
+            return KR_BOUNDARY_LEAD_WALL_SECONDS * Math.max(0.1, rate);
+        }
+
+        function processKrSectionBoundary(audio, time = playbackTime(audio)) {
+            if (!krFeedEnergized() || audio !== currentAudio || krLoopAudio !== audio ||
+                krLoopStart === null || krLoopEnd === null || audio.paused || audio.seeking ||
+                !Number.isFinite(time)) return false;
+            const generation = krLoopGeneration;
+            if (krBoundaryPendingGeneration === generation ||
+                time < krLoopEnd - krBoundaryLeadSeconds(audio)) return false;
+            krBoundaryPendingGeneration = generation;
+            const signal = playbackCircuit.pulseBoundary({
+                kind: 'section',
+                audio,
+                start: krLoopStart,
+                end: krLoopEnd,
+                generation
+            });
+            if (!signal.handled) {
+                if (krBoundaryPendingGeneration === generation) krBoundaryPendingGeneration = null;
+                return false;
+            }
+            lastTickTime = krLoopStart;
+            return true;
+        }
+
+        function setKrMode(on) {
+            const next = on ? 'ON' : 'OFF';
+            if (!playbackCircuit || !playbackCircuit.kr.setPosition(next)) {
+                paintKrSwitch();
+                return false;
+            }
+            if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
+            else clearKrSectionLoop();
+            paintKrSwitch();
+            return true;
+        }
+
+        function setLrcMode(on) {
+            const next = on ? 'ON' : 'OFF';
+            if (!playbackCircuit || !playbackCircuit.k.setPosition(next)) {
+                paintKSwitch();
+                return false;
+            }
+            kBtn.style.color = kIsOn() ? 'white' : 'yellow';
+            if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
+            else clearKrSectionLoop();
+            paintKSwitch();
+            return true;
+        }
+
+        function setIsrPosition(position) {
+            if (!playbackCircuit || !playbackCircuit.isr.setPosition(position)) return false;
+            iBtn.style.color = isrAt('I') ? 'yellow' : 'white';
+            sBtn.style.color = isrAt('S') ? 'yellow' : 'white';
+            loopBtn.style.color = isrAt('OFF') ? 'white' : 'yellow';
+            updateLoopState();
+            if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
+            else clearKrSectionLoop();
+            return true;
         }
 
         iBtn.onclick = () => {
-            iBtn.style.color = iBtn.style.color === 'yellow' ? 'white' : 'yellow';
-            if (iBtn.style.color === 'yellow') {
-                sBtn.style.color = 'white';
-                loopBtn.style.color = 'yellow';
-            } else {
-                if (sBtn.style.color !== 'yellow') loopBtn.style.color = 'white';
-            }
-            updateLoopState();
-            playUi(iBtn.style.color === 'yellow' ? 'chime' : 'noava');
+            const turningOn = !isrAt('I');
+            setIsrPosition(turningOn ? 'I' : 'OFF');
+            playElectricalSound(turningOn ? 'chime' : 'noava');
         };
 
         sBtn.onclick = () => {
-            sBtn.style.color = sBtn.style.color === 'yellow' ? 'white' : 'yellow';
-            if (sBtn.style.color === 'yellow') {
-                iBtn.style.color = 'white';
-                loopBtn.style.color = 'yellow';
-            } else {
-                if (iBtn.style.color !== 'yellow') loopBtn.style.color = 'white';
-            }
-            updateLoopState();
-            playUi(sBtn.style.color === 'yellow' ? 'chime' : 'noava');
+            const turningOn = !isrAt('S');
+            setIsrPosition(turningOn ? 'S' : 'OFF');
+            playElectricalSound(turningOn ? 'chime' : 'noava');
         };
 
         kBtn.onclick = () => {
-            lrcMode = !lrcMode;
-            kBtn.style.color = lrcMode ? 'white' : 'yellow';
+            setLrcMode(!kIsOn());
         };
 
 
@@ -2214,31 +5917,46 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
         function updateSeek() {
             if (currentAudio && currentAudio.duration) {
+                const uiDuration = playbackDuration(currentAudio) || currentAudio.duration;
+                const uiTime = playbackTime(currentAudio);
                 if (currentAudio !== lastActiveAudio) {
                     lastActiveAudio = currentAudio;
                     lastActiveLine = null;
                     lastTickTime = -1;
                 }
                 const prevTick = lastTickTime;
-                lastTickTime = currentAudio.currentTime;
+                lastTickTime = uiTime;
 
-                const pct = (currentAudio.currentTime / currentAudio.duration) * 100;
-                seekFill.style.height = pct + '%';
-                seekDot.style.top = pct + '%';
-                seekTime.textContent = fmtTime(currentAudio.currentTime);
+                renderSeekRadial(currentAudio, uiTime, uiDuration);
 
-                if (lrcMode &&
-                    (iBtn.style.color === 'yellow' || sBtn.style.color === 'yellow') &&
+                const playedThrough = prevTick >= 0 && uiTime >= prevTick &&
+                    (uiTime - prevTick) < 1.0;
+                if (processKrSectionBoundary(currentAudio, uiTime)) {
+                    requestAnimationFrame(updateSeek);
+                    return;
+                }
+                if (krFeedEnergized() &&
+                    (krLoopAudio !== currentAudio || krLoopStart === null || krLoopEnd === null ||
+                        uiTime < krLoopStart)) {
+                    syncKrSectionLoop(currentAudio, uiTime);
+                }
+
+                if (kIsOn() && (isrAt('I') || isrAt('S')) &&
                     !currentAudio.paused) {
-                    const t = currentAudio.currentTime;
-                    const playedThrough = prevTick >= 0 && t >= prevTick && (t - prevTick) < 1.0;
+                    const t = uiTime;
                     if (collageAudio === currentAudio && collageSegEnd !== null && playedThrough) {
                         if (t >= collageSegEnd) {
+                            const signal = playbackCircuit.pulseBoundary({
+                                kind: 'section',
+                                audio: currentAudio,
+                                end: collageSegEnd
+                            });
                             collageAudio = null;
                             collageSegEnd = null;
-                            advanceShuffle();
-                            requestAnimationFrame(updateSeek);
-                            return;
+                            if (signal.handled) {
+                                requestAnimationFrame(updateSeek);
+                                return;
+                            }
                         }
                     } else {
                         const seg = currentCollageSegment(currentAudio);
@@ -2255,33 +5973,29 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
                 const card = currentAudio.closest('.card');
                 if (card) {
-                    const v = card.querySelector('video[data-sync="true"]');
-                    if (v && v.readyState >= 1) {
-                        if (Math.abs(v.currentTime - currentAudio.currentTime) > 0.2) {
-                            v.currentTime = currentAudio.currentTime;
-                        }
-                    }
-
                     const lyr = card.querySelector('.cLyr');
                     if (lyr) {
                         const lines = [...lyr.querySelectorAll('.lrcLine')];
                         if (lines.length) {
-                            const t = currentAudio.currentTime;
-                            let active = null;
+                            const t = currentAudio.__virtualSong ? uiTime : currentAudio.currentTime;
+                            let active = currentAudio.__virtualSong ?
+                                activeVirtualMember(currentAudio.__virtualSong)?.line || null : null;
 
-                            for (let i = 0; i < lines.length; i++) {
-                                const l = lines[i];
-                                const start = parseFloat(l.dataset.t);
-                                const end = l.dataset.te ? parseFloat(l.dataset.te) : null;
+                            if (!currentAudio.__virtualSong) {
+                                for (let i = 0; i < lines.length; i++) {
+                                    const l = lines[i];
+                                    const start = parseFloat(l.dataset.t);
+                                    const end = l.dataset.te ? parseFloat(l.dataset.te) : null;
 
-                                if (end !== null) {
-                                    if (t >= start && t <= end) {
-                                        active = l;
-                                        break;
+                                    if (end !== null) {
+                                        if (t >= start && t <= end) {
+                                            active = l;
+                                            break;
+                                        }
+                                    } else {
+                                        if (t >= start) active = l;
+                                        else break;
                                     }
-                                } else {
-                                    if (t >= start) active = l;
-                                    else break;
                                 }
                             }
 
@@ -2303,8 +6017,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
                             }
                         } else {
                             const ph = lyr.querySelector('.playHead');
-                            if (ph && currentAudio.duration) {
-                                const pct = currentAudio.currentTime / currentAudio.duration;
+                            if (ph && uiDuration) {
+                                const pct = uiTime / uiDuration;
                                 ph.style.height = (pct * lyr.clientHeight) + 'px';
                                 ph.style.transform = `translateY(${lyr.scrollTop}px)`;
                             }
@@ -2327,7 +6041,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 lyr.addEventListener('click', e => {
                     e.stopPropagation();
                     const card = lyr.closest('.card');
-                    const cardAudio = card ? card.querySelector('audio') : null;
+                    const cardAudio = audioForCard(card);
                     if (!cardAudio) return;
                     const rect = lyr.getBoundingClientRect();
                     const clickY = e.clientY - rect.top;
@@ -2344,14 +6058,15 @@ $chosenLoader = 'waiting' . ($n ?: '');
                         });
                         currentAudio = cardAudio;
                         loadAudio(currentAudio);
-                        currentAudio.volume = PAGE_VOLUME;
-                        currentAudio.playbackRate = currentSpeed;
+                        currentAudio.volume = soundCircuit.volume.value;
+                        currentAudio.playbackRate = soundCircuit.playbackRate;
                     }
 
                     if (wasPlaying) {
                         const setPct = () => {
-                            if (currentAudio.duration) {
-                                currentAudio.currentTime = pct * currentAudio.duration;
+                            const duration = playbackDuration(currentAudio);
+                            if (duration) {
+                                seekPlayback(currentAudio, pct * duration);
                             }
                         };
 
@@ -2365,76 +6080,22 @@ $chosenLoader = 'waiting' . ($n ?: '');
                         }
                     } else {
                         updateLoopState();
-                        currentAudio.play();
+                        playAudio(currentAudio, 'card resume');
                     }
                 });
             }
         });
-
-
-        function seekFromY(clientY) {
-            if (!currentAudio || !currentAudio.duration) return;
-            const rect = seekWrap.getBoundingClientRect();
-            let pct = (clientY - rect.top) / rect.height;
-            pct = Math.max(0, Math.min(1, pct));
-            currentAudio.currentTime = pct * currentAudio.duration;
-        }
-        let seekDragging = false;
-        seekWrap.addEventListener('mousedown', e => {
-            seekDragging = true;
-            seekFromY(e.clientY);
-        });
-        seekDot.addEventListener('mousedown', e => {
-            e.stopPropagation();
-            seekDragging = true;
-        });
-        document.addEventListener('mousemove', e => {
-            if (seekDragging) seekFromY(e.clientY);
-        });
-        document.addEventListener('mouseup', () => {
-            seekDragging = false;
-        });
-        seekWrap.addEventListener('touchstart', e => {
-            seekDragging = true;
-            seekFromY(e.touches[0].clientY);
-        }, {
-            passive: true
-        });
-        document.addEventListener('touchmove', e => {
-            if (seekDragging) seekFromY(e.touches[0].clientY);
-        }, {
-            passive: true
-        });
-        document.addEventListener('touchend', () => {
-            seekDragging = false;
-        });
-
-        let currentPct = 0.5;
-        let currentSpeed = 1.0;
-
         function updateSpeedVisuals() {
-            let y = (0.5 - currentPct) * 100;
-            let x = Math.abs(y);
-            let delta = 0;
-            if (x <= 10) {
-                delta = 0.01 * x;
-            } else {
-                delta = 0.1 + 0.01 * (x - 10) + Math.pow(x - 10, 2) / 900;
-            }
-            currentSpeed = y >= 0 ? 1 + delta : 1 - delta;
-            currentSpeed = Math.max(0.05, currentSpeed);
-
             renderSpeedKnob();
-
-            if (lMode) {
-                currentRevPct = Math.min(1, Math.pow(Math.max(0, 1 - currentSpeed), 2 / 3));
+            if (lIsOn()) {
+                soundCircuit.reverb.setValue(Math.min(1, Math.pow(Math.max(0, 1 - soundCircuit.playbackRate), 2 / 3)));
                 updateReverbVisuals();
             }
         }
 
         const propagateSpeed = () => {
             document.querySelectorAll('audio, video').forEach(media => {
-                media.playbackRate = currentSpeed;
+                media.playbackRate = soundCircuit.playbackRate;
                 media.preservesPitch = false;
                 media.mozPreservesPitch = false;
                 media.webkitPreservesPitch = false;
@@ -2468,7 +6129,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
             lb.addEventListener('pointerdown', (e) => {
                 lSuppressClick = false;
-                if (!lMode) return;
+                if (!lIsOn()) return;
                 e.preventDefault();
                 lHolding = true;
                 lArmed = false;
@@ -2490,7 +6151,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 const completed = lArmed;
                 lCleanupHold();
                 if (completed) {
-                    lMode = false;
+                    soundCircuit.coupling.setPosition('OFF');
                     lb.style.color = 'white';
                 } else {
                     lb.style.color = 'yellow';
@@ -2505,21 +6166,68 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     lSuppressClick = false;
                     return;
                 }
-                if (lMode) return;
-                lMode = true;
+                if (lIsOn()) return;
+                soundCircuit.coupling.setPosition('ON');
                 lb.style.color = 'yellow';
-                currentRevPct = Math.max(0, (currentPct - 0.5) * 2);
+                soundCircuit.reverb.setValue(Math.max(0, (soundCircuit.speed.value - 0.5) * 2));
                 updateReverbVisuals();
-                playUi('chimetwice');
+                playElectricalSound('chimetwice');
             });
         }
 
+        function syncVideoToAudio(audio, playVideo = false) {
+            const card = audio?.closest('.card');
+            const media = card ? activeMediaForCard(card) : null;
+            const video = media?.matches('video[data-sync="true"]') ? media : null;
+            if (!video) return;
+
+            video.preload = 'auto';
+            if (window.loadMediaEl) window.loadMediaEl(video);
+
+            const synchronize = () => {
+                video.__m2SyncPending = false;
+                if (currentAudio !== audio) return;
+                const target = audio.currentTime;
+                if (!video.seeking && Number.isFinite(target) && Math.abs(video.currentTime - target) > 0.25) {
+                    try {
+                        video.currentTime = Math.max(0, Math.min(target, video.duration || target));
+                    } catch (error) {}
+                }
+                video.playbackRate = soundCircuit.playbackRate;
+                if (playVideo && !audio.paused && soundCircuit.powerContact.closed) {
+                    const videoPlay = video.play();
+                    if (videoPlay?.catch) videoPlay.catch(() => {});
+                }
+            };
+
+            if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+                synchronize();
+            } else if (!video.__m2SyncPending) {
+                video.__m2SyncPending = true;
+                video.addEventListener('loadedmetadata', synchronize, { once: true });
+                video.addEventListener('error', () => {
+                    video.__m2SyncPending = false;
+                }, { once: true });
+                video.load();
+            }
+        }
 
         document.addEventListener('play', (e) => {
             if (e.target.tagName !== 'AUDIO') return;
-            e.target.playbackRate = currentSpeed;
+            if (!soundCircuit.powerContact.closed) {
+                e.target.pause();
+                playbackCircuit?.dropPl();
+                return;
+            }
+            playbackCircuit?.energizePl();
+            playbackCircuit?.setActivity(e.target, true);
+            soundCircuit.setActivity(e.target, true);
+            e.target.playbackRate = soundCircuit.playbackRate;
+            if (krLoopAudio && krLoopAudio !== e.target) clearKrSectionLoop();
             if (currentAudio && currentAudio !== e.target) currentAudio.pause();
             currentAudio = e.target;
+            setActiveVirtualMember(currentAudio);
+            syncKrSectionLoop(currentAudio);
             updateLoopState();
             const card = currentAudio.closest('.card');
             document.querySelectorAll('.card').forEach(c => c.classList.remove('playing'));
@@ -2529,16 +6237,13 @@ $chosenLoader = 'waiting' . ($n ?: '');
             lastActiveLine = null;
             if (card) {
                 card.classList.add('playing');
-                np.innerHTML = card.dataset.title;
-                np.setAttribute('href', '#' + card.id);
-                const v = card.querySelector('video[data-sync="true"]');
-                if (v) {
-                    v.playbackRate = currentSpeed;
-                    v.play();
-                }
+                if (card.__virtualSong) np.textContent = card.__virtualSong.seriesTitle;
+                else np.innerHTML = card.dataset.title;
+                np.setAttribute('href', '#' + (currentAudio.dataset.songId || card.id));
+                syncVideoToAudio(currentAudio, true);
                 if ('mediaSession' in navigator) {
                     try {
-                        const imgEl = card.querySelector('.cImg img, .cImg video');
+                        const imgEl = activeMediaForCard(card);
                         const art = imgEl ? (imgEl.currentSrc || imgEl.src || imgEl.dataset.src || '') : '';
                         navigator.mediaSession.metadata = new MediaMetadata({
                             title: (card.querySelector('.cName')?.textContent || '').trim(),
@@ -2555,10 +6260,30 @@ $chosenLoader = 'waiting' . ($n ?: '');
             pBtn.textContent = '||';
         }, true);
 
+        document.addEventListener('seeking', (e) => {
+            if (e.target.tagName !== 'AUDIO') return;
+            syncKrSectionLoop(e.target, playbackTime(e.target));
+        }, true);
+
+        document.addEventListener('seeked', (e) => {
+            if (e.target.tagName !== 'AUDIO') return;
+            if (e.target === currentAudio) syncKrSectionLoop(e.target, playbackTime(e.target));
+            syncVideoToAudio(e.target, !e.target.paused);
+        }, true);
+
+        document.addEventListener('timeupdate', (e) => {
+            if (e.target.tagName !== 'AUDIO' || e.target !== currentAudio) return;
+            processKrSectionBoundary(e.target, playbackTime(e.target));
+        }, true);
+
         document.addEventListener('pause', (e) => {
             if (e.target.tagName !== 'AUDIO') return;
+            playbackCircuit?.setActivity(e.target, false);
+            soundCircuit.setActivity(e.target, false);
+            if (e.target === currentAudio && !e.target.ended) playbackCircuit?.dropPl();
             pBtn.textContent = '▶';
-            const v = e.target.closest('.card')?.querySelector('video[data-sync="true"]');
+            const media = activeMediaForCard(e.target.closest('.card'));
+            const v = media?.matches('video[data-sync="true"]') ? media : null;
             if (v) v.pause();
             if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
         }, true);
@@ -2569,7 +6294,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
             if (!card) return null;
             const lines = [...card.querySelectorAll('.lrcLine')];
             if (!lines.length) return null;
-            const dur = audio.duration;
+            const dur = playbackDuration(audio) || audio.duration;
             if (!dur || !isFinite(dur)) return null;
             const segs = [];
             for (let i = 0; i < lines.length; i++) {
@@ -2581,20 +6306,14 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     const ns = parseFloat(next.dataset.t);
                     if (!isNaN(ns)) end = ns;
                 }
-                if (end - start > 45) segs.push([start, end]);
+                if (sectionDurationEligible(end - start)) segs.push([start, end]);
             }
             return segs.length ? segs : null;
         }
 
 
         function currentCollageSegment(audio) {
-            const segs = getCollageSegments(audio);
-            if (!segs) return null;
-            const t = audio.currentTime;
-            for (const seg of segs) {
-                if (t >= seg[0] && t < seg[1]) return seg;
-            }
-            return null;
+            return collageSegmentAt(audio, playbackTime(audio));
         }
 
 
@@ -2604,22 +6323,31 @@ $chosenLoader = 'waiting' . ($n ?: '');
         function startCollageIfNeeded(audio) {
             collageAudio = null;
             collageSegEnd = null;
-            if (!lrcMode) return;
-            if (iBtn.style.color !== 'yellow' && sBtn.style.color !== 'yellow') return;
+            if (!kIsOn()) return false;
+            if (!isrAt('I') && !isrAt('S')) return false;
             const apply = () => {
+                if (currentAudio !== audio) return;
                 const segs = getCollageSegments(audio);
-                if (!segs) return;
+                if (!segs) {
+                    playAudio(audio, 'shuffle without timed segment');
+                    return;
+                }
                 const idx = crypto.getRandomValues(new Uint32Array(1))[0] % segs.length;
-                try {
-                    audio.currentTime = segs[idx][0];
-                } catch (e) {}
+                const target = seekPlayback(audio, segs[idx][0], false) || audio;
                 collageAudio = null;
                 collageSegEnd = null;
+                playAudio(target, 'shuffle timed segment');
             };
-            if (audio.readyState >= 1 && audio.duration && isFinite(audio.duration)) apply();
-            else audio.addEventListener('loadedmetadata', apply, {
-                once: true
-            });
+            if (audio.__virtualSong) {
+                if (audio.__virtualSong.timelineReady) apply();
+                else {
+                    ensureVirtualMetadata(audio.__virtualSong, audio);
+                    playAudio(audio, 'shuffle while virtual timeline loads');
+                }
+            }
+            else if (audio.readyState >= 1 && audio.duration && isFinite(audio.duration)) apply();
+            else audio.addEventListener('loadedmetadata', apply, { once: true });
+            return true;
         }
 
 
@@ -2628,89 +6356,198 @@ $chosenLoader = 'waiting' . ($n ?: '');
             const cards = [...document.querySelectorAll('.cardWrap')]
                 .filter(c => c.style.display !== 'none');
             let pool = cards;
-            if (iBtn.style.color === 'yellow') {
+            if (isrAt('I')) {
                 const currentCat = currentAudio?.closest('.cardWrap')?.dataset.category;
                 if (currentCat) pool = cards.filter(c => c.dataset.category === currentCat);
             }
             if (!pool.length) return;
             const randomUint = crypto.getRandomValues(new Uint32Array(1))[0];
             const nextCardWrap = pool[randomUint % pool.length];
-            const a = nextCardWrap.querySelector('audio');
+            const a = audioForCard(nextCardWrap.querySelector('.card'));
             if (!a) return;
             if (currentAudio && currentAudio !== a) {
                 currentAudio.pause();
                 currentAudio.loop = false;
             }
+            currentAudio = a;
+            setActiveVirtualMember(a);
             loadAudio(a);
-            a.volume = PAGE_VOLUME;
-            a.playbackRate = currentSpeed;
+            a.volume = soundCircuit.volume.value;
+            a.playbackRate = soundCircuit.playbackRate;
             a.loop = false;
             pBtn.textContent = '||';
-            startCollageIfNeeded(a);
-            a.play();
+            if (!startCollageIfNeeded(a)) playAudio(a, 'shuffle card');
         }
+
+        function markBoundaryContinued(signal) {
+            if (signal.event) signal.event.__virtualSongContinues = true;
+        }
+
+        function repeatWholeCard(signal) {
+            const audio = signal.audio || currentAudio;
+            if (!audio) return;
+            markBoundaryContinued(signal);
+            clearKrSectionLoop();
+            const target = seekPlayback(audio, 0, true) || audio;
+            if (!audio.__virtualSong) playAudio(target, 'whole-card repeat coil');
+        }
+
+        function repeatEligibleSection(signal) {
+            const audio = signal.audio || currentAudio;
+            const eligible = signal.kind === 'section' && isFinite(signal.start) &&
+                isFinite(signal.end) && signal.end > signal.start;
+            if (!eligible) {
+                repeatWholeCard(signal);
+                return;
+            }
+            markBoundaryContinued(signal);
+            seekRadialInstrument.crossNextHandBoundary(1);
+            const target = seekPlayback(audio, signal.start, true) || audio;
+            if (!audio.__virtualSong) playAudio(target, 'eligible-section repeat coil');
+        }
+
+        function stopAtBoundary(signal) {
+            playbackCircuit.dropPl();
+            if (signal.audio && !signal.audio.paused) signal.audio.pause();
+        }
+
+        function transferToPrevious(signal) {
+            markBoundaryContinued(signal);
+            prevBtn.click();
+        }
+
+        function transferToNext(signal) {
+            markBoundaryContinued(signal);
+            nextBtn.click();
+        }
+
+        function transferToRandom(signal) {
+            markBoundaryContinued(signal);
+            advanceShuffle();
+        }
+
+        playbackCircuit = new PlaybackAvionicsUnit({
+            wholeRepeat: repeatWholeCard,
+            sectionRepeat: repeatEligibleSection,
+            previousCard: transferToPrevious,
+            stop: stopAtBoundary,
+            nextCard: transferToNext,
+            categoryWhole: transferToRandom,
+            categorySection: transferToRandom,
+            visibleWhole: transferToRandom,
+            visibleSection: transferToRandom
+        }, playbackAvionicsPower);
+        const applySoundCircuitPower = () => {
+            const powered = soundCircuit.powerContact.closed;
+            if (masterGain && audioCtx) {
+                masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
+                masterGain.gain.setValueAtTime(powered ? 1 : 0, audioCtx.currentTime);
+            }
+            if (powered) return;
+            playbackCircuit.dropPl();
+            playbackCircuit.clearActivity();
+            clearKrSectionLoop();
+            document.querySelectorAll('.card audio, .card video').forEach(media => {
+                if (!media.paused) media.pause();
+            });
+            Object.values(uiAudio).forEach(audio => {
+                if (!audio.paused) audio.pause();
+            });
+            driveStopAlarm();
+            soundCircuit.clearActivity();
+        };
+        soundCircuit.powerContact.addEventListener('change', applySoundCircuitPower);
+        applySoundCircuitPower();
+        playbackCircuit.sectionRepeatFeed.addEventListener('change', () => {
+            if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
+            else clearKrSectionLoop();
+        });
 
         document.addEventListener('ended', (e) => {
             if (e.target.tagName !== 'AUDIO') return;
-            seekFill.style.height = '100%';
-            seekDot.style.top = '100%';
-            pBtn.textContent = '▶';
-
-            if (loopBtn.style.color === 'yellow' &&
-                (iBtn.style.color === 'yellow' || sBtn.style.color === 'yellow')) {
-                advanceShuffle();
+            if (window.__npKrLooping(e.target) && krLoopStart !== null && krLoopEnd !== null) {
+                const signal = playbackCircuit.pulseBoundary({
+                    kind: 'section', audio: e.target, start: krLoopStart, end: krLoopEnd, event: e
+                });
+                if (signal.handled) return;
             }
+            if (e.target.__virtualSong && kIsOn() && (isrAt('I') || isrAt('S'))) {
+                const endedAt = playbackTime(e.target);
+                const seg = collageSegmentAt(e.target, Math.max(0, endedAt - 0.001));
+                if (seg) {
+                    const signal = playbackCircuit.pulseBoundary({
+                        kind: 'section', audio: e.target, start: seg[0], end: seg[1], event: e
+                    });
+                    if (signal.handled) return;
+                }
+            }
+            if (advanceVirtualSong(e.target)) {
+                e.__virtualSongContinues = true;
+                return;
+            }
+            pBtn.textContent = '▶';
+            const signal = playbackCircuit.pulseBoundary({
+                kind: 'card', audio: e.target, event: e
+            });
+            if (!signal.handled) playbackCircuit.dropPl();
         }, true);
 
         pBtn.onclick = () => {
             if (!currentAudio) return;
-            currentAudio.paused ? currentAudio.play() : currentAudio.pause();
+            if (currentAudio.paused) {
+                if (currentAudio.__virtualSong && currentAudio.ended) {
+                    seekPlayback(currentAudio, 0, true);
+                    return;
+                }
+                updateLoopState();
+                playAudio(currentAudio, 'play button');
+            } else {
+                playbackCircuit.dropPl();
+                currentAudio.pause();
+            }
         };
 
         loopBtn.onclick = () => {
-            const isLooping = loopBtn.style.color === 'yellow';
-            loopBtn.style.color = isLooping ? 'white' : 'yellow';
-            if (loopBtn.style.color === 'white') {
-                iBtn.style.color = 'white';
-                sBtn.style.color = 'white';
-            }
-            updateLoopState();
-            playUi(loopBtn.style.color === 'yellow' ? 'arm' : 'click');
+            const turningOn = !isrAt('R');
+            setIsrPosition(turningOn ? 'R' : 'OFF');
+            playMechanicalSound(turningOn ? 'arm' : 'click');
         };
-
-
-        seekWrap.style.setProperty('--seek-hit-w', '45px');
-
         nextBtn.onclick = () => {
             const cards = [...document.querySelectorAll('.card:not([style*="display: none"])')]
                 .filter(c => c.closest('.cardWrap')?.style.display !== 'none');
-            const idx = cards.indexOf(currentAudio?.closest('.card'));
+            const idx = cards.indexOf(visibleCardFor(currentAudio?.closest('.card')));
             const next = cards[idx + 1] || cards[0];
             if (next) {
-                const a = next.querySelector('audio');
+                const a = audioForCard(next);
                 if (a) {
+                    if (currentAudio && currentAudio !== a) currentAudio.pause();
+                    currentAudio = a;
+                    setActiveVirtualMember(a);
                     loadAudio(a);
-                    a.volume = PAGE_VOLUME;
-                    a.playbackRate = currentSpeed;
+                    a.volume = soundCircuit.volume.value;
+                    a.playbackRate = soundCircuit.playbackRate;
                     pBtn.textContent = '||';
-                    a.play();
+                    playAudio(a, 'next card');
                 }
             }
         };
 
         prevBtn.onclick = () => {
-            const cards = [...document.querySelectorAll('.card')]
+            const cards = [...document.querySelectorAll('.card:not([style*="display: none"])')]
                 .filter(c => c.closest('.cardWrap')?.style.display !== 'none');
-            const idx = cards.indexOf(currentAudio?.closest('.card'));
+            const idx = cards.indexOf(visibleCardFor(currentAudio?.closest('.card')));
             const prev = cards[idx - 1] || cards[cards.length - 1];
             if (prev) {
-                const a = prev.querySelector('audio');
+                const a = audioForCard(prev);
                 if (a) {
+                    if (currentAudio && currentAudio !== a) currentAudio.pause();
+                    currentAudio = a;
+                    setActiveVirtualMember(a);
                     loadAudio(a);
-                    a.volume = PAGE_VOLUME;
-                    a.playbackRate = currentSpeed;
+                    a.volume = soundCircuit.volume.value;
+                    a.playbackRate = soundCircuit.playbackRate;
                     pBtn.textContent = '||';
-                    a.play();
+                    playAudio(a, 'previous card');
                 }
             }
         };
@@ -2722,10 +6559,10 @@ $chosenLoader = 'waiting' . ($n ?: '');
         (function() {
             const $ = id => document.getElementById(id);
             const lBtnEl = $('lBtn');
-            const click = () => playUi('click');
-            const arm = () => playUi('arm');
-            const playSingelPress = () => playUi('singelpress');
-            const playChimeTwice = () => playUi('chimetwice');
+            const click = () => playMechanicalSound('click');
+            const arm = () => playMechanicalSound('arm');
+            const playSingelPress = () => playMechanicalSound('singelpress');
+            const playChimeTwice = () => playElectricalSound('chimetwice');
             const startFire = startAlarm;
             const stopFire = stopAlarm;
 
@@ -2787,19 +6624,19 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
             const mVol = $('mVol');
             const renderVol = () => {
-                if (mVol) mVol.style.transform = 'rotate(' + (Math.cbrt(PAGE_VOLUME) * 305) + 'deg)';
+                if (mVol) mVol.style.transform = 'rotate(' + (Math.cbrt(soundCircuit.volume.value) * 305) + 'deg)';
             };
             const setVol = lin => {
                 lin = Math.max(0, Math.min(1, lin));
-                PAGE_VOLUME = Math.pow(lin, 3);
+                soundCircuit.volume.setValue(Math.pow(lin, 3));
                 propagateVolume();
                 renderVol();
             };
-            makeRotary(mVol, d => setVol(Math.cbrt(PAGE_VOLUME) + d / 305));
+            makeRotary(mVol, d => setVol(Math.cbrt(soundCircuit.volume.value) + d / 305));
             if (mVol) mVol.addEventListener('wheel', e => {
                 e.preventDefault();
                 e.stopPropagation();
-                setVol(Math.cbrt(PAGE_VOLUME) + (e.deltaY < 0 ? 0.04 : -0.04));
+                setVol(Math.cbrt(soundCircuit.volume.value) + (e.deltaY < 0 ? 0.04 : -0.04));
             }, {
                 passive: false
             });
@@ -2808,26 +6645,26 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
             const mRev = $('mRev');
             const renderRev = () => {
-                if (mRev) mRev.style.transform = 'rotate(' + (currentRevPct * 305) + 'deg)';
+                if (mRev) mRev.style.transform = 'rotate(' + (soundCircuit.reverb.value * 305) + 'deg)';
             };
             const setRev = v => {
-                currentRevPct = Math.max(0, Math.min(1, v));
+                soundCircuit.reverb.setValue(v);
                 updateReverbVisuals();
             };
 
 
             makeRotary(mRev,
                 d => {
-                    if (!lMode) setRev(currentRevPct + d / 305);
+                    if (!lIsOn()) setRev(soundCircuit.reverb.value + d / 305);
                 },
                 () => {
-                    if (lMode) startFire();
+                    if (lIsOn()) { startFire(); if (lBtnEl) lBtnEl.classList.add('lFlashing'); }
                 },
-                stopFire);
+                () => { stopFire(); if (lBtnEl) lBtnEl.classList.remove('lFlashing'); });
             if (mRev) mRev.addEventListener('wheel', e => {
                 e.preventDefault();
-                if (lMode) return;
-                setRev(currentRevPct + (e.deltaY < 0 ? 0.05 : -0.05));
+                if (lIsOn()) return;
+                setRev(soundCircuit.reverb.value + (e.deltaY < 0 ? 0.05 : -0.05));
             }, {
                 passive: false
             });
@@ -2836,22 +6673,43 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
             const mSpd = $('mSpd');
             const renderSpd = () => {
-                if (mSpd) mSpd.style.transform = 'rotate(' + ((0.5 - currentPct) * 360) + 'deg)';
+                if (mSpd) mSpd.style.transform = 'rotate(' + ((0.5 - soundCircuit.speed.value) * 360) + 'deg)';
             };
             const setSpd = p => {
-                currentPct = Math.max(0, Math.min(1, p));
+                soundCircuit.speed.setValue(p);
                 updateSpeedVisuals();
                 propagateSpeed();
             };
-            makeRotary(mSpd, d => setSpd(currentPct - d / 360));
+            makeRotary(mSpd, d => setSpd(soundCircuit.speed.value - d / 360));
             if (mSpd) mSpd.addEventListener('wheel', e => {
                 e.preventDefault();
                 e.stopPropagation();
-                setSpd(currentPct + (e.deltaY < 0 ? -0.01 : 0.01));
+                setSpd(soundCircuit.speed.value + (e.deltaY < 0 ? -0.01 : 0.01));
             }, {
                 passive: false
             });
             renderSpd();
+
+            const mR3 = $('mR3');
+            const renderR3 = () => {
+                if (mR3) mR3.style.transform = 'rotate(' + ((playbackCircuit.sectionWindow.value * 305) - 152.5) + 'deg)';
+            };
+            const setR3 = value => {
+                playbackCircuit.sectionWindow.setValue(value);
+                collageAudio = null;
+                collageSegEnd = null;
+                if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
+                renderR3();
+            };
+            makeRotary(mR3, delta => setR3(playbackCircuit.sectionWindow.value + delta / 305));
+            if (mR3) mR3.addEventListener('wheel', event => {
+                event.preventDefault();
+                event.stopPropagation();
+                setR3(playbackCircuit.sectionWindow.value + (event.deltaY < 0 ? 0.05 : -0.05));
+            }, {
+                passive: false
+            });
+            renderR3();
 
 
             const mR2 = $('mR2');
@@ -2862,7 +6720,10 @@ $chosenLoader = 'waiting' . ($n ?: '');
                         mR2.setPointerCapture(e.pointerId);
                     } catch (_) {}
                     mR2.src = aimg('r2on.png');
-                    setSpd(0.5);
+                    soundCircuit.pulseR2();
+                    updateSpeedVisuals();
+                    propagateSpeed();
+                    renderSpd();
                     playChimeTwice();
                 });
                 const up = () => {
@@ -2885,8 +6746,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
             const paintPl = () => {
                 if (mPl && !plBusy) mPl.src = aimg(playing() ? PL.on : PL.off);
             };
-            if (mPl) mPl.addEventListener('click', () => {
-                if (plBusy) return;
+            const pressPl = () => {
+                if (!mPl || plBusy) return;
                 plBusy = true;
                 mPl.src = aimg(playing() ? PL.toOff : PL.toOn);
                 playSingelPress();
@@ -2895,7 +6756,9 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     if (pBtn.onclick) pBtn.onclick();
                     paintPl();
                 }, 130);
-            });
+            };
+            if (mPl) mPl.addEventListener('click', pressPl);
+            playbackCircuit.plContact.addEventListener('change', paintPl);
             document.addEventListener('play', e => {
                 if (e.target.tagName === 'AUDIO') paintPl();
             }, true);
@@ -2959,14 +6822,12 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     combo: 'SR'
                 },
             ];
-            const curCombo = () => iBtn.style.color === 'yellow' ? 'IR' : sBtn.style.color === 'yellow' ? 'SR' : loopBtn.style.color === 'yellow' ? 'R' : '';
+            const curCombo = () => isrAt('I') ? 'IR' : isrAt('S') ? 'SR' : isrAt('R') ? 'R' : '';
             const mISR = $('mISR');
             let isrCtl = null;
             if (mISR) isrCtl = knobs(mISR, ISR_STEPS, s => {
-                iBtn.style.color = s.combo === 'IR' ? 'yellow' : 'white';
-                sBtn.style.color = s.combo === 'SR' ? 'yellow' : 'white';
-                loopBtn.style.color = (s.combo === 'R' || s.combo === 'IR' || s.combo === 'SR') ? 'yellow' : 'white';
-                updateLoopState();
+                const position = s.combo === 'IR' ? 'I' : s.combo === 'SR' ? 'S' : s.combo === 'R' ? 'R' : 'OFF';
+                setIsrPosition(position);
             }, click);
 
 
@@ -3000,6 +6861,15 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     passive: false
                 });
                 paint();
+                return {
+                    sync: name => {
+                        const n = states.findIndex(state => state.name === name);
+                        if (n >= 0) {
+                            i = n;
+                            paint();
+                        }
+                    }
+                };
             }
             const ST = {
                 D: {
@@ -3018,10 +6888,9 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
 
 
-            let armed = 0,
-                lastSide = 0;
             const mNav = $('mNav');
-            if (mNav) switchControl(mNav, [{
+            let navCtl = null;
+            if (mNav) navCtl = switchControl(mNav, [{
                     f: ST.D.f,
                     ty: ST.D.ty,
                     name: 'D'
@@ -3038,61 +6907,65 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     name: 'U'
                 },
             ], s => {
-                const dir = s.name === 'U' ? -1 : s.name === 'D' ? +1 : 0;
-                if (dir === 0) {
-                    armed = 0;
-                    return;
-                }
-                if (lastSide === dir)(dir > 0 ? nextBtn : prevBtn).click();
-                lastSide = dir;
-                armed = dir;
+                playbackCircuit.m.setPosition(s.name);
             }, arm, true);
-            document.addEventListener('ended', e => {
-                if (e.target.tagName !== 'AUDIO') return;
-                const shuffle = loopBtn.style.color === 'yellow' && (iBtn.style.color === 'yellow' || sBtn.style.color === 'yellow');
-                if (armed !== 0 && !shuffle)(armed > 0 ? nextBtn : prevBtn).click();
-            }, true);
 
 
             const mK = $('mK');
-            const paintK = () => {
+            paintKSwitch = () => {
                 if (!mK) return;
-                const s = lrcMode ? ST.D : ST.C;
+                const s = playbackCircuit?.k.position === 'ON' ? ST.D : ST.C;
                 mK.src = aimg(s.f);
                 mK.style.transform = 'translate(-49.2%, ' + s.ty + '%)';
             };
             if (mK) {
                 mK.addEventListener('click', () => {
-                    if (lrcMode) {
-                        lrcMode = false;
-                        kBtn.style.color = 'yellow';
+                    if (setLrcMode(false)) {
                         arm();
-                        paintK();
                     }
                 });
                 mK.addEventListener('contextmenu', e => {
                     e.preventDefault();
-                    if (!lrcMode) {
-                        lrcMode = true;
-                        kBtn.style.color = 'white';
+                    if (setLrcMode(true)) {
                         arm();
-                        paintK();
                     }
                 });
                 mK.addEventListener('wheel', e => {
                     e.preventDefault();
                     e.stopPropagation();
                     const goOn = e.deltaY < 0;
-                    if (goOn !== lrcMode) {
-                        lrcMode = goOn;
-                        kBtn.style.color = lrcMode ? 'white' : 'yellow';
+                    if (setLrcMode(goOn)) {
                         arm();
-                        paintK();
                     }
                 }, {
                     passive: false
                 });
-                paintK();
+                paintKSwitch();
+            }
+
+            const mKR = $('mKR');
+            paintKrSwitch = () => {
+                if (!mKR) return;
+                const s = krIsOn() ? ST.D : ST.C;
+                mKR.src = aimg(s.f);
+                mKR.style.transform = 'translate(-49.2%, ' + s.ty + '%)';
+            };
+            if (mKR) {
+                mKR.addEventListener('click', () => {
+                    if (setKrMode(false)) arm();
+                });
+                mKR.addEventListener('contextmenu', e => {
+                    e.preventDefault();
+                    if (setKrMode(true)) arm();
+                });
+                mKR.addEventListener('wheel', e => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (setKrMode(e.deltaY < 0)) arm();
+                }, {
+                    passive: false
+                });
+                paintKrSwitch();
             }
 
 
@@ -3104,9 +6977,12 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 renderRev();
                 renderVol();
                 if (isrCtl) isrCtl.sync(curCombo());
-                paintK();
+                if (navCtl) navCtl.sync(playbackCircuit.m.position);
+                paintKSwitch();
+                paintKrSwitch();
                 paintPl();
             };
+            triggerPl = pressPl;
         })();
 
         const srchEl = document.getElementById('srch');
@@ -3116,7 +6992,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 if (w.__search === undefined) {
                     const name = w.querySelector('.cName');
                     const lyrics = w.querySelector('.cLyr');
-                    w.__search = foldSearch((name ? name.textContent : '') + ' ' + (lyrics ? lyrics.textContent : ''));
+                    const memberNames = w.__virtualSong ? w.__virtualSong.members.map(m => m.title).join(' ') : '';
+                    w.__search = foldSearch((name ? name.textContent : '') + ' ' + memberNames + ' ' + (lyrics ? lyrics.textContent : ''));
                 }
                 w.style.display = (v === '' || w.__search.includes(v)) ? '' : 'none';
             });
@@ -3133,44 +7010,20 @@ $chosenLoader = 'waiting' . ($n ?: '');
 
         const propagateVolume = () => {
             document.querySelectorAll('audio').forEach(a => {
-                a.volume = PAGE_VOLUME;
+                a.volume = soundCircuit.volume.value;
             });
         };
 
         window.addEventListener('DOMContentLoaded', () => {
-
-            try {
-                const st = JSON.parse(localStorage.getItem('m2settings') || 'null');
-                if (st) {
-                    if (typeof st.vol === 'number') PAGE_VOLUME = Math.max(0, Math.min(1, st.vol));
-                    if (typeof st.speed === 'number') currentPct = Math.max(0, Math.min(1, st.speed));
-                    if (typeof st.rev === 'number') currentRevPct = Math.max(0, Math.min(1, st.rev));
-                    if (typeof st.k === 'boolean') {
-                        lrcMode = st.k;
-                        kBtn.style.color = lrcMode ? 'white' : 'yellow';
-                    }
-                    if (typeof st.l === 'boolean') {
-                        lMode = st.l;
-                        if (lb) lb.style.color = lMode ? 'yellow' : 'white';
-                    }
-                    if (st.i) iBtn.style.color = 'yellow';
-                    if (st.s) sBtn.style.color = 'yellow';
-                    if (st.r) loopBtn.style.color = 'yellow';
-                    updateSpeedVisuals();
-                    if (!lMode) updateReverbVisuals();
-                    updateLoopState();
-                    renderVolKnob();
-                    mSyncControls();
-                }
-            } catch (e) {}
-
             propagateVolume();
             propagateSpeed();
-            const hash = location.hash.slice(1);
-            if (hash) {
-                const target = document.getElementById(hash);
-                if (target && target.classList.contains('card')) {
-                    const a = target.querySelector('audio');
+            const activateInitialHash = () => {
+                const hash = location.hash.slice(1);
+                if (!hash) return;
+                const requestedCard = document.getElementById(hash);
+                if (requestedCard && requestedCard.classList.contains('card')) {
+                    const target = visibleCardFor(requestedCard);
+                    const a = requestedCard.__virtualMember?.audio || audioForCard(target);
                     const nameEl = target.querySelector('.cName');
                     if (nameEl) {
                         nameEl.style.background = 'yellow';
@@ -3188,18 +7041,28 @@ $chosenLoader = 'waiting' . ($n ?: '');
                         });
                     }
                     if (a) {
-                        loadAudio(a);
                         currentAudio = a;
-                        a.volume = PAGE_VOLUME;
-                        a.playbackRate = currentSpeed;
+                        setActiveVirtualMember(a);
+                        loadAudio(a);
+                        a.volume = soundCircuit.volume.value;
+                        a.playbackRate = soundCircuit.playbackRate;
+                        try { a.currentTime = 0; } catch (e) {}
                         updateLoopState();
-                        a.play();
+                        playAudio(a, 'permalink');
                         target.scrollIntoView({
                             block: 'center'
                         });
                     }
                 }
-            }
+            };
+            if (pageMainSystemsPower.closed) activateInitialHash();
+            else mainSystemsEvents.addEventListener('ready', activateInitialHash, { once: true });
+        });
+
+        window.addEventListener('hashchange', () => {
+            const requestedCard = document.getElementById(location.hash.slice(1));
+            if (!requestedCard?.__virtualMember) return;
+            requestedCard.__virtualMember.info.hostCard.scrollIntoView({ block: 'center' });
         });
 
         document.addEventListener('click', e => {
@@ -3213,10 +7076,18 @@ $chosenLoader = 'waiting' . ($n ?: '');
             if (!wrap) return;
             const card = wrap.querySelector('.card');
             if (!card) return;
-            const audio = card.querySelector('audio');
+            const audio = audioForCard(card);
             if (!audio) return;
 
             if (lrcLine) {
+                if (lrcLine.dataset.virtualMember !== undefined) {
+                    const info = card.__virtualSong;
+                    const index = parseInt(lrcLine.dataset.virtualMember, 10);
+                    if (info && Number.isInteger(index)) {
+                        playVirtualMember(info, index, 0, true);
+                    }
+                    return;
+                }
                 const time = parseFloat(lrcLine.dataset.t);
                 if (currentAudio !== audio) {
                     document.querySelectorAll('audio').forEach(a => {
@@ -3227,20 +7098,22 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     });
                     currentAudio = audio;
                     loadAudio(currentAudio);
-                    currentAudio.volume = PAGE_VOLUME;
-                    currentAudio.playbackRate = currentSpeed;
+                    currentAudio.volume = soundCircuit.volume.value;
+                    currentAudio.playbackRate = soundCircuit.playbackRate;
                 }
                 const setT = () => {
-                    currentAudio.currentTime = time;
+                    if (currentAudio !== audio) return;
+                    syncKrSectionLoop(audio, time);
+                    audio.currentTime = time;
                     updateLoopState();
-                    currentAudio.play();
+                    playAudio(audio, 'LRC line');
                 };
-                if (currentAudio.readyState >= 1) setT();
+                if (audio.readyState >= 1) setT();
                 else {
-                    currentAudio.addEventListener('loadedmetadata', setT, {
+                    audio.addEventListener('loadedmetadata', setT, {
                         once: true
                     });
-                    currentAudio.play();
+                    startLoadingAnim(wrap);
                 }
                 return;
             }
@@ -3258,44 +7131,107 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     });
                     currentAudio = audio;
                     loadAudio(currentAudio);
-                    currentAudio.volume = PAGE_VOLUME;
-                    currentAudio.playbackRate = currentSpeed;
+                    currentAudio.volume = soundCircuit.volume.value;
+                    currentAudio.playbackRate = soundCircuit.playbackRate;
                 }
                 const setT = () => {
-                    if (currentAudio.duration) {
-                        currentAudio.currentTime = pct * currentAudio.duration;
+                    if (currentAudio !== audio) return;
+                    if (audio.duration) {
+                        const time = pct * audio.duration;
+                        syncKrSectionLoop(audio, time);
+                        audio.currentTime = time;
                         updateLoopState();
-                        currentAudio.play();
+                        playAudio(audio, 'lyrics proportional seek');
                     }
                 };
-                if (currentAudio.readyState >= 1) setT();
+                if (audio.readyState >= 1) setT();
                 else {
-                    currentAudio.addEventListener('loadedmetadata', setT, {
+                    audio.addEventListener('loadedmetadata', setT, {
                         once: true
                     });
-                    currentAudio.play();
+                    startLoadingAnim(wrap);
                 }
                 return;
             }
 
             currentAudio = audio;
             loadAudio(currentAudio);
-            currentAudio.volume = PAGE_VOLUME;
-            currentAudio.playbackRate = currentSpeed;
+            currentAudio.volume = soundCircuit.volume.value;
+            currentAudio.playbackRate = soundCircuit.playbackRate;
             document.querySelectorAll('audio').forEach(a => {
                 if (a !== audio) {
                     a.pause();
                     a.loop = false;
                 }
             });
-            if (audio.paused) {
-                updateLoopState();
-                audio.play();
-            } else {
-                audio.pause();
-                audio.loop = false;
-            }
+            triggerPl();
         });
+
+        function applyDigitSeek(audio, num) {
+            if (!audio || audio !== currentAudio) return false;
+            const duration = playbackDuration(audio) || audio.duration;
+            if (!isFinite(duration) || duration <= 0) return false;
+
+            let handled = false;
+            if (kIsOn()) {
+                const card = audio.closest('.card');
+                let activeLine = audio.__virtualSong ?
+                    activeVirtualMember(audio.__virtualSong)?.line || null :
+                    (card ? card.querySelector('.lrcLine.lrcActive') : null);
+                if (!activeLine && card) {
+                    const time = playbackTime(audio);
+                    for (const line of card.querySelectorAll('.lrcLine')) {
+                        const start = parseFloat(line.dataset.t);
+                        if (isFinite(start) && start <= time) activeLine = line;
+                        else if (isFinite(start) && start > time) break;
+                    }
+                }
+                if (activeLine) {
+                    const start = parseFloat(activeLine.dataset.t);
+                    let end = duration;
+                    const next = activeLine.nextElementSibling;
+                    if (next && next.classList.contains('lrcLine')) {
+                        end = parseFloat(next.dataset.t);
+                    }
+                    const lineDur = end - start;
+                    if (isFinite(start) && sectionDurationEligible(lineDur)) {
+                        const targetTime = start + (lineDur * num * 0.1);
+                        const wasPlaying = !audio.paused;
+                        seekRadialInstrument.easeNextHandChange();
+                        const target = seekPlayback(audio, targetTime, wasPlaying) || audio;
+                        syncKrSectionLoop(target, targetTime);
+                        handled = true;
+                    }
+                }
+            }
+            if (!handled) {
+                seekRadialInstrument.easeNextHandChange();
+                seekPlayback(audio, duration * num * 0.1);
+            }
+            return true;
+        }
+
+        function requestDigitSeek(audio, num) {
+            audio.__pendingDigitSeek = num;
+            const applyPending = () => {
+                if (audio !== currentAudio || audio.__pendingDigitSeek === undefined) return;
+                const pending = audio.__pendingDigitSeek;
+                if (applyDigitSeek(audio, pending)) delete audio.__pendingDigitSeek;
+            };
+            applyPending();
+            if (audio.__pendingDigitSeek === undefined) return;
+
+            if (!audio.getAttribute('src')) loadAudio(audio);
+            if (audio.__virtualSong) {
+                ensureVirtualMetadata(audio.__virtualSong, audio).then(applyPending);
+            } else if (!audio.__digitMetadataPending) {
+                audio.__digitMetadataPending = true;
+                audio.addEventListener('loadedmetadata', () => {
+                    audio.__digitMetadataPending = false;
+                    applyPending();
+                }, { once: true });
+            }
+        }
 
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
@@ -3314,30 +7250,7 @@ $chosenLoader = 'waiting' . ($n ?: '');
             const key = e.key;
             if (key >= '0' && key <= '9') {
                 e.preventDefault();
-                if (!isNaN(currentAudio.duration) && currentAudio.duration > 0) {
-                    const num = parseInt(key, 10);
-                    let handled = false;
-                    if (lrcMode) {
-                        const card = currentAudio.closest('.card');
-                        const activeLine = card ? card.querySelector('.lrcLine.lrcActive') : null;
-                        if (activeLine) {
-                            const start = parseFloat(activeLine.dataset.t);
-                            let end = currentAudio.duration;
-                            const next = activeLine.nextElementSibling;
-                            if (next && next.classList.contains('lrcLine')) {
-                                end = parseFloat(next.dataset.t);
-                            }
-                            const lineDur = end - start;
-                            if (lineDur > 45) {
-                                currentAudio.currentTime = start + (lineDur * num * 0.1);
-                                handled = true;
-                            }
-                        }
-                    }
-                    if (!handled) {
-                        currentAudio.currentTime = currentAudio.duration * num * 0.1;
-                    }
-                }
+                requestDigitSeek(currentAudio, parseInt(key, 10));
                 return;
             }
             if (e.key === 'Escape') {
@@ -3347,20 +7260,17 @@ $chosenLoader = 'waiting' . ($n ?: '');
             }
             if (key === 'ArrowLeft') {
                 e.preventDefault();
-                currentAudio.currentTime = Math.max(0, currentAudio.currentTime - 5);
+                seekPlayback(currentAudio, Math.max(0, playbackTime(currentAudio) - 5));
                 return;
             }
             if (key === 'ArrowRight') {
                 e.preventDefault();
-                currentAudio.currentTime = Math.min(currentAudio.duration, currentAudio.currentTime + 5);
+                seekPlayback(currentAudio, Math.min(playbackDuration(currentAudio), playbackTime(currentAudio) + 5));
                 return;
             }
             if (key === ' ' || key === 'Spacebar') {
                 e.preventDefault();
-                if (currentAudio.paused) {
-                    updateLoopState();
-                    currentAudio.play();
-                } else currentAudio.pause();
+                triggerPl();
             }
         });
 
@@ -3368,6 +7278,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
         <input name="category[]" list="catList" placeholder="category" required>
         <input name="title[]" placeholder="title" required autocomplete="off">
         <input type="file" name="file[]" accept=".mp3" required>
+        <input type="file" name="imgfile[]" accept="image/*,video/webm,video/mp4">
+        <label><input type="checkbox" name="isyes[]"> sync</label>
         <button type="button" class="ctlBtn addBtn">+</button>
         <button type="button" class="ctlBtn delBtn">D</button>
     </div>`;
@@ -3389,7 +7301,11 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
         function uploadFile(row, progLine) {
-            const [c, t, f] = row.querySelectorAll('input');
+            const c = row.querySelector('[name="category[]"]');
+            const t = row.querySelector('[name="title[]"]');
+            const f = row.querySelector('[name="file[]"]');
+            const img = row.querySelector('[name="imgfile[]"]');
+            const sync = row.querySelector('[name="isyes[]"]');
             let attempt = 0;
             return new Promise(resolve => {
                 function tryUpload() {
@@ -3398,6 +7314,8 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     form.append('category[]', c.value.trim());
                     form.append('title[]', t.value.trim());
                     form.append('file[]', f.files[0]);
+                    form.append('isyes[]', sync && sync.checked ? '1' : '0');
+                    if (img && img.files[0]) form.append('imgfile[]', img.files[0]);
                     form.append('auth', TOKEN);
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', 'amqury.php');
@@ -3448,6 +7366,35 @@ $chosenLoader = 'waiting' . ($n ?: '');
             setTimeout(() => location.reload(), 1000);
         });
 
+        const jsonBox = document.getElementById('jsonBox');
+        const jsonBtn = document.getElementById('jsonBtn');
+        jsonBtn.addEventListener('click', () => {
+            const v = jsonBox.value.trim();
+            if (v === '') {
+                const data = [...document.querySelectorAll('.rowgrp.entry')].map(r => ({
+                    category: r.querySelector('[name="category[]"]').value,
+                    title: r.querySelector('[name="title[]"]').value,
+                    isyes: r.querySelector('[name="isyes[]"]').checked
+                }));
+                const s = JSON.stringify(data);
+                jsonBox.value = s;
+                navigator.clipboard.writeText(s).catch(() => {});
+                return;
+            }
+            let data;
+            try { data = JSON.parse(v); } catch { return; }
+            if (!Array.isArray(data)) return;
+            [...document.querySelectorAll('.rowgrp.entry')].forEach(r => r.remove());
+            data.slice().reverse().forEach(item => {
+                addRow();
+                const r = document.querySelector('.rowgrp.entry');
+                r.querySelector('[name="category[]"]').value = item.category || '';
+                r.querySelector('[name="title[]"]').value = item.title || '';
+                r.querySelector('[name="isyes[]"]').checked = !!item.isyes;
+            });
+            refreshDel();
+        });
+
         function enableAdds() {
             addBtn.style.display = 'inline';
         }
@@ -3458,7 +7405,9 @@ $chosenLoader = 'waiting' . ($n ?: '');
         }
 
         function copyLinkId(a) {
-            navigator.clipboard.writeText(location.origin + location.pathname + '#' + a);
+            const card = document.getElementById(a);
+            const id = activeSongId(card) || a;
+            navigator.clipboard.writeText(location.origin + location.pathname + '#' + id);
         }
 
         function enableDeletes() {
@@ -3674,7 +7623,9 @@ $chosenLoader = 'waiting' . ($n ?: '');
             if (!editBtn) return;
 
             const wrap = editBtn.closest('.cardWrap');
-            const audio = wrap.querySelector('audio');
+            const requestedCard = wrap.querySelector('.card');
+            const audio = audioForCard(requestedCard);
+            const visibleWrap = visibleCardFor(requestedCard)?.closest('.cardWrap') || wrap;
 
             if (audio) {
                 if (currentAudio !== audio) {
@@ -3685,16 +7636,17 @@ $chosenLoader = 'waiting' . ($n ?: '');
                         }
                     });
                     currentAudio = audio;
+                    setActiveVirtualMember(audio);
                     loadAudio(currentAudio);
-                    currentAudio.volume = PAGE_VOLUME;
-                    currentAudio.playbackRate = currentSpeed;
+                    currentAudio.volume = soundCircuit.volume.value;
+                    currentAudio.playbackRate = soundCircuit.playbackRate;
                 }
                 currentAudio.currentTime = time;
                 if (currentAudio.paused) {
                     updateLoopState();
-                    currentAudio.play();
+                    playAudio(currentAudio, 'playAndSeek');
                 }
-                wrap.scrollIntoView({
+                visibleWrap.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
                 });
@@ -3702,225 +7654,2220 @@ $chosenLoader = 'waiting' . ($n ?: '');
         };
 
         (function() {
-            window.addEventListener('DOMContentLoaded', () => {
-                const overlay = document.getElementById('loaderOverlay');
-                const pctEl = document.getElementById('loaderPct');
-                const audio = document.getElementById('loaderAudio');
+            class ElectricalTerminal {
+                constructor(owner, designation) {
+                    this.owner = owner;
+                    this.designation = designation;
+                    this.name = owner.name + ':' + designation;
+                    Object.freeze(this);
+                }
+            }
 
-                let completed = false;
-                let assetsLoaded = false;
-
-                function getVersionedUrl(url) {
-                    if (!url) return url;
-
-                    const assetVersions = [
-                        ['go']
-                    ];
-
-                    for (let i = 0; i < assetVersions.length; i++) {
-                        const version = i + 1;
-                        const patterns = assetVersions[i];
-                        for (const pattern of patterns) {
-                            if (url.includes(pattern)) {
-                                const separator = url.includes('?') ? '&' : '?';
-                                return `${url}${separator}v=${version}`;
-                            }
-                        }
-                    }
-                    return url;
+            class DcSource {
+                constructor(name, nominalVoltage = 28, currentLimit = 2) {
+                    this.name = name;
+                    this.nominalVoltage = nominalVoltage;
+                    this.currentLimit = currentLimit;
+                    this.positive = new ElectricalTerminal(this, 'L+');
+                    this.negative = new ElectricalTerminal(this, 'L-');
+                    this.current = 0;
+                    this.tripped = false;
+                    this.tripReason = null;
                 }
 
-                function checkFinish() {
-                    if (assetsLoaded && !completed) {
-                        completed = true;
-                        setTimeout(() => {
-                            if (pctEl) pctEl.textContent = '100%';
-                            hideLoader();
-                        }, 1000);
+                trip(reason) {
+                    this.tripped = true;
+                    this.tripReason = reason;
+                    this.current = 0;
+                }
+
+                reset() {
+                    this.tripped = false;
+                    this.tripReason = null;
+                    this.current = 0;
+                }
+            }
+
+            class ElectricalConductor extends EventTarget {
+                #connected = true;
+
+                constructor(name, from, to) {
+                    super();
+                    if (!(from instanceof ElectricalTerminal) || !(to instanceof ElectricalTerminal)) {
+                        throw new TypeError(name + ' requires two electrical terminals');
+                    }
+                    this.name = name;
+                    this.from = from;
+                    this.to = to;
+                }
+
+                get connected() {
+                    return this.#connected;
+                }
+
+                get conductive() {
+                    return this.#connected;
+                }
+
+                setConnected(connected) {
+                    const next = !!connected;
+                    if (next === this.#connected) return false;
+                    this.#connected = next;
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
+                disconnect() {
+                    return this.setConnected(false);
+                }
+
+                reconnect() {
+                    return this.setConnected(true);
+                }
+            }
+
+            class ElectricalContact extends EventTarget {
+                #closed;
+                #authority;
+
+                constructor(name, closed = false, authority = null) {
+                    super();
+                    this.name = name;
+                    this.line = new ElectricalTerminal(this, 'LINE');
+                    this.load = new ElectricalTerminal(this, 'LOAD');
+                    this.#closed = !!closed;
+                    this.#authority = authority;
+                    Object.defineProperties(this, {
+                        closed: {
+                            enumerable: true,
+                            configurable: false,
+                            get: () => this.#closed
+                        },
+                        conductive: {
+                            enumerable: true,
+                            configurable: false,
+                            get: () => this.#closed
+                        }
+                    });
+                    Object.preventExtensions(this);
+                }
+
+                setClosed(closed, authority = null) {
+                    if (this.#authority !== null && authority !== this.#authority) {
+                        throw new Error('Unauthorized operation of contact ' + this.name);
+                    }
+                    const next = !!closed;
+                    if (next === this.#closed) return false;
+                    this.#closed = next;
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+            }
+
+            Object.freeze(ElectricalContact.prototype);
+            Object.freeze(ElectricalContact);
+
+            const DC_SOLVER_AUTHORITY = Symbol('DC CONTROL CIRCUIT SOLVER');
+
+            class DcRelayCoil extends EventTarget {
+                #energized = false;
+                #auxiliaryAuthority = Symbol('RELAY AUXILIARY CONTACTS');
+                #auxiliaries = [];
+
+                constructor(name, {
+                    ratedVoltage = 28,
+                    resistance = 280,
+                    pickupVoltage = 18,
+                    dropoutVoltage = 6
+                } = {}) {
+                    super();
+                    this.name = name;
+                    this.a1 = new ElectricalTerminal(this, 'A1');
+                    this.a2 = new ElectricalTerminal(this, 'A2');
+                    this.ratedVoltage = ratedVoltage;
+                    this.resistance = resistance;
+                    this.pickupVoltage = pickupVoltage;
+                    this.dropoutVoltage = dropoutVoltage;
+                    this.voltage = 0;
+                    this.current = 0;
+                }
+
+                get energized() {
+                    return this.#energized;
+                }
+
+                addNormallyOpenAuxiliary(name) {
+                    const contact = new ElectricalContact(name, this.#energized, this.#auxiliaryAuthority);
+                    this.#auxiliaries.push({ contact, normallyClosed: false });
+                    return contact;
+                }
+
+                addNormallyClosedAuxiliary(name) {
+                    const contact = new ElectricalContact(name, !this.#energized, this.#auxiliaryAuthority);
+                    this.#auxiliaries.push({ contact, normallyClosed: true });
+                    return contact;
+                }
+
+                applyVoltage(voltage, authority = null) {
+                    if (authority !== DC_SOLVER_AUTHORITY) {
+                        throw new Error(
+                            'Coil voltage is determined by circuit continuity: ' + this.name
+                        );
+                    }
+                    const nextVoltage = Number.isFinite(voltage) ? voltage : 0;
+                    this.voltage = nextVoltage;
+                    this.current = nextVoltage / this.resistance;
+                    const magnitude = Math.abs(nextVoltage);
+                    const nextEnergized = this.#energized
+                        ? magnitude >= this.dropoutVoltage
+                        : magnitude >= this.pickupVoltage;
+                    if (nextEnergized === this.#energized) return false;
+
+                    this.#energized = nextEnergized;
+                    this.#auxiliaries.forEach(({ contact, normallyClosed }) => {
+                        contact.setClosed(
+                            normallyClosed ? !nextEnergized : nextEnergized,
+                            this.#auxiliaryAuthority
+                        );
+                    });
+                    this.dispatchEvent(new Event('statechange'));
+                    return true;
+                }
+            }
+
+            class DcPoweredLoad extends EventTarget {
+                #energized = false;
+
+                constructor(name, {
+                    resistance = 280,
+                    pickupVoltage = 18,
+                    dropoutVoltage = 6
+                } = {}) {
+                    super();
+                    this.name = name;
+                    this.a1 = new ElectricalTerminal(this, 'A1');
+                    this.a2 = new ElectricalTerminal(this, 'A2');
+                    this.resistance = resistance;
+                    this.pickupVoltage = pickupVoltage;
+                    this.dropoutVoltage = dropoutVoltage;
+                    this.voltage = 0;
+                    this.current = 0;
+                }
+
+                get energized() {
+                    return this.#energized;
+                }
+
+                applyVoltage(voltage, authority = null) {
+                    if (authority !== DC_SOLVER_AUTHORITY) {
+                        throw new Error('Load voltage is determined by circuit continuity: ' + this.name);
+                    }
+                    const nextVoltage = Number.isFinite(voltage) ? voltage : 0;
+                    this.voltage = nextVoltage;
+                    this.current = nextVoltage / this.resistance;
+                    const magnitude = Math.abs(nextVoltage);
+                    const nextEnergized = this.#energized
+                        ? magnitude >= this.dropoutVoltage
+                        : magnitude >= this.pickupVoltage;
+                    if (nextEnergized === this.#energized) return false;
+                    this.#energized = nextEnergized;
+                    this.dispatchEvent(new Event('statechange'));
+                    return true;
+                }
+            }
+
+            class DcControlCircuit extends EventTarget {
+                #solving = false;
+                #solveAgain = false;
+                #transactionDepth = 0;
+                #names = new Set();
+
+                constructor(name, nominalVoltage = 28, currentLimit = 2) {
+                    super();
+                    this.name = name;
+                    this.source = new DcSource(name + ' SOURCE', nominalVoltage, currentLimit);
+                    this.conductors = [];
+                    this.contacts = [];
+                    this.coils = [];
+                    this.loads = [];
+                    this.fault = null;
+                }
+
+                register(device, collection) {
+                    if (this.#names.has(device.name)) {
+                        throw new Error('Duplicate circuit designation: ' + device.name);
+                    }
+                    this.#names.add(device.name);
+                    collection.push(device);
+                    device.addEventListener('change', () => this.solve());
+                    this.solve();
+                    return device;
+                }
+
+                addConductor(conductor) {
+                    return this.register(conductor, this.conductors);
+                }
+
+                addContact(contact) {
+                    return this.register(contact, this.contacts);
+                }
+
+                addCoil(coil) {
+                    if (this.#names.has(coil.name)) {
+                        throw new Error('Duplicate circuit designation: ' + coil.name);
+                    }
+                    this.#names.add(coil.name);
+                    this.coils.push(coil);
+                    this.loads.push(coil);
+                    this.solve();
+                    return coil;
+                }
+
+                addLoad(load) {
+                    if (this.#names.has(load.name)) {
+                        throw new Error('Duplicate circuit designation: ' + load.name);
+                    }
+                    this.#names.add(load.name);
+                    this.loads.push(load);
+                    this.solve();
+                    return load;
+                }
+
+                wire(name, from, to) {
+                    return this.addConductor(new ElectricalConductor(name, from, to));
+                }
+
+                installJumper(name, from, to) {
+                    return this.wire('JUMPER ' + name, from, to);
+                }
+
+                transaction(work) {
+                    this.#transactionDepth++;
+                    try {
+                        return work();
+                    } finally {
+                        this.#transactionDepth--;
+                        if (this.#transactionDepth === 0 && this.#solveAgain) this.solve();
                     }
                 }
 
-                function hideLoader() {
-                    if (overlay) {
-                        overlay.style.opacity = '0';
-
-                        if (audio) {
-                            const fadeInterval = setInterval(() => {
-                                if (audio.volume > 0.05) {
-                                    audio.volume -= 0.05;
-                                } else {
-                                    audio.volume = 0;
-                                    audio.pause();
-                                    clearInterval(fadeInterval);
-                                }
-                            }, 25);
-                        }
-
-                        setTimeout(() => {
-                            overlay.style.display = 'none';
-                        }, 500);
+                solve() {
+                    if (this.#transactionDepth > 0 || this.#solving) {
+                        this.#solveAgain = true;
+                        return false;
                     }
-                }
 
-                setTimeout(() => {
-                    const info = document.getElementById('loaderInfo');
-                    const scroller = document.getElementById('loaderInfoScroll');
-                    if (info && scroller && overlay && overlay.style.display !== 'none') {
-                        info.style.opacity = '1';
-
-                        const chosenClass = scroller.classList.contains('waiting3') ? 'waiting3' : (scroller.classList.contains('waiting2') ? 'waiting2' : 'waiting');
-                        const paragraphs = [...scroller.querySelectorAll('p')].filter(p => p.classList.contains(chosenClass));
-
-                        function startScrolling() {
-                            if (overlay.style.display === 'none') return;
-                            const scrollHeight = scroller.scrollHeight;
-                            const clientHeight = info.clientHeight;
-                            if (scrollHeight > clientHeight) {
-                                let currentY = 0;
-                                const maxScroll = scrollHeight - clientHeight;
-                                const scrollInterval = setInterval(() => {
-                                    if (overlay.style.display === 'none') {
-                                        clearInterval(scrollInterval);
-                                        return;
-                                    }
-                                    currentY += 0.5;
-                                    if (currentY >= maxScroll) {
-                                        currentY = maxScroll;
-                                        clearInterval(scrollInterval);
-                                    }
-                                    scroller.style.transform = `translateY(${-currentY}px)`;
-                                }, 30);
-                            }
-                        }
-
-                        function showParagraph(i) {
-                            if (overlay.style.display === 'none') return;
-                            if (i >= paragraphs.length) {
-                                startScrolling();
-                                return;
+                    this.#solving = true;
+                    let passes = 0;
+                    try {
+                        do {
+                            this.#solveAgain = false;
+                            passes++;
+                            if (passes > 32) {
+                                throw new Error(this.name + ' failed to reach an electrical steady state');
                             }
 
-                            const p = paragraphs[i];
-                            p.style.opacity = '1';
-
-                            const style = window.getComputedStyle(p);
-                            const durationSec = parseFloat(style.transitionDuration) || 4;
-                            const textLength = p.textContent.length;
-                            const readingTimeSec = Math.max(3, textLength / 12);
-                            const totalWaitMs = (durationSec + readingTimeSec) * 1000;
-
-                            setTimeout(() => {
-                                showParagraph(i + 1);
-                            }, totalWaitMs);
-                        }
-
-                        showParagraph(0);
-                    }
-                }, 5000);
-
-                function startDeferredLoading() {
-                    const images = [...document.querySelectorAll('img[data-src]')];
-                    const videos = [...document.querySelectorAll('video[data-src]')];
-                    const totalCount = images.length + videos.length;
-
-                    if (totalCount === 0) {
-                        assetsLoaded = true;
-                        checkFinish();
-                        return;
-                    }
-
-                    const loadedAssets = new Set();
-
-                    function updateProgress(asset) {
-                        if (loadedAssets.has(asset)) return;
-                        loadedAssets.add(asset);
-
-                        const rawPct = Math.round((loadedAssets.size / totalCount) * 100);
-                        const displayPct = Math.min(99, rawPct);
-                        if (pctEl) pctEl.textContent = displayPct + '%';
-
-                        if (loadedAssets.size >= totalCount && !assetsLoaded) {
-                            assetsLoaded = true;
-                            checkFinish();
-                        }
-                    }
-
-                    function loadVideos() {
-                        videos.forEach(video => {
-                            video.addEventListener('loadeddata', () => updateProgress(video));
-                            video.addEventListener('error', () => updateProgress(video));
-                            video.src = getVersionedUrl(video.dataset.src);
-                        });
-                    }
-
-                    document.fonts.load('1em "BabelStone Han"').then(() => {
-                        if (images.length === 0) {
-                            loadVideos();
-                        } else {
-                            let loadedImagesCount = 0;
-                            images.forEach(img => {
-                                const onImgDone = () => {
-                                    updateProgress(img);
-                                    loadedImagesCount++;
-                                    if (loadedImagesCount === images.length) {
-                                        loadVideos();
-                                    }
-                                };
-                                img.addEventListener('load', onImgDone);
-                                img.addEventListener('error', onImgDone);
-                                img.src = getVersionedUrl(img.dataset.src);
+                            const terminals = new Set([this.source.positive, this.source.negative]);
+                            this.conductors.forEach(device => {
+                                terminals.add(device.from);
+                                terminals.add(device.to);
                             });
+                            this.contacts.forEach(device => {
+                                terminals.add(device.line);
+                                terminals.add(device.load);
+                            });
+                            this.loads.forEach(load => {
+                                terminals.add(load.a1);
+                                terminals.add(load.a2);
+                            });
+
+                            const parent = new Map([...terminals].map(terminal => [terminal, terminal]));
+                            const find = terminal => {
+                                let root = terminal;
+                                while (parent.get(root) !== root) root = parent.get(root);
+                                let cursor = terminal;
+                                while (parent.get(cursor) !== cursor) {
+                                    const next = parent.get(cursor);
+                                    parent.set(cursor, root);
+                                    cursor = next;
+                                }
+                                return root;
+                            };
+                            const union = (left, right) => {
+                                const leftRoot = find(left);
+                                const rightRoot = find(right);
+                                if (leftRoot !== rightRoot) parent.set(leftRoot, rightRoot);
+                            };
+
+                            this.conductors.forEach(conductor => {
+                                if (conductor.conductive) union(conductor.from, conductor.to);
+                            });
+                            this.contacts.forEach(contact => {
+                                if (contact.conductive) union(contact.line, contact.load);
+                            });
+
+                            const positiveRoot = find(this.source.positive);
+                            const negativeRoot = find(this.source.negative);
+                            if (positiveRoot === negativeRoot) {
+                                this.source.trip('direct short circuit between L+ and L-');
+                            }
+
+                            if (this.source.tripped) {
+                                this.fault = this.source.tripReason;
+                                this.source.current = 0;
+                                this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
+                                continue;
+                            }
+
+                            const potential = terminal => {
+                                const root = find(terminal);
+                                if (root === positiveRoot) return this.source.nominalVoltage;
+                                if (root === negativeRoot) return 0;
+                                return null;
+                            };
+                            let sourceCurrent = 0;
+                            this.loads.forEach(load => {
+                                const a1 = potential(load.a1);
+                                const a2 = potential(load.a2);
+                                const voltage = a1 === null || a2 === null ? 0 : a1 - a2;
+                                load.applyVoltage(voltage, DC_SOLVER_AUTHORITY);
+                                sourceCurrent += Math.abs(load.current);
+                            });
+                            this.source.current = sourceCurrent;
+
+                            if (sourceCurrent > this.source.currentLimit) {
+                                this.source.trip(
+                                    'overcurrent: ' + sourceCurrent.toFixed(3) + ' A exceeds ' +
+                                    this.source.currentLimit.toFixed(3) + ' A'
+                                );
+                                this.fault = this.source.tripReason;
+                                this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
+                                this.#solveAgain = true;
+                            } else {
+                                this.fault = null;
+                            }
+                        } while (this.#solveAgain);
+                    } finally {
+                        this.#solving = false;
+                    }
+                    this.dispatchEvent(new Event('solved'));
+                    return !this.source.tripped;
+                }
+
+                resetProtection() {
+                    this.source.reset();
+                    this.fault = null;
+                    return this.solve();
+                }
+
+                validateTopology() {
+                    const degree = new Map();
+                    this.conductors.forEach(conductor => {
+                        degree.set(conductor.from, (degree.get(conductor.from) || 0) + 1);
+                        degree.set(conductor.to, (degree.get(conductor.to) || 0) + 1);
+                    });
+                    const faults = [];
+                    this.contacts.forEach(contact => {
+                        if (!(degree.get(contact.line) || 0)) {
+                            faults.push({ device: contact.name, terminal: 'LINE', fault: 'UNWIRED' });
                         }
-                    }).catch(() => {
-                        images.forEach(img => {
-                            img.addEventListener('load', () => updateProgress(img));
-                            img.addEventListener('error', () => updateProgress(img));
-                            img.src = getVersionedUrl(img.dataset.src);
+                        if (!(degree.get(contact.load) || 0)) {
+                            faults.push({ device: contact.name, terminal: 'LOAD', fault: 'UNWIRED' });
+                        }
+                    });
+                    this.loads.forEach(load => {
+                        if (!(degree.get(load.a1) || 0)) {
+                            faults.push({ device: load.name, terminal: 'A1', fault: 'UNWIRED' });
+                        }
+                        if (!(degree.get(load.a2) || 0)) {
+                            faults.push({ device: load.name, terminal: 'A2', fault: 'UNWIRED' });
+                        }
+                        if (!Number.isFinite(load.resistance) || load.resistance <= 0) {
+                            faults.push({ device: load.name, terminal: null, fault: 'INVALID_RESISTANCE' });
+                        }
+                    });
+                    return faults;
+                }
+
+                snapshot() {
+                    return {
+                        source: {
+                            voltage: this.source.nominalVoltage,
+                            current: this.source.current,
+                            currentLimit: this.source.currentLimit,
+                            tripped: this.source.tripped,
+                            tripReason: this.source.tripReason
+                        },
+                        contacts: Object.fromEntries(this.contacts.map(contact => [
+                            contact.name,
+                            contact.closed
+                        ])),
+                        coils: Object.fromEntries(this.coils.map(coil => [
+                            coil.name,
+                            {
+                                voltage: coil.voltage,
+                                current: coil.current,
+                                energized: coil.energized
+                            }
+                        ])),
+                        loads: Object.fromEntries(this.loads
+                            .filter(load => !this.coils.includes(load))
+                            .map(load => [
+                                load.name,
+                                {
+                                    voltage: load.voltage,
+                                    current: load.current,
+                                    energized: load.energized
+                                }
+                            ])),
+                        conductors: Object.fromEntries(this.conductors.map(conductor => [
+                            conductor.name,
+                            conductor.connected
+                        ]))
+                    };
+                }
+            }
+
+            class DcDeviceRegistry {
+                #factories = new Map();
+
+                register(type, factory) {
+                    if (this.#factories.has(type)) throw new Error('Duplicate DC device type: ' + type);
+                    this.#factories.set(type, factory);
+                    return this;
+                }
+
+                create(spec, context) {
+                    const factory = this.#factories.get(spec.type);
+                    if (!factory) throw new Error('Unknown DC device type: ' + spec.type);
+                    return factory(spec, context);
+                }
+            }
+
+            class DcSwitchedLoad extends EventTarget {
+                #authority = Symbol('SWITCHED DC LOAD');
+
+                constructor(name, circuit, supply, returnTerminal, resistance, wire) {
+                    super();
+                    this.name = name;
+                    this.contact = circuit.addContact(new ElectricalContact(name + ' CONTACT', false, this.#authority));
+                    this.load = circuit.addLoad(new DcPoweredLoad(name + ' LOAD', { resistance }));
+                    wire(name + ' FEED', supply, this.contact.line);
+                    wire(name + ' SWITCHED', this.contact.load, this.load.a1);
+                    wire(name + ' RETURN', this.load.a2, returnTerminal);
+                    this.load.addEventListener('statechange', () => this.dispatchEvent(new Event('change')));
+                }
+
+                get active() {
+                    return this.load.energized;
+                }
+
+                setActive(active) {
+                    return this.contact.setClosed(active, this.#authority);
+                }
+            }
+
+            class DcDiscreteInputAdapter extends EventTarget {
+                #authority = Symbol('DISCRETE SWITCH CONTACT');
+
+                constructor(name, circuit, supply, returnTerminal, powerContact, {
+                    resistance = 28000,
+                    sense = 'power',
+                    wire
+                } = {}) {
+                    super();
+                    this.name = name;
+                    this.powerContact = powerContact;
+                    this.sense = sense;
+                    this.contact = circuit.addContact(new ElectricalContact(
+                        name + ' SWITCH CONTACT', false, this.#authority
+                    ));
+                    this.load = circuit.addLoad(new DcPoweredLoad(
+                        name + ' INPUT LOAD', { resistance }
+                    ));
+                    if (sense === 'ground') {
+                        wire(name + ' INPUT FEED', supply, this.load.a1);
+                        wire(name + ' INPUT TO SWITCH', this.load.a2, this.contact.line);
+                        wire(name + ' SWITCH RETURN', this.contact.load, returnTerminal);
+                    } else {
+                        wire(name + ' SWITCH FEED', supply, this.contact.line);
+                        wire(name + ' SWITCH TO INPUT', this.contact.load, this.load.a1);
+                        wire(name + ' INPUT RETURN', this.load.a2, returnTerminal);
+                    }
+                    this.load.addEventListener('statechange', () => this.dispatchEvent(new Event('change')));
+                    powerContact?.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+                }
+
+                get powered() {
+                    return !this.powerContact || this.powerContact.closed;
+                }
+
+                get active() {
+                    return this.powered && this.contact.closed && this.load.energized;
+                }
+
+                get state() {
+                    if (!this.powered || !this.contact.closed) return 'OPEN';
+                    if (!this.load.energized) return 'FAULT';
+                    return this.sense === 'ground' ? 'GROUND' : 'POWERED';
+                }
+
+                get voltage() {
+                    return this.load.voltage;
+                }
+
+                get current() {
+                    return this.load.current;
+                }
+
+                setClosed(closed) {
+                    return this.contact.setClosed(closed, this.#authority);
+                }
+            }
+
+            class DcAnalogInputAdapter extends EventTarget {
+                #value = 0;
+
+                constructor(name, circuit, supply, returnTerminal, powerContact, {
+                    resistance = 56000,
+                    referenceVoltage = 5,
+                    wire
+                } = {}) {
+                    super();
+                    this.name = name;
+                    this.powerContact = powerContact;
+                    this.referenceVoltage = referenceVoltage;
+                    this.load = circuit.addLoad(new DcPoweredLoad(
+                        name + ' EXCITATION LOAD', { resistance }
+                    ));
+                    wire(name + ' EXCITATION FEED', supply, this.load.a1);
+                    wire(name + ' EXCITATION RETURN', this.load.a2, returnTerminal);
+                    this.load.addEventListener('statechange', () => this.dispatchEvent(new Event('change')));
+                    powerContact?.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+                }
+
+                get powered() {
+                    return !this.powerContact || this.powerContact.closed;
+                }
+
+                get state() {
+                    if (!this.powered) return 'OPEN';
+                    return this.load.energized ? 'POWERED' : 'FAULT';
+                }
+
+                get signalVoltage() {
+                    return this.state === 'POWERED' ? this.#value * this.referenceVoltage : 0;
+                }
+
+                get voltage() {
+                    return this.load.voltage;
+                }
+
+                get current() {
+                    return this.load.current;
+                }
+
+                setValue(value) {
+                    const next = Math.max(0, Math.min(1, Number(value)));
+                    if (!Number.isFinite(next) || next === this.#value) return false;
+                    this.#value = next;
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+            }
+
+            class DiscreteBus extends EventTarget {
+                #channels = new Map();
+
+                register(id, channel) {
+                    if (this.#channels.has(id)) throw new Error('Duplicate discrete channel: ' + id);
+                    this.#channels.set(id, channel);
+                    channel.addEventListener('change', () => this.dispatchEvent(new CustomEvent(
+                        'change',
+                        { detail: { id, state: channel.state, active: channel.active } }
+                    )));
+                    return channel;
+                }
+
+                get(id) {
+                    return this.#channels.get(id) || null;
+                }
+
+                get states() {
+                    return Object.fromEntries([...this.#channels].map(([id, channel]) => [id, {
+                        state: channel.state,
+                        active: channel.active,
+                        voltage: channel.voltage,
+                        current: channel.current
+                    }]));
+                }
+
+                validate() {
+                    return [...this.#channels]
+                        .filter(([, channel]) => channel.state === 'FAULT')
+                        .map(([id]) => ({ device: id, terminal: 'DISCRETE', fault: 'DISCRETE_FAULT' }));
+                }
+            }
+
+            class DcNetlist {
+                #devices = new Map();
+                #specs = new Map();
+                #avionicsDevices = new WeakSet();
+                #wireNumber = 700;
+
+                constructor(circuit, registry, { supplies = {}, returns = {}, protectedSupplies = [] } = {}) {
+                    this.circuit = circuit;
+                    this.registry = registry;
+                    this.supplies = supplies;
+                    this.returns = returns;
+                    this.protectedSupplies = new Set(protectedSupplies);
+                    this.discreteBus = new DiscreteBus();
+                }
+
+                wire(name, from, to) {
+                    const number = String(this.#wireNumber++).padStart(3, '0');
+                    return this.circuit.wire('W' + number + ' ' + name, from, to);
+                }
+
+                add(spec) {
+                    if (!spec.id || this.#devices.has(spec.id)) throw new Error('Duplicate or missing DC device id: ' + spec.id);
+                    const supply = spec.supply ? this.supplies[spec.supply] : null;
+                    const returnTerminal = spec.return ? this.returns[spec.return] : null;
+                    if (spec.supply && !supply) throw new Error('Unknown DC supply: ' + spec.supply);
+                    if (spec.return && !returnTerminal) throw new Error('Unknown DC return: ' + spec.return);
+                    const device = this.registry.create(spec, {
+                        circuit: this.circuit,
+                        supply,
+                        returnTerminal,
+                        wire: (name, from, to) => this.wire(name, from, to)
+                    });
+                    this.#devices.set(spec.id, device);
+                    this.#specs.set(spec.id, { ...spec });
+                    if (spec.type === 'discrete-input') this.discreteBus.register(spec.id, device);
+                    return device;
+                }
+
+                install(specs) {
+                    return Object.fromEntries(specs.map(spec => [spec.id, this.add(spec)]));
+                }
+
+                get(id) {
+                    return this.#devices.get(id) || null;
+                }
+
+                attachAvionicsDevice(spec, device, options = {}) {
+                    if (this.#avionicsDevices.has(device) || spec.electrical === false) return device;
+                    const supply = spec.dcSupply || options.supply || 'main';
+                    const returnName = spec.dcReturn || options.return || 'dc';
+                    const sense = spec.sense || options.sense || 'power';
+                    const resistance = spec.inputResistance || options.inputResistance || 28000;
+                    const prefix = (options.prefix ? options.prefix + '_' : '') + spec.id;
+                    if (device instanceof DiscreteInput) {
+                        const input = this.add({
+                            id: prefix,
+                            type: 'discrete-input',
+                            name: spec.name || spec.id,
+                            supply,
+                            return: returnName,
+                            resistance,
+                            sense,
+                            powerContact: device.power
                         });
-                        loadVideos();
+                        device.bindElectricalInput(input);
+                    } else if (device instanceof AvionicsSelector) {
+                        device.positions.forEach(position => {
+                            const input = this.add({
+                                id: prefix + '_' + position,
+                                type: 'discrete-input',
+                                name: (spec.name || spec.id) + ' ' + position,
+                                supply,
+                                return: returnName,
+                                resistance,
+                                sense,
+                                powerContact: device.power
+                            });
+                            device.bindElectricalPosition(position, input);
+                        });
+                    } else if (device instanceof AnalogControl) {
+                        const input = this.add({
+                            id: prefix,
+                            type: 'analog-input',
+                            name: spec.name || spec.id,
+                            supply,
+                            return: returnName,
+                            resistance,
+                            referenceVoltage: device.referenceVoltage,
+                            powerContact: device.power
+                        });
+                        device.bindElectricalInput(input);
+                    }
+                    this.#avionicsDevices.add(device);
+                    return device;
+                }
+
+                attachSelector(id, selector, options = {}) {
+                    return this.attachAvionicsDevice({
+                        id,
+                        type: 'selector',
+                        name: selector.name,
+                        dcSupply: options.supply,
+                        dcReturn: options.return,
+                        inputResistance: options.inputResistance,
+                        sense: options.sense
+                    }, selector, options);
+                }
+
+                attachAnalog(id, control, options = {}) {
+                    if (this.#avionicsDevices.has(control)) return control;
+                    const input = this.add({
+                        id,
+                        type: 'analog-input',
+                        name: control.name,
+                        supply: options.supply || 'main',
+                        return: options.return || 'dc',
+                        resistance: options.resistance || 56000,
+                        referenceVoltage: control.referenceVoltage,
+                        powerContact: control.power
+                    });
+                    control.bindElectricalInput(input);
+                    this.#avionicsDevices.add(control);
+                    return control;
+                }
+
+                validate() {
+                    const faults = [
+                        ...this.circuit.validateTopology(),
+                        ...this.discreteBus.validate()
+                    ];
+                    this.#specs.forEach((spec, id) => {
+                        if (spec.supply && !this.protectedSupplies.has(spec.supply)) {
+                            faults.push({ device: id, terminal: 'A1', fault: 'UNPROTECTED_FEED' });
+                        }
+                        if (spec.supply && !spec.return) {
+                            faults.push({ device: id, terminal: 'A2', fault: 'MISSING_RETURN' });
+                        }
+                    });
+                    this.#devices.forEach((device, id) => {
+                        if (device instanceof DcAnalogInputAdapter && device.state === 'FAULT') {
+                            faults.push({ device: id, terminal: 'ANALOG', fault: 'ANALOG_FAULT' });
+                        }
+                    });
+                    const maximumCurrent = this.circuit.loads.reduce((sum, load) =>
+                        sum + this.circuit.source.nominalVoltage / load.resistance, 0);
+                    if (maximumCurrent > this.circuit.source.currentLimit) {
+                        faults.push({
+                            device: this.circuit.source.name,
+                            terminal: 'L+',
+                            fault: 'LOAD_BUDGET_EXCEEDED',
+                            current: maximumCurrent,
+                            limit: this.circuit.source.currentLimit
+                        });
+                    }
+                    return faults;
+                }
+
+                get devices() {
+                    return Object.fromEntries(this.#devices);
+                }
+            }
+
+            const dcDeviceRegistry = new DcDeviceRegistry()
+                .register('resistive-load', (spec, context) => {
+                    const load = context.circuit.addLoad(new DcPoweredLoad(
+                        spec.name || spec.id,
+                        {
+                            resistance: spec.resistance,
+                            pickupVoltage: spec.pickupVoltage,
+                            dropoutVoltage: spec.dropoutVoltage
+                        }
+                    ));
+                    context.wire((spec.name || spec.id) + ' FEED', context.supply, load.a1);
+                    context.wire((spec.name || spec.id) + ' RETURN', load.a2, context.returnTerminal);
+                    return load;
+                })
+                .register('switched-load', (spec, context) => new DcSwitchedLoad(
+                    spec.name || spec.id,
+                    context.circuit,
+                    context.supply,
+                    context.returnTerminal,
+                    spec.resistance,
+                    context.wire
+                ))
+                .register('discrete-input', (spec, context) => new DcDiscreteInputAdapter(
+                    spec.name || spec.id,
+                    context.circuit,
+                    context.supply,
+                    context.returnTerminal,
+                    spec.powerContact,
+                    {
+                        resistance: spec.resistance,
+                        sense: spec.sense,
+                        wire: context.wire
+                    }
+                ))
+                .register('discrete-adapter', (spec, context) => new DcDiscreteInputAdapter(
+                    spec.name || spec.id,
+                    context.circuit,
+                    context.supply,
+                    context.returnTerminal,
+                    spec.powerContact,
+                    {
+                        resistance: spec.resistance,
+                        sense: spec.sense,
+                        wire: context.wire
+                    }
+                ))
+                .register('analog-input', (spec, context) => new DcAnalogInputAdapter(
+                    spec.name || spec.id,
+                    context.circuit,
+                    context.supply,
+                    context.returnTerminal,
+                    spec.powerContact,
+                    {
+                        resistance: spec.resistance,
+                        referenceVoltage: spec.referenceVoltage,
+                        wire: context.wire
+                    }
+                ))
+                .register('lamp', (spec, context) => {
+                    const lamp = context.circuit.addLoad(new DcPoweredLoad(
+                        spec.name || spec.id,
+                        { resistance: spec.resistance }
+                    ));
+                    context.wire((spec.name || spec.id) + ' FEED', context.supply, lamp.a1);
+                    context.wire((spec.name || spec.id) + ' RETURN', lamp.a2, context.returnTerminal);
+                    return lamp;
+                })
+                .register('avionics-unit', (spec, context) => {
+                    const unit = context.circuit.addLoad(new DcPoweredLoad(
+                        spec.name || spec.id,
+                        { resistance: spec.resistance }
+                    ));
+                    context.wire((spec.name || spec.id) + ' FEED', context.supply, unit.a1);
+                    context.wire((spec.name || spec.id) + ' RETURN', unit.a2, context.returnTerminal);
+                    return unit;
+                })
+                .register('relay', (spec, context) => {
+                    const relay = context.circuit.addCoil(new DcRelayCoil(
+                        spec.name || spec.id,
+                        { resistance: spec.resistance || 280 }
+                    ));
+                    context.wire((spec.name || spec.id) + ' A1 FEED', context.supply, relay.a1);
+                    context.wire((spec.name || spec.id) + ' A2 RETURN', relay.a2, context.returnTerminal);
+                    return relay;
+                });
+
+            class DcStrobeEmitter extends EventTarget {
+                #illuminated = false;
+                #offTimer = null;
+
+                constructor(name, load) {
+                    super();
+                    this.name = name;
+                    this.load = load;
+                    load.addEventListener('statechange', () => {
+                        if (!load.energized) this.extinguish();
+                        this.dispatchEvent(new Event('powerchange'));
                     });
                 }
 
-                if (audio) {
-                    audio.volume = 1.0;
-
-                    let started = false;
-                    const triggerLoad = () => {
-                        if (started) return;
-                        started = true;
-                        startDeferredLoading();
-                    };
-
-                    audio.addEventListener('playing', triggerLoad);
-                    audio.addEventListener('canplaythrough', triggerLoad);
-
-                    const playPromise = audio.play();
-                    if (playPromise !== undefined) {
-                        playPromise.then(triggerLoad).catch(() => {
-                            const startOnInteraction = () => {
-                                audio.play().then(triggerLoad).catch(triggerLoad);
-                                document.removeEventListener('click', startOnInteraction);
-                                document.removeEventListener('keydown', startOnInteraction);
-                            };
-                            document.addEventListener('click', startOnInteraction);
-                            document.addEventListener('keydown', startOnInteraction);
-                        });
-                    } else {
-                        triggerLoad();
-                    }
-                } else {
-                    startDeferredLoading();
+                get powered() {
+                    return this.load.energized;
                 }
 
-                setTimeout(() => {
-                    if (overlay && overlay.style.display !== 'none' && !completed) {
-                        completed = true;
-                        assetsLoaded = true;
-                        if (pctEl) pctEl.textContent = '100%';
-                        hideLoader();
+                get illuminated() {
+                    return this.#illuminated;
+                }
+
+                flash(duration) {
+                    if (!this.powered) return false;
+                    if (this.#offTimer !== null) clearTimeout(this.#offTimer);
+                    this.#offTimer = null;
+                    this.#setIlluminated(true);
+                    this.#offTimer = setTimeout(() => {
+                        this.#offTimer = null;
+                        this.#setIlluminated(false);
+                    }, duration);
+                    return true;
+                }
+
+                extinguish() {
+                    if (this.#offTimer !== null) clearTimeout(this.#offTimer);
+                    this.#offTimer = null;
+                    return this.#setIlluminated(false);
+                }
+
+                #setIlluminated(illuminated) {
+                    const next = this.powered && !!illuminated;
+                    if (next === this.#illuminated) return false;
+                    this.#illuminated = next;
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+            }
+
+            class LightingControlUnit extends EventTarget {
+                #cycleTimer = null;
+                #timers = new Set();
+                #running = false;
+                #panelWord = '00000000';
+                #warning = false;
+                #cycleNumber = 0;
+
+                constructor(circuit, controlLoad, loads, readPanelState) {
+                    super();
+                    this.name = 'A5 LIGHTING CONTROL UNIT';
+                    this.circuit = circuit;
+                    this.controlLoad = controlLoad;
+                    this.loads = loads;
+                    this.readPanelState = readPanelState;
+                    this.flashRate = 40;
+                    this.cycleDuration = 60000 / this.flashRate;
+                    this.safeCurrentLimit = 1.6;
+                    this.pattern = Object.freeze({
+                        bitOrder: Object.freeze(['PL', 'ISR1', 'ISR0', 'K', 'KR', 'M1', 'M0', 'L']),
+                        shortPulse: 24,
+                        longPulse: 58,
+                        slot: 100,
+                        start: 400,
+                        whiteDoubleGap: 140,
+                        oddTopDelay: 260,
+                        warningGap: 80
+                    });
+                    this.strobes = Object.freeze({
+                        top: new DcStrobeEmitter('H2 TOP MAIN BUS RED STROBE', loads.top.load),
+                        left: new DcStrobeEmitter('H3 LEFT PLAYBACK WHITE STROBE', loads.left.load),
+                        right: new DcStrobeEmitter('H4 RIGHT PLAYBACK WHITE STROBE', loads.right.load),
+                        bottomLeft: new DcStrobeEmitter('H5 BOTTOM LEFT CURRENT GREEN STROBE', loads.bottomLeft.load),
+                        bottomRight: new DcStrobeEmitter('H6 BOTTOM RIGHT PANEL CODE RED STROBE', loads.bottomRight.load)
+                    });
+                    Object.values(this.strobes).forEach(strobe => {
+                        strobe.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+                        strobe.addEventListener('powerchange', () => this.dispatchEvent(new Event('change')));
+                    });
+                    loads.top.addEventListener('change', () => this.#synchronizeRunState());
+                    controlLoad.addEventListener('statechange', () => this.#synchronizeRunState());
+                    circuit.addEventListener('solved', () => this.#synchronizeRunState());
+                    circuit.transaction(() => {
+                        loads.top.setActive(true);
+                        loads.left.setActive(true);
+                        loads.right.setActive(true);
+                        loads.bottomLeft.setActive(true);
+                        loads.bottomRight.setActive(true);
+                    });
+                    this.#synchronizeRunState();
+                }
+
+                get running() {
+                    return this.#running;
+                }
+
+                get panelWord() {
+                    return this.#panelWord;
+                }
+
+                get warning() {
+                    return this.#warning;
+                }
+
+                #synchronizeRunState() {
+                    if (this.controlLoad.energized && !this.circuit.source.tripped) this.start();
+                    else this.stop();
+                }
+
+                #encodePanelWord(state) {
+                    const isr = { OFF: 0, R: 1, I: 2, S: 3 }[state.isr] ?? 0;
+                    const m = { C: 0, U: 1, D: 2 }[state.m] ?? 0;
+                    return [
+                        state.pl ? '1' : '0',
+                        isr.toString(2).padStart(2, '0'),
+                        state.k === 'ON' ? '1' : '0',
+                        state.kr === 'ON' ? '1' : '0',
+                        m.toString(2).padStart(2, '0'),
+                        state.l === 'ON' ? '1' : '0'
+                    ].join('');
+                }
+
+                #schedule(delay, work) {
+                    const timer = setTimeout(() => {
+                        this.#timers.delete(timer);
+                        if (this.#running) work();
+                    }, delay);
+                    this.#timers.add(timer);
+                }
+
+                #beginCycle() {
+                    if (!this.#running || !this.controlLoad.energized || this.circuit.source.tripped) {
+                        this.stop();
+                        return;
                     }
-                }, 45000);
+                    this.#cycleNumber++;
+                    const panelState = this.readPanelState();
+                    this.#panelWord = this.#encodePanelWord(panelState);
+                    this.#warning = this.circuit.source.current > this.safeCurrentLimit;
+                    const evenCycle = this.#cycleNumber % 2 === 0;
+                    this.#schedule(0, () => {
+                        this.strobes.left.flash(44);
+                        this.strobes.right.flash(44);
+                        if (evenCycle) this.strobes.top.flash(this.pattern.longPulse);
+                    });
+                    if (panelState.pl) this.#schedule(this.pattern.whiteDoubleGap, () => {
+                        this.strobes.left.flash(44);
+                        this.strobes.right.flash(44);
+                    });
+                    if (!evenCycle) this.#schedule(
+                        this.pattern.oddTopDelay,
+                        () => this.strobes.top.flash(this.pattern.longPulse)
+                    );
+                    if (this.#warning) [1, 2].forEach(index => this.#schedule(
+                        this.pattern.start + index * this.pattern.warningGap,
+                        () => this.strobes.bottomLeft.flash(42)
+                    ));
+                    [...this.#panelWord].forEach((bit, index) => this.#schedule(
+                        this.pattern.start + index * this.pattern.slot,
+                        () => {
+                            if (index === 0) this.strobes.bottomLeft.flash(42);
+                            this.strobes.bottomRight.flash(
+                                bit === '1' ? this.pattern.longPulse : this.pattern.shortPulse
+                            );
+                        }
+                    ));
+                    this.dispatchEvent(new Event('cycle'));
+                    this.#cycleTimer = setTimeout(() => {
+                        this.#cycleTimer = null;
+                        this.#beginCycle();
+                    }, this.cycleDuration);
+                }
+
+                start() {
+                    if (this.#running) return false;
+                    this.#running = true;
+                    this.#cycleTimer = setTimeout(() => {
+                        this.#cycleTimer = null;
+                        this.#beginCycle();
+                    }, 0);
+                    this.dispatchEvent(new Event('statechange'));
+                    return true;
+                }
+
+                stop() {
+                    if (!this.#running && this.#cycleTimer === null && !this.#timers.size) return false;
+                    this.#running = false;
+                    if (this.#cycleTimer !== null) clearTimeout(this.#cycleTimer);
+                    this.#cycleTimer = null;
+                    this.#timers.forEach(timer => clearTimeout(timer));
+                    this.#timers.clear();
+                    Object.values(this.strobes).forEach(strobe => strobe.extinguish());
+                    this.dispatchEvent(new Event('statechange'));
+                    return true;
+                }
+
+                snapshot() {
+                    return {
+                        running: this.#running,
+                        cycleNumber: this.#cycleNumber,
+                        flashRate: this.flashRate,
+                        cycleDuration: this.cycleDuration,
+                        safeCurrentLimit: this.safeCurrentLimit,
+                        powered: this.controlLoad.energized,
+                        warning: this.#warning,
+                        panelWord: this.#panelWord,
+                        pattern: this.pattern,
+                        strobes: Object.fromEntries(Object.entries(this.strobes).map(
+                            ([id, strobe]) => [id, {
+                                powered: strobe.powered,
+                                illuminated: strobe.illuminated,
+                                voltage: strobe.load.voltage,
+                                current: strobe.load.current
+                            }]
+                        ))
+                    };
+                }
+            }
+
+            class ElectricallyStartedLoadStage extends EventTarget {
+                #readyAuthority = Symbol('LOAD COMPLETION CONTACT');
+                #runNumber = 0;
+
+                constructor(name, coil, circuit, work) {
+                    super();
+                    this.name = name;
+                    this.coil = coil;
+                    this.work = work;
+                    this.state = 'idle';
+                    this.progress = 0;
+                    this.error = null;
+                    this.readyContact = circuit.addContact(new ElectricalContact(
+                        name + ' COMPLETION CONTACT',
+                        false,
+                        this.#readyAuthority
+                    ));
+                    coil.addEventListener('statechange', () => this.onCoilStateChange());
+                    this.onCoilStateChange();
+                }
+
+                onCoilStateChange() {
+                    if (this.coil.energized) {
+                        if (this.state === 'idle') this.start();
+                        return;
+                    }
+                    if (this.state === 'idle' && !this.readyContact.closed) return;
+
+                    this.#runNumber++;
+                    this.state = 'idle';
+                    this.progress = 0;
+                    this.error = null;
+                    this.readyContact.setClosed(false, this.#readyAuthority);
+                    this.dispatchEvent(new Event('statechange'));
+                }
+
+                start() {
+                    if (!this.coil.energized || this.state !== 'idle') return false;
+                    const runNumber = ++this.#runNumber;
+                    this.state = 'running';
+                    this.error = null;
+                    this.dispatchEvent(new Event('statechange'));
+                    const report = (completed, total) => {
+                        if (runNumber !== this.#runNumber) return;
+                        this.progress = total > 0 ? completed / total : 1;
+                        this.dispatchEvent(new Event('progress'));
+                    };
+                    Promise.resolve()
+                        .then(() => this.work(report))
+                        .then(() => {
+                            if (runNumber !== this.#runNumber || !this.coil.energized) return;
+                            this.state = 'ready';
+                            this.progress = 1;
+                            this.readyContact.setClosed(true, this.#readyAuthority);
+                            this.dispatchEvent(new Event('statechange'));
+                        })
+                        .catch(error => {
+                            if (runNumber !== this.#runNumber) return;
+                            this.state = 'fault';
+                            this.error = error;
+                            this.readyContact.setClosed(false, this.#readyAuthority);
+                            this.dispatchEvent(new Event('statechange'));
+                        });
+                    return true;
+                }
+            }
+
+            class RotarySelector extends EventTarget {
+                #index = 0;
+                #camAuthority = Symbol('ROTARY SELECTOR CAM');
+                #cams = [];
+
+                constructor(name, detents, circuit) {
+                    super();
+                    this.name = name;
+                    this.detents = detents;
+                    this.circuit = circuit;
+                }
+
+                get index() {
+                    return this.#index;
+                }
+
+                get position() {
+                    return this.detents[this.#index];
+                }
+
+                pulseForward() {
+                    return this.step(1);
+                }
+
+                pulseBackward() {
+                    return this.step(-1);
+                }
+
+                addCamContact(name, closedAtDetents) {
+                    const closedAt = new Set(closedAtDetents);
+                    for (const detent of closedAt) {
+                        if (!this.detents.includes(detent)) {
+                            throw new Error(this.name + ' cam references invalid detent ' + detent);
+                        }
+                    }
+                    const contact = this.circuit.addContact(new ElectricalContact(
+                        this.name + ':' + name,
+                        closedAt.has(this.position),
+                        this.#camAuthority
+                    ));
+                    this.#cams.push({ contact, closedAt });
+                    return contact;
+                }
+
+                step(direction) {
+                    const requestedSteps = Math.trunc(Number(direction));
+                    if (!Number.isFinite(requestedSteps) || requestedSteps === 0) return false;
+
+                    const stepDirection = Math.sign(requestedSteps);
+                    let moved = false;
+                    for (let count = 0; count < Math.abs(requestedSteps); count++) {
+                        if (!this.#stepOneDetent(stepDirection)) break;
+                        moved = true;
+                    }
+                    return moved;
+                }
+
+                #stepOneDetent(direction) {
+                    const index = Math.max(
+                        0,
+                        Math.min(this.detents.length - 1, this.#index + Math.sign(direction))
+                    );
+                    if (index === this.#index) return false;
+                    const from = this.#index;
+                    this.#index = index;
+                    this.circuit.transaction(() => {
+                        this.#cams.forEach(({ contact, closedAt }) => {
+                            contact.setClosed(closedAt.has(this.position), this.#camAuthority);
+                        });
+                    });
+                    this.dispatchEvent(new CustomEvent('change', {
+                        detail: { from, to: index, direction: Math.sign(direction) }
+                    }));
+                    return true;
+                }
+            }
+
+            class PageControlBus {
+                #pagePowerAuthority = Symbol('PAGE MASTER SWITCH');
+                #kR3ContactAuthority = Symbol('K R3 ANALOG CONTACT');
+                #timeBusContactAuthority = Symbol('TIME BUS PL AUXILIARY CONTACT');
+
+                constructor(work) {
+                    this.circuit = new DcControlCircuit('PAGE CONTROL BUS', 28, 2);
+                    const circuit = this.circuit;
+
+                    this.pagePower = circuit.addContact(new ElectricalContact(
+                        'S0 PAGE MASTER SWITCH',
+                        false,
+                        this.#pagePowerAuthority
+                    ));
+                    this.selector = new RotarySelector(
+                        'S1 PAGE MODE SELECTOR',
+                        ['STR', 'L', 'OBS'],
+                        circuit
+                    );
+                    this.loadCommand = this.selector.addCamContact(
+                        'L PERMISSIVE CAM',
+                        ['L', 'OBS']
+                    );
+                    this.observeCommand = this.selector.addCamContact(
+                        'OBS PERMISSIVE CAM',
+                        ['OBS']
+                    );
+                    const readieContacts = {
+                        tier1: this.selector.addCamContact('STR READIE CAM', ['STR']),
+                        tier2: this.selector.addCamContact('L READIE CAM', ['L']),
+                        main: this.selector.addCamContact('OBS READIE CAM', ['OBS'])
+                    };
+
+                    const coils = {
+                        tier1: circuit.addCoil(new DcRelayCoil('K1 STR LOAD RELAY')),
+                        tier2: circuit.addCoil(new DcRelayCoil('K2 L LOAD RELAY')),
+                        tier3: circuit.addCoil(new DcRelayCoil('K3 OBS LOAD RELAY')),
+                        tier4: circuit.addCoil(new DcRelayCoil('K4 MAIN SYSTEMS RELAY'))
+                    };
+                    const sealInContacts = {
+                        tier2: circuit.addContact(coils.tier2.addNormallyOpenAuxiliary(
+                            'K2-A NO SEAL-IN CONTACT'
+                        )),
+                        tier3: circuit.addContact(coils.tier3.addNormallyOpenAuxiliary(
+                            'K3-A NO SEAL-IN CONTACT'
+                        ))
+                    };
+                    const lightingTierContacts = {
+                        load: circuit.addContact(coils.tier2.addNormallyOpenAuxiliary(
+                            'K2-B NO L LIGHTING BUS CONTACT'
+                        )),
+                        observe: circuit.addContact(coils.tier3.addNormallyOpenAuxiliary(
+                            'K3-B NO OBS LIGHTING BUS CONTACT'
+                        ))
+                    };
+                    const mainSystemsContact = circuit.addContact(
+                        coils.tier4.addNormallyOpenAuxiliary(
+                            'K4-A NO MAIN SYSTEMS POWER CONTACT'
+                        )
+                    );
+                    const kR3Contact = circuit.addContact(new ElectricalContact(
+                        'K-R3 ANALOG ENABLE CONTACT',
+                        false,
+                        this.#kR3ContactAuthority
+                    ));
+                    const timeBusContact = circuit.addContact(new ElectricalContact(
+                        'PL-T TIME BUS AUXILIARY CONTACT',
+                        false,
+                        this.#timeBusContactAuthority
+                    ));
+                    const readieLamp = circuit.addLoad(new DcPoweredLoad(
+                        'H1 READIE LAMP',
+                        { resistance: 2800 }
+                    ));
+
+                    this.tier1 = new ElectricallyStartedLoadStage(
+                        'TIER 1', coils.tier1, circuit, work.tier1
+                    );
+                    this.tier2 = new ElectricallyStartedLoadStage(
+                        'TIER 2', coils.tier2, circuit, work.tier2
+                    );
+                    this.tier3 = new ElectricallyStartedLoadStage(
+                        'OBS BACKGROUND', coils.tier3, circuit, work.tier3
+                    );
+                    this.stages = Object.freeze([
+                        this.tier1,
+                        this.tier2,
+                        this.tier3
+                    ]);
+
+                    const wires = {};
+                    const wire = (key, name, from, to) => {
+                        const conductor = circuit.wire(name, from, to);
+                        wires[key] = conductor;
+                        return conductor;
+                    };
+
+                    wire('sourceToMaster', 'W001 SOURCE L+ TO S0 LINE',
+                        circuit.source.positive, this.pagePower.line);
+
+                    wire('masterToTier1', 'W101 S0 LOAD TO K1 A1',
+                        this.pagePower.load, coils.tier1.a1);
+                    wire('tier1Return', 'W102 K1 A2 TO RETURN',
+                        coils.tier1.a2, circuit.source.negative);
+
+                    wire('masterToTier1Ready', 'W201 S0 LOAD TO K1 READY LINE',
+                        this.pagePower.load, this.tier1.readyContact.line);
+                    wire('tier1ReadyToLoadCam', 'W202 K1 READY LOAD TO S1 L CAM LINE',
+                        this.tier1.readyContact.load, this.loadCommand.line);
+                    wire('loadCamToTier2', 'W203 S1 L CAM LOAD TO K2 A1',
+                        this.loadCommand.load, coils.tier2.a1);
+                    wire('tier1ReadyToTier2Seal', 'W204 K1 READY LOAD TO K2-A LINE',
+                        this.tier1.readyContact.load, sealInContacts.tier2.line);
+                    wire('tier2SealToTier2', 'W205 K2-A LOAD TO K2 A1',
+                        sealInContacts.tier2.load, coils.tier2.a1);
+                    wire('tier2Return', 'W206 K2 A2 TO RETURN',
+                        coils.tier2.a2, circuit.source.negative);
+
+                    wire('masterToTier2Ready', 'W301 S0 LOAD TO K2 READY LINE',
+                        this.pagePower.load, this.tier2.readyContact.line);
+                    wire('tier2ReadyToObserveCam', 'W302 K2 READY LOAD TO S1 OBS CAM LINE',
+                        this.tier2.readyContact.load, this.observeCommand.line);
+                    wire('observeCamToTier3', 'W303 S1 OBS CAM LOAD TO K3 A1',
+                        this.observeCommand.load, coils.tier3.a1);
+                    wire('tier2ReadyToTier3Seal', 'W304 K2 READY LOAD TO K3-A LINE',
+                        this.tier2.readyContact.load, sealInContacts.tier3.line);
+                    wire('tier3SealToTier3', 'W305 K3-A LOAD TO K3 A1',
+                        sealInContacts.tier3.load, coils.tier3.a1);
+                    wire('tier3Return', 'W306 K3 A2 TO RETURN',
+                        coils.tier3.a2, circuit.source.negative);
+
+                    wire('masterToTier3Ready', 'W401 S0 LOAD TO K3 READY LINE',
+                        this.pagePower.load, this.tier3.readyContact.line);
+                    wire('tier3ReadyToTier4', 'W402 K3 READY LOAD TO K4 A1',
+                        this.tier3.readyContact.load, coils.tier4.a1);
+                    wire('tier4Return', 'W403 K4 A2 TO RETURN',
+                        coils.tier4.a2, circuit.source.negative);
+                    wire('sourceToMainSystemsContact', 'W501 SOURCE L+ TO K4-A LINE',
+                        circuit.source.positive, mainSystemsContact.line);
+                    wire('mainSystemsToKR3Contact', 'W502 MAIN BUS TO K-R3 LINE',
+                        mainSystemsContact.load, kR3Contact.line);
+                    wire('mainSystemsToTimeBusContact', 'W503 MAIN BUS TO PL-T TIME BUS LINE',
+                        mainSystemsContact.load, timeBusContact.line);
+                    wire('masterToLLightingContact', 'W510 S0 LOAD TO K2-B L LIGHTING LINE',
+                        this.pagePower.load, lightingTierContacts.load.line);
+                    wire('masterToObsLightingContact', 'W511 S0 LOAD TO K3-B OBS LIGHTING LINE',
+                        this.pagePower.load, lightingTierContacts.observe.line);
+                    wire('tier1ReadyToReadieCam', 'W601 TIER 1 READY TO STR READIE CAM',
+                        this.tier1.readyContact.load, readieContacts.tier1.line);
+                    wire('tier1ReadieCamToLamp', 'W602 STR READIE CAM TO H1',
+                        readieContacts.tier1.load, readieLamp.a1);
+                    wire('tier2ReadyToReadieCam', 'W603 TIER 2 READY TO L READIE CAM',
+                        this.tier2.readyContact.load, readieContacts.tier2.line);
+                    wire('tier2ReadieCamToLamp', 'W604 L READIE CAM TO H1',
+                        readieContacts.tier2.load, readieLamp.a1);
+                    wire('mainBusToReadieCam', 'W605 MAIN BUS TO OBS READIE CAM',
+                        mainSystemsContact.load, readieContacts.main.line);
+                    wire('mainReadieCamToLamp', 'W606 OBS READIE CAM TO H1',
+                        readieContacts.main.load, readieLamp.a1);
+                    wire('readieLampReturn', 'W607 H1 TO RETURN',
+                        readieLamp.a2, circuit.source.negative);
+
+                    const netlist = new DcNetlist(circuit, dcDeviceRegistry, {
+                        supplies: {
+                            control: this.pagePower.load,
+                            main: mainSystemsContact.load,
+                            lightingL: lightingTierContacts.load.load,
+                            lightingObs: lightingTierContacts.observe.load,
+                            k: kR3Contact.load,
+                            time: timeBusContact.load
+                        },
+                        returns: { dc: circuit.source.negative },
+                        protectedSupplies: ['control', 'main', 'lightingL', 'lightingObs', 'k', 'time']
+                    });
+                    const equipmentLoads = netlist.install([
+                        { id: 'mainSystemsLoad', type: 'avionics-unit', name: 'A0 MAIN AVIONICS BUS SENSE', supply: 'main', return: 'dc', resistance: 28000 },
+                        { id: 'panelSystemsLoad', type: 'avionics-unit', name: 'A1 PANEL CONTROLLER', supply: 'main', return: 'dc', resistance: 560 },
+                        { id: 'playbackSystemsLoad', type: 'avionics-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'main', return: 'dc', resistance: 560 },
+                        { id: 'soundSystemsLoad', type: 'avionics-unit', name: 'A3 SOUND CONTROLLER', supply: 'main', return: 'dc', resistance: 280 },
+                        { id: 'archiveSystemsLoad', type: 'avionics-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'control', return: 'dc', resistance: 1120 },
+                        { id: 'lightingSystemsLoad', type: 'avionics-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'control', return: 'dc', resistance: 1120 }
+                    ]);
+                    const activityLoads = netlist.install([
+                        { id: 'playbackActivityLoad', type: 'switched-load', name: 'A2-L PLAYBACK MEDIA LOAD', supply: 'main', return: 'dc', resistance: 560 },
+                        { id: 'soundActivityLoad', type: 'switched-load', name: 'A3-L SOUND OUTPUT LOAD', supply: 'main', return: 'dc', resistance: 140 },
+                        { id: 'archiveActivityLoad', type: 'switched-load', name: 'A4-L ARCHIVE WORK LOAD', supply: 'control', return: 'dc', resistance: 280 / 3 }
+                    ]);
+                    const timeBusLoads = netlist.install([
+                        { id: 'timeActiveDisplay', type: 'lamp', name: 'H7 TIME BUS ACTIVE DISPLAY', supply: 'time', return: 'dc', resistance: 5600 },
+                        { id: 'timeStandbyDisplay', type: 'lamp', name: 'H8 TIME BUS STANDBY DISPLAY', supply: 'time', return: 'dc', resistance: 5600 },
+                        { id: 'timeDcAmpsDisplay', type: 'lamp', name: 'H9 TIME BUS DC AMPS DISPLAY', supply: 'time', return: 'dc', resistance: 5600 },
+                        { id: 'mainSeekSensor', type: 'analog-input', name: 'T1 TIME BUS MAIN SEEK SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
+                        { id: 'sectionSensor', type: 'analog-input', name: 'T2 TIME BUS SECTION SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
+                        { id: 'timeSensor', type: 'analog-input', name: 'T3 TIME BUS TIME SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
+                        { id: 'setInput', type: 'discrete-input', name: 'S2 TIME BUS SET INPUT', supply: 'time', return: 'dc', resistance: 28000, powerContact: timeBusPower }
+                    ]);
+                    timeBusInputs = Object.freeze({
+                        mainSeekSensor: timeBusLoads.mainSeekSensor,
+                        sectionSensor: timeBusLoads.sectionSensor,
+                        timeSensor: timeBusLoads.timeSensor,
+                        setInput: timeBusLoads.setInput
+                    });
+                    const lightingLoads = netlist.install([
+                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'control', return: 'dc', resistance: 5600 },
+                        { id: 'leftPlaybackStrobe', type: 'switched-load', name: 'H3 LEFT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 },
+                        { id: 'rightPlaybackStrobe', type: 'switched-load', name: 'H4 RIGHT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 },
+                        { id: 'bottomLeftCurrentStrobe', type: 'switched-load', name: 'H5 BOTTOM LEFT CURRENT GREEN STROBE POWER SUPPLY', supply: 'lightingL', return: 'dc', resistance: 5600 },
+                        { id: 'bottomRightPanelStrobe', type: 'switched-load', name: 'H6 BOTTOM RIGHT PANEL CODE RED STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 }
+                    ]);
+                    const powerBridges = [
+                        [equipmentLoads.mainSystemsLoad, pageMainSystemsPower],
+                        [equipmentLoads.panelSystemsLoad, panelAvionicsPower],
+                        [equipmentLoads.playbackSystemsLoad, playbackAvionicsPower],
+                        [equipmentLoads.soundSystemsLoad, soundAvionicsPower],
+                        [equipmentLoads.archiveSystemsLoad, archiveAvionicsPower]
+                    ];
+                    powerBridges.forEach(([load, contact]) => {
+                        const synchronize = () => contact.setClosed(
+                            load.energized,
+                            PAGE_CONTROL_AUTHORITY
+                        );
+                        load.addEventListener('statechange', synchronize);
+                        synchronize();
+                    });
+                    playbackCircuit.board.connectElectricalNetlist(netlist, {
+                        prefix: 'PLAYBACK',
+                        supply: 'main',
+                        return: 'dc',
+                        inputResistance: 28000
+                    });
+                    const synchronizeTimeBusContact = () => timeBusContact.setClosed(
+                        playbackCircuit.plContact.active,
+                        this.#timeBusContactAuthority
+                    );
+                    playbackCircuit.plContact.addEventListener('change', synchronizeTimeBusContact);
+                    playbackAvionicsPower.addEventListener('change', synchronizeTimeBusContact);
+                    synchronizeTimeBusContact();
+                    const synchronizeTimeBusPower = () => timeBusPower.setClosed(
+                        timeBusLoads.timeActiveDisplay.energized && !circuit.source.tripped,
+                        PAGE_CONTROL_AUTHORITY
+                    );
+                    timeBusLoads.timeActiveDisplay.addEventListener('statechange', synchronizeTimeBusPower);
+                    circuit.addEventListener('solved', synchronizeTimeBusPower);
+                    synchronizeTimeBusPower();
+                    const synchronizeKR3Contact = () => kR3Contact.setClosed(
+                        playbackCircuit.k.effectivePosition === 'ON',
+                        this.#kR3ContactAuthority
+                    );
+                    playbackCircuit.k.addEventListener('change', synchronizeKR3Contact);
+                    synchronizeKR3Contact();
+                    m2ExpansionBoard.connectElectricalNetlist(netlist, {
+                        prefix: 'ARCHIVE',
+                        supply: 'control',
+                        return: 'dc',
+                        inputResistance: 28000
+                    });
+                    netlist.attachSelector('SOUND_L_COUPLING', soundCircuit.coupling, {
+                        prefix: 'SOUND',
+                        supply: 'main',
+                        return: 'dc',
+                        inputResistance: 28000
+                    });
+                    netlist.attachAnalog('SOUND_VOLUME', soundCircuit.volume, {
+                        supply: 'main', return: 'dc', resistance: 56000
+                    });
+                    netlist.attachAnalog('SOUND_SPEED', soundCircuit.speed, {
+                        supply: 'main', return: 'dc', resistance: 56000
+                    });
+                    netlist.attachAnalog('SOUND_REVERB', soundCircuit.reverb, {
+                        supply: 'main', return: 'dc', resistance: 56000
+                    });
+                    const synchronizeActivityLoads = () => {
+                        activityLoads.playbackActivityLoad.setActive(playbackCircuit.active);
+                        activityLoads.soundActivityLoad.setActive(soundCircuit.active);
+                        activityLoads.archiveActivityLoad.setActive(archiveCircuit.active);
+                    };
+                    playbackCircuit.addEventListener('activitychange', synchronizeActivityLoads);
+                    soundCircuit.addEventListener('activitychange', synchronizeActivityLoads);
+                    archiveCircuit.addEventListener('activitychange', synchronizeActivityLoads);
+                    synchronizeActivityLoads();
+                    const lightingController = new LightingControlUnit(
+                        circuit,
+                        equipmentLoads.lightingSystemsLoad,
+                        {
+                            top: lightingLoads.topMainBusStrobe,
+                            left: lightingLoads.leftPlaybackStrobe,
+                            right: lightingLoads.rightPlaybackStrobe,
+                            bottomLeft: lightingLoads.bottomLeftCurrentStrobe,
+                            bottomRight: lightingLoads.bottomRightPanelStrobe
+                        },
+                        () => ({
+                            pl: playbackCircuit.plContact.active,
+                            isr: playbackCircuit.isr.effectivePosition,
+                            k: playbackCircuit.k.effectivePosition,
+                            kr: playbackCircuit.kr.effectivePosition,
+                            m: playbackCircuit.m.effectivePosition,
+                            l: soundCircuit.coupling.effectivePosition
+                        })
+                    );
+                    this.lighting = lightingController;
+
+                    this.schematic = Object.freeze({
+                        source: circuit.source,
+                        masterSwitch: this.pagePower,
+                        selector: this.selector,
+                        commandContacts: Object.freeze({
+                            load: this.loadCommand,
+                            observe: this.observeCommand
+                        }),
+                        readieContacts: Object.freeze(readieContacts),
+                        coils: Object.freeze(coils),
+                        sealInContacts: Object.freeze(sealInContacts),
+                        lightingTierContacts: Object.freeze(lightingTierContacts),
+                        mainSystemsContact,
+                        kR3Contact,
+                        timeBus: Object.freeze({
+                            contact: timeBusContact,
+                            power: timeBusPower,
+                            loads: Object.freeze(timeBusLoads)
+                        }),
+                        mainSystemsLoad: equipmentLoads.mainSystemsLoad,
+                        equipmentLoads: Object.freeze(equipmentLoads),
+                        activityLoads: Object.freeze(activityLoads),
+                        lightingLoads: Object.freeze(lightingLoads),
+                        lightingController,
+                        readieLamp,
+                        wires: Object.freeze(wires),
+                        netlist
+                    });
+                    const topologyFaults = boardValidator.validate({
+                        boards: [playbackCircuit.board, m2ExpansionBoard],
+                        netlists: [netlist]
+                    });
+                    if (topologyFaults.length) {
+                        throw new Error('PAGE CONTROL BUS topology fault: ' + JSON.stringify(topologyFaults));
+                    }
+                    const electricalTelemetry = Object.freeze({
+                        snapshot: () => freezeTelemetry(circuit.snapshot()),
+                        get source() {
+                            return freezeTelemetry({ ...circuit.snapshot().source });
+                        },
+                        get discreteStates() {
+                            return freezeTelemetry(netlist.discreteBus.states);
+                        },
+                        get lighting() {
+                            return freezeTelemetry(lightingController.snapshot());
+                        },
+                        get timeBus() {
+                            const loads = Object.fromEntries(Object.entries(timeBusLoads).map(([id, device]) => [id, {
+                                state: device.state || (device.energized ? 'POWERED' : 'OPEN'),
+                                voltage: device.voltage,
+                                current: device.current,
+                                active: device.active ?? device.energized
+                            }]));
+                            return freezeTelemetry({
+                                powered: timeBusPower.closed,
+                                contactClosed: timeBusContact.closed,
+                                current: Object.values(loads).reduce((sum, load) => sum + Math.abs(load.current || 0), 0),
+                                loads
+                            });
+                        },
+                        validateTopology: () => freezeTelemetry(
+                            circuit.validateTopology().map(fault => ({ ...fault }))
+                        ),
+                        validate: () => freezeTelemetry(
+                            boardValidator.validate({
+                                boards: [playbackCircuit.board, m2ExpansionBoard],
+                                netlists: [netlist]
+                            }).map(fault => ({ ...fault }))
+                        )
+                    });
+                    this.telemetry = electricalTelemetry;
+                    publishReadOnlyWindow('m2Electrical', electricalTelemetry);
+                    circuit.solve();
+                }
+
+                powerOn() {
+                    return this.pagePower.setClosed(true, this.#pagePowerAuthority);
+                }
+
+                powerOff() {
+                    return this.pagePower.setClosed(false, this.#pagePowerAuthority);
+                }
+
+                resetProtection() {
+                    return this.circuit.resetProtection();
+                }
+            }
+
+            class M2SevenSegmentReadout {
+                constructor(target, powerContact = null) {
+                    this.target = target;
+                    this.powerContact = powerContact;
+                    this.value = '0.000';
+                    this.svgNamespace = 'http://www.w3.org/2000/svg';
+                    this.segmentMap = Object.freeze({
+                        '0': 'abcdef',
+                        '1': 'bc',
+                        '2': 'abdeg',
+                        '3': 'abcdg',
+                        '4': 'bcfg',
+                        '5': 'acdfg',
+                        '6': 'acdefg',
+                        '7': 'abc',
+                        '8': 'abcdefg',
+                        '9': 'abcdfg',
+                        ' ': ''
+                    });
+                    this.segmentPaths = Object.freeze({
+                        a: 'M3 1H12L14 3L12 5H3L1 3Z',
+                        b: 'M13 4L15 6V16L13 18L11 16V6Z',
+                        c: 'M13 20L15 22V32L13 34L11 32V22Z',
+                        d: 'M3 33H12L14 35L12 37H3L1 35Z',
+                        e: 'M2 20L4 22V32L2 34L0 32V22Z',
+                        f: 'M2 4L4 6V16L2 18L0 16V6Z',
+                        g: 'M3 17H12L14 19L12 21H3L1 19Z'
+                    });
+                    this.displaySlotXs = Object.freeze([8, 29.5, 51, 79, 100.5, 122]);
+                    this.initialize();
+                    this.powerContact?.addEventListener('change', () => this.render());
+                    this.receive({ value: '0.000' });
+                }
+
+                createSvg(tag, attributes = {}) {
+                    const node = document.createElementNS(this.svgNamespace, tag);
+                    Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, String(value)));
+                    return node;
+                }
+
+                initialize() {
+                    this.displaySlotXs.forEach((x, slot) => {
+                        const digit = this.createSvg('g', {
+                            transform: `translate(${x} 8) scale(1.12 .75)`,
+                            'data-digit-slot': slot
+                        });
+                        Object.entries(this.segmentPaths).forEach(([segment, path]) => {
+                            digit.append(this.createSvg('path', {
+                                class: 'mDcAmpsSegment is-off',
+                                d: path,
+                                'data-segment': segment
+                            }));
+                        });
+                        this.target.append(digit);
+                    });
+                    this.target.append(this.createSvg('circle', {
+                        class: 'mDcAmpsSegment is-off',
+                        cx: 73,
+                        cy: 34,
+                        r: 2,
+                        'data-decimal': ''
+                    }));
+                }
+
+                layout(value) {
+                    const normalized = String(value);
+                    const [whole = '', fraction = ''] = normalized.split('.');
+                    return {
+                        characters: [...whole.slice(-3).padStart(3, ' '), ...fraction.slice(0, 3).padEnd(3, '0')],
+                        decimal: normalized.includes('.')
+                    };
+                }
+
+                receive(signal) {
+                    this.value = String(signal?.value ?? '0.000');
+                    this.render();
+                }
+
+                render() {
+                    const powered = !this.powerContact || this.powerContact.closed;
+                    const layout = this.layout(this.value);
+                    this.target.querySelectorAll('[data-digit-slot]').forEach((digit, slot) => {
+                        const lit = powered ? this.segmentMap[layout.characters[slot] ?? ' '] ?? '' : '';
+                        digit.querySelectorAll('[data-segment]').forEach(segment => {
+                            segment.classList.toggle('is-off', !lit.includes(segment.dataset.segment));
+                        });
+                    });
+                    this.target.querySelector('[data-decimal]').classList.toggle('is-off', !powered || !layout.decimal);
+                    this.target.dataset.timePowered = String(powered);
+                    this.target.setAttribute('aria-label', powered ? 'DC amps ' + this.value : 'DC amps unpowered');
+                }
+            }
+
+            class InstrumentSignalCable {
+                constructor(source, receiver) {
+                    this.source = source;
+                    this.receiver = receiver;
+                    this.source.addEventListener('instrumentdata', event => this.receiver.receive(event.detail));
+                }
+            }
+
+            class PageBusPanel {
+                constructor(bus, control, knob, light) {
+                    this.bus = bus;
+                    this.control = control;
+                    this.knob = knob;
+                    this.light = light;
+                    this.instrument = control.querySelector('#pageBusInstrument');
+                    this.archiveButton = control.querySelector('#pageArchiveR2');
+                    this.archive = {
+                        state: document.documentElement.dataset.m2ArchiveState || 'standby',
+                        completed: Number(document.documentElement.dataset.m2ArchiveCompleted || 0),
+                        total: Number(document.documentElement.dataset.m2ArchiveTotal || 0) ||
+                            collectM2ArchiveManifest().length + 1
+                    };
+                    document.documentElement.dataset.m2ArchiveTotal = String(this.archive.total);
+                    this.readouts = Object.fromEntries(
+                        [...control.querySelectorAll('[data-bus-meter]')].map(readout => [
+                            readout.dataset.busMeter,
+                            readout
+                        ])
+                    );
+                    this.signalOutputs = Object.fromEntries(
+                        [...control.querySelectorAll('[data-bus-signal]')].map(output => [
+                            output.dataset.busSignal,
+                            output
+                        ])
+                    );
+                    this.angles = [0, 57, 102];
+
+                    bus.selector.addEventListener('change', () => this.render());
+                    [bus.tier1, bus.tier2, bus.tier3].forEach(stage => {
+                        stage.addEventListener('statechange', () => this.render());
+                    });
+                    bus.pagePower.addEventListener('change', () => this.render());
+                    bus.circuit.addEventListener('solved', () => this.render());
+                    window.addEventListener('m2archiveprogress', event => {
+                        this.archive.state = event.detail?.state || 'installing';
+                        this.archive.completed = Number(event.detail?.completed || 0);
+                        this.archive.total = Number(event.detail?.total || 0);
+                        this.render();
+                    });
+                    window.addEventListener('m2archivecomplete', event => {
+                        this.archive.state = 'complete';
+                        this.archive.completed = Number(event.detail?.total || 0);
+                        this.archive.total = Number(event.detail?.total || 0);
+                        this.render();
+                    });
+                    window.addEventListener('m2archivefault', event => {
+                        this.archive.state = 'fault';
+                        this.archive.completed = Number(event.detail?.completed || this.archive.completed || 0);
+                        this.archive.total = Number(event.detail?.total || this.archive.total || 0);
+                        this.render();
+                    });
+
+                    if (this.archiveButton) {
+                        this.archiveButton.addEventListener('pointerdown', event => {
+                            event.stopPropagation();
+                            try {
+                                this.archiveButton.setPointerCapture(event.pointerId);
+                            } catch (_) {}
+                            this.archiveButton.src = ASSET['r2on.png'] ||
+                                m2VersionedAssetUrl('/m/img/r2on.png');
+                        });
+                        const releaseArchiveButton = () => {
+                            this.archiveButton.src = ASSET['r2off.png'] ||
+                                m2VersionedAssetUrl('/m/img/r2off.png');
+                        };
+                        this.archiveButton.addEventListener('pointerup', releaseArchiveButton);
+                        this.archiveButton.addEventListener('pointercancel', releaseArchiveButton);
+                    }
+
+                    knob.addEventListener('click', event => {
+                        if (event.button !== 0) return;
+                        this.backward();
+                    });
+                    knob.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        this.forward();
+                    });
+                    knob.addEventListener('wheel', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (event.deltaY < 0) this.forward();
+                        else this.backward();
+                    }, { passive: false });
+                    control.addEventListener('keydown', event => {
+                        if (event.key === 'ArrowRight' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            this.forward();
+                        } else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') {
+                            event.preventDefault();
+                            this.backward();
+                        }
+                    });
+                    this.render();
+                }
+
+                forward() {
+                    if (this.bus.selector.pulseForward()) playMechanicalSound('click');
+                }
+
+                backward() {
+                    if (this.bus.selector.pulseBackward()) playMechanicalSound('click');
+                }
+
+                render() {
+                    const selector = this.bus.selector;
+                    const ready = this.bus.schematic.readieLamp.energized;
+                    this.knob.style.transform = 'translate(-49.5%, -55.2%) rotate(' + this.angles[selector.index] + 'deg)';
+                    this.light.src = m2VersionedAssetUrl(
+                        ready ? '/m/img/lightforalignon.png' : '/m/img/lightforalignoff.png'
+                    );
+                    this.light.classList.toggle('is-on', ready);
+
+                    const source = this.bus.circuit.source;
+                    const controlPowerAvailable = this.bus.pagePower.closed && !source.tripped;
+                    const archiveTotal = this.archive.total;
+                    const archiveCompleted = Math.min(this.archive.completed, archiveTotal || this.archive.completed);
+                    const archivePercent = archiveTotal > 0
+                        ? Math.min(100, archiveCompleted / archiveTotal * 100).toFixed(1)
+                        : (this.archive.state === 'complete' ? '100.0' : '0.0');
+                    const values = {
+                        dcAmps: controlPowerAvailable ? source.current.toFixed(3) : '0.000',
+                        archivePercent: this.archive.state === 'fault' ? 'FAULT' : archivePercent,
+                        dcVolts: controlPowerAvailable ? source.nominalVoltage.toFixed(1) : '0.0',
+                        archiveCompleted: String(archiveCompleted),
+                        archiveTotal: String(archiveTotal)
+                    };
+                    Object.entries(values).forEach(([name, value]) => {
+                        if (this.readouts[name]) this.readouts[name].textContent = value;
+                        if (this.signalOutputs[name]) {
+                            this.signalOutputs[name].dispatchEvent(new CustomEvent('instrumentdata', {
+                                detail: Object.freeze({ name, value })
+                            }));
+                        }
+                    });
+                    if (this.instrument) {
+                        this.instrument.classList.toggle(
+                            'is-fault',
+                            source.tripped || this.archive.state === 'fault'
+                        );
+                    }
+
+                    this.control.dataset.detent = selector.position;
+                    this.control.dataset.tier1 = this.bus.tier1.state;
+                    this.control.dataset.tier2 = this.bus.tier2.state;
+                    this.control.dataset.main = this.bus.tier3.state;
+                    this.control.setAttribute('aria-busy', ready ? 'false' : 'true');
+                }
+            }
+
+            class StrobeField {
+                constructor(lighting, root) {
+                    this.lighting = lighting;
+                    this.root = root;
+                    this.elements = Object.fromEntries(
+                        [...root.querySelectorAll('[data-strobe]')].map(element => [
+                            element.dataset.strobe,
+                            element
+                        ])
+                    );
+                    lighting.addEventListener('change', () => this.render());
+                    lighting.addEventListener('statechange', () => this.render());
+                    lighting.addEventListener('cycle', () => this.render());
+                    this.render();
+                }
+
+                render() {
+                    const state = this.lighting.snapshot();
+                    Object.entries(this.elements).forEach(([id, element]) => {
+                        const strobe = state.strobes[id];
+                        element.classList.toggle('is-lit', !!strobe?.illuminated);
+                        element.dataset.powered = strobe?.powered ? 'true' : 'false';
+                    });
+                    this.root.dataset.running = state.running ? 'true' : 'false';
+                    this.root.dataset.warning = state.warning ? 'true' : 'false';
+                    this.root.dataset.panelWord = state.panelWord;
+                }
+            }
+
+            window.addEventListener('DOMContentLoaded', () => {
+                const overlay = document.getElementById('loaderOverlay');
+                const control = document.getElementById('pageBusControl');
+                const knob = document.getElementById('pageBusKnob');
+                const light = document.getElementById('pageBusLight');
+                const strobeField = document.getElementById('m2StrobeField');
+                if (!overlay || !control || !knob || !light || !strobeField) return;
+
+                function getVersionedUrl(url) {
+                    return m2VersionedAssetUrl(url);
+                }
+
+                function loadMediaEl(el) {
+                    if (!el) return false;
+                    if (!el.dataset?.src) return !!el.getAttribute('src');
+                    el.src = getVersionedUrl(el.dataset.src);
+                    el.removeAttribute('data-src');
+                    return true;
+                }
+                window.loadMediaEl = loadMediaEl;
+
+                function observeVideos(videos) {
+                    if (!videos.length) return;
+                    if (!('IntersectionObserver' in window)) {
+                        videos.forEach(loadMediaEl);
+                        return;
+                    }
+                    const observer = new IntersectionObserver((entries, obs) => {
+                        entries.forEach(entry => {
+                            if (!entry.isIntersecting) return;
+                            loadMediaEl(entry.target);
+                            obs.unobserve(entry.target);
+                        });
+                    }, { rootMargin: '800px 0px' });
+                    videos.forEach(video => observer.observe(video));
+                }
+
+                function retryFailedImage(image, source) {
+                    const retry = () => {
+                        image.addEventListener('error', () => {
+                            image.classList.add('media-load-failed');
+                        }, { once: true });
+                        image.src = getVersionedUrl(source);
+                    };
+                    if ('requestIdleCallback' in window) requestIdleCallback(retry, { timeout: 10000 });
+                    else setTimeout(retry, 3000);
+                }
+
+                function loadPageImage(image, retryOnError = true) {
+                    if (!image?.dataset?.src) return;
+                    const source = image.dataset.src;
+                    if (retryOnError) {
+                        image.addEventListener('error', () => retryFailedImage(image, source), { once: true });
+                    }
+                    image.decoding = 'async';
+                    image.src = getVersionedUrl(source);
+                    image.removeAttribute('data-src');
+                }
+
+                function observePageImages(images) {
+                    if (!images.length) return;
+                    if (!('IntersectionObserver' in window)) {
+                        images.forEach(image => {
+                            image.loading = 'lazy';
+                            loadPageImage(image);
+                        });
+                        return;
+                    }
+                    const observer = new IntersectionObserver((entries, obs) => {
+                        entries.forEach(entry => {
+                            if (!entry.isIntersecting) return;
+                            loadPageImage(entry.target);
+                            obs.unobserve(entry.target);
+                        });
+                    }, { rootMargin: '800px 0px' });
+                    images.forEach(image => observer.observe(image));
+                }
+
+                function loadPageImages(report) {
+                    const images = [...document.querySelectorAll('img[data-src]')];
+                    report(0, 1);
+                    observePageImages(images);
+                    report(1, 1);
+                    return Promise.resolve();
+                }
+
+                function isPresentationImage(image) {
+                    if (!image?.isConnected) return false;
+                    const style = getComputedStyle(image);
+                    if (style.display === 'none' || style.visibility === 'hidden') return false;
+                    const rect = image.getBoundingClientRect();
+                    return rect.width > 0 &&
+                        rect.height > 0 &&
+                        rect.bottom > 0 &&
+                        rect.right > 0 &&
+                        rect.top < window.innerHeight &&
+                        rect.left < window.innerWidth;
+                }
+
+                function waitForRequiredImage(image) {
+                    return new Promise((resolve, reject) => {
+                        let settled = false;
+                        let watchdog = null;
+                        const source = image.dataset.src || image.currentSrc || image.src || 'unknown image';
+                        const cleanup = () => {
+                            if (watchdog !== null) clearTimeout(watchdog);
+                            image.removeEventListener('load', verify);
+                            image.removeEventListener('error', fail);
+                        };
+                        const succeed = () => {
+                            if (settled) return;
+                            settled = true;
+                            cleanup();
+                            image.classList.remove('media-load-failed');
+                            resolve();
+                        };
+                        const fail = () => {
+                            if (settled) return;
+                            settled = true;
+                            cleanup();
+                            image.classList.add('media-load-failed');
+                            reject(new Error('OBS image sensing fault: ' + source));
+                        };
+                        const verify = () => {
+                            if (settled || !image.complete) return;
+                            if (image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+                                fail();
+                                return;
+                            }
+                            const decoding = typeof image.decode === 'function'
+                                ? image.decode()
+                                : Promise.resolve();
+                            decoding.then(succeed, fail);
+                        };
+
+                        watchdog = setTimeout(fail, 15000);
+                        image.addEventListener('load', verify);
+                        image.addEventListener('error', fail);
+                        if (image.dataset.src) loadPageImage(image, false);
+                        queueMicrotask(verify);
+                    });
+                }
+
+                function waitForTwoPaintFrames() {
+                    return new Promise(resolve => {
+                        requestAnimationFrame(() => requestAnimationFrame(resolve));
+                    });
+                }
+
+                async function observePagePresentation(report) {
+                    const images = [...document.querySelectorAll('#songList .cImg img')]
+                        .filter(isPresentationImage);
+                    const fontLoads = [
+                        document.fonts.load('1em "Junicode"'),
+                        document.fonts.load('1em "nullpunktsenergiefont"')
+                    ];
+                    const tasks = [
+                        ...fontLoads,
+                        ...images.map(waitForRequiredImage)
+                    ];
+                    const total = tasks.length + 1;
+                    let completed = 0;
+                    const markReady = () => report(++completed, total);
+                    report(0, total);
+                    await Promise.all(tasks.map(task => task.then(markReady)));
+                    await waitForTwoPaintFrames();
+                    markReady();
+                }
+
+                function disconnectOverlay() {
+                    overlay.style.display = 'none';
+                    document.body.classList.remove('loading-overlay-active');
+                }
+
+                mainSystemsEvents.addEventListener('ready', () => {
+                    if (!pageMainSystemsPower.closed) return;
+                    const run = () => {
+                        document.body.classList.add('babelstone-ready');
+                        document.fonts.load('1em "BabelStone Han"').catch(() => {});
+                    };
+                    if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 10000 });
+                    else setTimeout(run, 2000);
+                }, { once: true });
+
+                const bus = new PageControlBus({
+                    tier1: report => loadTierOneResources(report),
+                    tier2: report => loadPageImages(report),
+                    tier3: async report => {
+                        await observePagePresentation(report);
+                        observeVideos([...document.querySelectorAll('video[data-src]:not([data-sync])')]);
+                        disconnectOverlay();
+                    }
+                });
+
+                const stageTelemetry = stage => freezeTelemetry({
+                    name: stage.name,
+                    state: stage.state,
+                    progress: stage.progress,
+                    error: stage.error ? String(stage.error.message || stage.error) : null
+                });
+                const selectorTelemetry = Object.freeze({
+                    get index() {
+                        return bus.selector.index;
+                    },
+                    get position() {
+                        return bus.selector.position;
+                    },
+                    step: direction => bus.selector.step(direction),
+                    pulseForward: () => bus.selector.pulseForward(),
+                    pulseBackward: () => bus.selector.pulseBackward()
+                });
+                const pageControlFacade = Object.freeze({
+                    powerOn: () => bus.powerOn(),
+                    powerOff: () => bus.powerOff(),
+                    resetProtection: () => bus.resetProtection(),
+                    selector: selectorTelemetry,
+                    circuit: bus.telemetry,
+                    get pagePower() {
+                        return freezeTelemetry({ closed: bus.pagePower.closed });
+                    },
+                    get tier1() {
+                        return stageTelemetry(bus.tier1);
+                    },
+                    get tier2() {
+                        return stageTelemetry(bus.tier2);
+                    },
+                    get tier3() {
+                        return stageTelemetry(bus.tier3);
+                    },
+                    get schematic() {
+                        return freezeTelemetry({
+                            source: { ...bus.circuit.snapshot().source },
+                            selector: bus.selector.position,
+                            masterSwitch: bus.pagePower.closed,
+                            mainSystemsContact: bus.schematic.mainSystemsContact.closed,
+                            readieLamp: bus.schematic.readieLamp.energized,
+                            lighting: bus.lighting.snapshot(),
+                            coils: Object.fromEntries(Object.entries(bus.schematic.coils).map(
+                                ([name, coil]) => [name, {
+                                    energized: coil.energized,
+                                    voltage: coil.voltage,
+                                    current: coil.current
+                                }]
+                            ))
+                        });
+                    }
+                });
+                publishReadOnlyWindow('pageControlBus', pageControlFacade);
+                publishReadOnlyWindow('pageControlCircuit', bus.telemetry);
+                const dcAmpsSignal = control.querySelector('[data-bus-signal="dcAmps"]');
+                const dcAmpsDisplay = document.getElementById('mDcAmpsDisplay');
+                if (dcAmpsSignal && dcAmpsDisplay) {
+                    new InstrumentSignalCable(dcAmpsSignal, new M2SevenSegmentReadout(dcAmpsDisplay, timeBusPower));
+                }
+                new PageBusPanel(bus, control, knob, light);
+                new StrobeField(bus.lighting, strobeField);
+                bus.powerOn();
             });
+        })();
+
+        (function() {
+            const rw = document.getElementById('rBarWrapper');
+            if (!rw) return;
+            rw.addEventListener('wheel', function(e) {
+                if (!e.target.closest('.tJump')) e.preventDefault();
+            }, { passive: false });
+            rw.addEventListener('touchmove', function(e) {
+                if (!e.target.closest('.tJump')) e.preventDefault();
+            }, { passive: false });
         })();
     </script>
     <iframe id="comFrame" src="about:blank"></iframe>
@@ -3933,13 +9880,13 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 : location.origin;
 
             const isCardAudio = el =>
-                el && el.tagName === 'AUDIO' && el.id !== 'loaderAudio' && el.closest('.card');
+                el && el.tagName === 'AUDIO' && el.closest('.card');
 
             function collageInfo(audio) {
                 if (!(window.__npK && window.__npK())) return null;
                 const card = audio.closest('.card');
                 if (!card) return null;
-                const dur = audio.duration;
+                const dur = window.__npPlaybackDuration ? window.__npPlaybackDuration(audio) : audio.duration;
                 if (!dur || !isFinite(dur)) return null;
                 const lines = card.querySelectorAll('.lrcLine');
                 if (lines.length < 2) return null;
@@ -3950,13 +9897,24 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     let end = dur;
                     const next = lines[i + 1];
                     if (next) { const ns = parseFloat(next.dataset.t); if (!isNaN(ns)) end = ns; }
-                    if (end - start > 45) segs.push([start, end, (lines[i].textContent || '').trim()]);
+                    if (window.__npSectionEligible(end - start)) segs.push([start, end, (lines[i].textContent || '').trim()]);
                 }
                 if (!segs.length) return null;
-                const t = audio.currentTime;
+                const t = window.__npPlaybackTime ? window.__npPlaybackTime(audio) : audio.currentTime;
                 let cur = segs[segs.length - 1];
                 for (const s of segs) { if (t >= s[0] && t < s[1]) { cur = s; break; } }
                 return { part: cur[2], start: cur[0], end: cur[1] };
+            }
+
+            function npMemberName(audio, title) {
+                const info = audio.__virtualSong;
+                if (!info) return title;
+                const seriesName = (info.seriesTitle || '').trim();
+                const seriesPrefix = seriesName.replace(/\s+series\s*$/iu, '').trim();
+                if (!seriesPrefix || !title.startsWith(seriesPrefix)) return title;
+                return title.slice(seriesPrefix.length)
+                    .replace(/^[\s\u2010-\u2015\u2212:·]+/u, '')
+                    .trim();
             }
 
             function buildState(audio, paused) {
@@ -3965,31 +9923,34 @@ $chosenLoader = 'waiting' . ($n ?: '');
                 let name = (card.querySelector('.cName')?.textContent || '').trim();
                 const category = (card.closest('.cardWrap')?.dataset.category || '').trim();
                 let art = '';
-                const imgEl = card.querySelector('.cImg img');
-                const raw = imgEl ? (imgEl.dataset.src || imgEl.getAttribute('src') || '') : '';
+                const raw = (card.dataset.art || '').trim();
                 if (raw && !raw.startsWith('blob:')) {
                     try { art = new URL(raw, ART_BASE).href; } catch (e) { art = ''; }
                 }
                 let startMs = 0, endMs = 0;
-                const dur = audio.duration;
+                const dur = window.__npPlaybackDuration ? window.__npPlaybackDuration(audio) : audio.duration;
+                const time = window.__npPlaybackTime ? window.__npPlaybackTime(audio) : audio.currentTime;
                 const col = collageInfo(audio);
                 if (col) {
-                    if (col.part) name = name ? (name + ' — ' + col.part) : col.part;
-                    startMs = Math.round(Date.now() - (audio.currentTime - col.start) * 1000);
+                    const part = npMemberName(audio, col.part);
+                    if (part) name = name ? (name + ' — ' + part) : part;
+                    startMs = Math.round(Date.now() - (time - col.start) * 1000);
                     endMs = Math.round(startMs + (col.end - col.start) * 1000);
                 } else if (dur && isFinite(dur)) {
-                    startMs = Math.round(Date.now() - audio.currentTime * 1000);
+                    startMs = Math.round(Date.now() - time * 1000);
                     endMs = Math.round(startMs + dur * 1000);
                 }
                 return { name, category, art, startMs, endMs, paused: !!paused };
             }
 
             function push(obj) {
+                const body = JSON.stringify(obj);
                 try {
+                    if (navigator.sendBeacon && navigator.sendBeacon(ENDPOINT, new Blob([body], { type: 'text/plain' }))) return;
                     fetch(ENDPOINT, {
                         method: 'POST',
-                        headers: { 'content-type': 'application/json' },
-                        body: JSON.stringify(obj),
+                        headers: { 'content-type': 'text/plain' },
+                        body,
                         keepalive: true
                     }).catch(() => {});
                 } catch (e) {}
@@ -4013,8 +9974,16 @@ $chosenLoader = 'waiting' . ($n ?: '');
                     if (isCardAudio(e.target) && !e.target.paused) send(e.target, false);
                 }, true));
             document.addEventListener('pause', e => { if (isCardAudio(e.target)) send(e.target, true); }, true);
-            document.addEventListener('ended', e => { if (isCardAudio(e.target)) { lastKey = ''; push({ clear: true }); } }, true);
-            document.addEventListener('timeupdate', e => { if (isCardAudio(e.target) && !e.target.paused) send(e.target, false); }, true);
+            document.addEventListener('ended', e => {
+                if (e.__virtualSongContinues) return;
+                if (isCardAudio(e.target) && !(window.__npKrLooping && window.__npKrLooping(e.target))) {
+                    lastKey = '';
+                    push({ clear: true });
+                }
+            }, true);
+            setInterval(() => {
+                document.querySelectorAll('audio').forEach(a => { if (isCardAudio(a) && !a.paused) send(a, false); });
+            }, 10000);
             window.addEventListener('pagehide', () => { lastKey = ''; push({ clear: true }); });
         })();
     </script>
