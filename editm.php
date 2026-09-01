@@ -23,6 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title  = trim($_POST['title']    ?? '');
     $cat    = trim($_POST['category'] ?? '');
     $lyrics = $_POST['lyrics']        ?? '';
+    $trans  = $_POST['trans']         ?? '';
     $isyes  = isset($_POST['isyes']) ? 1 : 0;
 
     if (isset($_FILES['img_file']) && $_FILES['img_file']['error'] === UPLOAD_ERR_OK) {
@@ -46,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    $up = $pdo->prepare('UPDATE song_links SET title=?, category=?, lyrics=?, is_yes=? WHERE link_id=?');
-    $up->execute([$title, $cat, $lyrics, $isyes, $id]);
+    $up = $pdo->prepare('UPDATE song_links SET title=?, category=?, lyrics=?, trans=?, is_yes=? WHERE link_id=?');
+    $up->execute([$title, $cat, $lyrics, $trans, $isyes, $id]);
     echo json_encode(['ok' => true]);
     exit;
 }
@@ -88,7 +89,6 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
             src: url(/css/fonts/nullpunktsenergiefont-Regular.ttf);
         }
 
-        /* ── LRC tuner ── */
         #lrcTuner {
             display: none;
             margin-bottom: 2em;
@@ -158,6 +158,7 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
         #lrcTuner audio { width: 100%; margin-top: 8px }
 
         #lrcTuner label { font-size: .85em }
+
     </style>
 </head>
 
@@ -171,6 +172,7 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
             <label>speed: <span id="speedDisplay">100%</span></label>
             <input type="range" id="speedSlider" min="50" max="200" value="100" step="1">
         </div>
+        <button type="button" id="recordModeBtn" class="ctl" aria-pressed="false" style="width:auto;padding:0 10px;margin-top:8px">AKTIVATE REKORD MODE</button>
         <div class="panels">
             <div class="panel">
                 <textarea id="lrcInput" ></textarea>
@@ -195,6 +197,7 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
             </datalist><br>
             <label>file <input type="file" name="img_file" accept="image/*,video/webm,video/mp4"></label> <input type="checkbox" name="isyes" id="isyes" <?php if (($row['is_yes'] ?? 0) == 1) echo 'checked'; ?> ><label for="isyes">is yes</label><br>
             <label>lyrics<br><textarea name="lyrics" style="width:100%;height:200px"><?= htmlspecialchars($row['lyrics'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea></label>
+            <label>trans<br><textarea name="trans" style="width:100%;height:200px"><?= htmlspecialchars($row['trans'] ?? '', ENT_QUOTES, 'UTF-8') ?></textarea></label>
             <input type="hidden" name="dummy">
         </div>
 
@@ -248,27 +251,57 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
                 .then(j => alert(j.ok ? 'saved' : 'err'));
         };
 
-        /* ── LRC tuner (from a.html, stripped) ── */
-        const lrcPlayer   = document.getElementById('lrcPlayer');
+        const lrcPlayer = document.getElementById('lrcPlayer');
         const speedSlider = document.getElementById('speedSlider');
         const speedDisplay = document.getElementById('speedDisplay');
-        const lrcInput    = document.getElementById('lrcInput');
-        const lrcDisplay  = document.getElementById('lrcDisplay');
-        const lrcCopyBtn  = document.getElementById('lrcCopyBtn');
+        const lrcInput = document.getElementById('lrcInput');
+        const lrcDisplay = document.getElementById('lrcDisplay');
+        const lrcCopyBtn = document.getElementById('lrcCopyBtn');
+        const recordModeBtn = document.getElementById('recordModeBtn');
 
         let generatedLrcString = '';
         let lrcActiveDiv = null;
+        let recordMode = false;
+        let recordSpaceDown = false;
+        let recordSequenceActive = false;
+        let recordIndex = 0;
+        let recordSource = '';
+        let recordLines = [];
+        let recordScrollLock = null;
 
         function formatTime(seconds) {
             if (isNaN(seconds)) return '00:00.00';
-            const m  = Math.floor(seconds / 60).toString().padStart(2, '0');
-            const s  = (seconds % 60).toFixed(2).padStart(5, '0');
+            const units = Math.max(0, Math.round(seconds * 100));
+            const m = Math.floor(units / 6000).toString().padStart(2, '0');
+            const s = ((units % 6000) / 100).toFixed(2).padStart(5, '0');
             return `${m}:${s}`;
         }
 
+        function keepInsidePanel(element) {
+            if (!element) return;
+            const panelRect = lrcDisplay.getBoundingClientRect();
+            const elementRect = element.getBoundingClientRect();
+            if (elementRect.top < panelRect.top) {
+                lrcDisplay.scrollTop -= panelRect.top - elementRect.top;
+            } else if (elementRect.bottom > panelRect.bottom) {
+                lrcDisplay.scrollTop += elementRect.bottom - panelRect.bottom;
+            }
+        }
 
         lrcPlayer.addEventListener('timeupdate', () => {
             const t = lrcPlayer.currentTime;
+            if (recordMode) {
+                if (recordSequenceActive) return;
+                let activeIndex = -1;
+                recordLines.forEach((line, index) => {
+                    if (Number.isFinite(line.start) && t >= line.start) activeIndex = index;
+                });
+                if (activeIndex >= 0 && activeIndex !== recordIndex) {
+                    recordIndex = activeIndex;
+                    renderRecordLines();
+                }
+                return;
+            }
             let newActive = null;
             for (const el of document.querySelectorAll('.lyric-line[data-time]')) {
                 if (t >= parseFloat(el.dataset.time)) newActive = el;
@@ -278,7 +311,7 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
                 if (lrcActiveDiv) lrcActiveDiv.classList.remove('active');
                 if (newActive) {
                     newActive.classList.add('active');
-                    newActive.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    keepInsidePanel(newActive);
                 }
                 lrcActiveDiv = newActive;
             }
@@ -299,6 +332,7 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
         }
 
         function autoNormalize() {
+            if (recordMode) return;
             let val = lrcInput.value.trim();
             if (/\d{2}:\d{2}:\d{2}[,.]\d+\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d+/.test(val)) {
                 const regex = /(?:(\d+)\s*\r?\n)?(\d{2}:\d{2}:\d{2}[,.]\d+\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d+)\r?\n([\s\S]*?)(?=\r?\n\s*\r?\n|\r?\n\d+\s*\r?\n\d{2}:\d{2}:\d{2}|$)/g;
@@ -315,9 +349,176 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
         lrcInput.addEventListener('blur', autoNormalize);
         lrcInput.addEventListener('paste', () => setTimeout(autoNormalize, 10));
 
+        function containsTimedLyrics(raw) {
+            return /-->/.test(raw) || /\[(?:\d{1,3}:\d{2}(?:[.:]\d+)?|(?:ar|ti|al|by|offset|length|re):)/im.test(raw);
+        }
+
+        function renderRecordLines() {
+            lrcDisplay.innerHTML = '';
+            recordLines.forEach((line, index) => {
+                const row = document.createElement('div');
+                row.className = 'lyric-line';
+                if (index === recordIndex) row.classList.add('active');
+                row.textContent = line.text;
+                if (Number.isFinite(line.start)) row.dataset.time = line.start;
+                row.addEventListener('click', () => selectRecordLine(index, true));
+                lrcDisplay.appendChild(row);
+            });
+            const selected = lrcDisplay.children[recordIndex];
+            keepInsidePanel(selected);
+        }
+
+        function selectRecordLine(index, seek) {
+            if (!recordMode || index < 0 || index >= recordLines.length || recordSpaceDown) return;
+            recordSequenceActive = false;
+            recordIndex = index;
+            const start = recordLines[index].start;
+            if (seek && Number.isFinite(start)) {
+                try {
+                    lrcPlayer.currentTime = start;
+                } catch (e) {
+                    lrcPlayer.addEventListener('loadedmetadata', () => {
+                        lrcPlayer.currentTime = start;
+                    }, { once: true });
+                }
+            }
+            renderRecordLines();
+        }
+
+        function activateRecordMode() {
+            const raw = lrcInput.value.trim();
+            if (!raw) {
+                alert('LEFT SIDE IS EMPTIE');
+                lrcInput.focus();
+                return;
+            }
+            if (containsTimedLyrics(raw)) {
+                alert('LEFT SIDE MUST NOT HAVE LRC OR SRT');
+                lrcInput.focus();
+                return;
+            }
+            const lines = raw.replace(/\r\n?/g, '\n').split('\n').map(line => line.trim()).filter(Boolean);
+            if (!lines.length) {
+                alert('LEFT SIDE IS EMPTIE');
+                lrcInput.focus();
+                return;
+            }
+            if (recordSource !== raw) {
+                recordSource = raw;
+                recordLines = lines.map(text => ({ text, start: null, end: null }));
+                recordIndex = 0;
+            }
+            recordMode = true;
+            recordSpaceDown = false;
+            recordSequenceActive = false;
+            recordModeBtn.setAttribute('aria-pressed', 'true');
+            recordModeBtn.textContent = 'DEAKTIVATE REKORD MODE';
+            renderRecordLines();
+            recordModeBtn.blur();
+        }
+
+        function deactivateRecordMode() {
+            unlockRecordPage();
+            recordMode = false;
+            recordSpaceDown = false;
+            recordSequenceActive = false;
+            recordModeBtn.setAttribute('aria-pressed', 'false');
+            recordModeBtn.textContent = 'AKTIVATE REKORD MODE';
+            processLRC();
+        }
+
+        function isWritableTarget(target) {
+            if (!(target instanceof Element)) return false;
+            if (target.matches('textarea, [contenteditable]:not([contenteditable="false"])')) return true;
+            if (!target.matches('input')) return false;
+            return ['text', 'search', 'email', 'url', 'tel', 'password', 'number'].includes(target.type);
+        }
+
+        function isTextEditing() {
+            return isWritableTarget(document.activeElement);
+        }
+
+        function isSpaceKey(event) {
+            return event.code === 'Space' || event.key === ' ' || event.key === 'Spacebar' || event.keyCode === 32;
+        }
+
+        function syncRecordLinesFromInput() {
+            const raw = lrcInput.value.trim();
+            if (!raw) {
+                return false;
+            }
+            if (containsTimedLyrics(raw)) {
+                return false;
+            }
+            const texts = raw.replace(/\r\n?/g, '\n').split('\n').map(line => line.trim()).filter(Boolean);
+            if (!texts.length) {
+                return false;
+            }
+            const selected = recordLines[recordIndex];
+            const available = new Map();
+            recordLines.forEach(line => {
+                if (!available.has(line.text)) available.set(line.text, []);
+                available.get(line.text).push(line);
+            });
+            recordLines = texts.map(text => {
+                const matches = available.get(text);
+                if (matches && matches.length) return matches.shift();
+                return { text, start: null, end: null };
+            });
+            const selectedIndex = selected ? recordLines.indexOf(selected) : -1;
+            recordIndex = selectedIndex >= 0 ? selectedIndex : Math.min(recordIndex, recordLines.length - 1);
+            recordSource = raw;
+            renderRecordLines();
+            return true;
+        }
+
+        function recordLrcText() {
+            const scale = parseFloat(speedSlider.value) / 100;
+            return recordLines
+                .filter(line => Number.isFinite(line.start))
+                .flatMap(line => {
+                    const output = [`[${formatTime(line.start / scale)}]${line.text}`];
+                    if (Number.isFinite(line.end)) output.push(`[${formatTime(line.end / scale)}]`);
+                    return output;
+                })
+                .join('\n');
+        }
+
+        function releaseMediaFocus() {
+            if (!recordMode || isTextEditing()) return;
+            lrcPlayer.blur();
+        }
+
+        function lockRecordPage() {
+            if (recordScrollLock) return;
+            recordScrollLock = {
+                x: window.scrollX,
+                y: window.scrollY,
+                htmlOverflow: document.documentElement.style.overflow,
+                bodyOverflow: document.body.style.overflow
+            };
+            document.documentElement.style.overflow = 'hidden';
+            document.body.style.overflow = 'hidden';
+            window.scrollTo(recordScrollLock.x, recordScrollLock.y);
+        }
+
+        function unlockRecordPage() {
+            if (!recordScrollLock) return;
+            const lock = recordScrollLock;
+            recordScrollLock = null;
+            document.documentElement.style.overflow = lock.htmlOverflow;
+            document.body.style.overflow = lock.bodyOverflow;
+            window.scrollTo(lock.x, lock.y);
+            requestAnimationFrame(() => window.scrollTo(lock.x, lock.y));
+        }
+
         function processLRC() {
             const pct = parseFloat(speedSlider.value);
             speedDisplay.textContent = pct + '%';
+            if (recordMode) {
+                renderRecordLines();
+                return;
+            }
             const scale = pct / 100;
             const raw = lrcInput.value.trim();
             lrcDisplay.innerHTML = '';
@@ -374,10 +575,70 @@ $cats = $pdo->query('SELECT DISTINCT category FROM song_links ORDER BY category'
         }
 
         speedSlider.addEventListener('input', processLRC);
-        lrcInput.addEventListener('input', processLRC);
+        lrcInput.addEventListener('input', () => {
+            if (recordMode) syncRecordLinesFromInput();
+            else processLRC();
+        });
+
+        recordModeBtn.addEventListener('click', () => {
+            if (recordMode) deactivateRecordMode();
+            else activateRecordMode();
+        });
+
+        window.addEventListener('keydown', event => {
+            if (!recordMode || isWritableTarget(event.target) || isTextEditing()) return;
+            if (event.code === 'Backspace' && !recordSpaceDown) {
+                event.preventDefault();
+                recordSequenceActive = true;
+                const previous = Math.max(0, recordIndex - 1);
+                const start = recordLines[previous].start;
+                recordLines[previous].start = null;
+                recordLines[previous].end = null;
+                recordIndex = previous;
+                if (Number.isFinite(start)) lrcPlayer.currentTime = start;
+                renderRecordLines();
+                return;
+            }
+            if (!isSpaceKey(event) || event.repeat || recordSpaceDown) return;
+            event.preventDefault();
+            if (!syncRecordLinesFromInput()) return;
+            lockRecordPage();
+            recordSpaceDown = true;
+            recordSequenceActive = true;
+            recordLines[recordIndex].start = lrcPlayer.currentTime;
+            recordLines[recordIndex].end = null;
+            const play = lrcPlayer.play();
+            if (play) play.catch(() => {});
+            renderRecordLines();
+        }, true);
+
+        window.addEventListener('keyup', event => {
+            if (!recordMode || !isSpaceKey(event) || !recordSpaceDown) return;
+            event.preventDefault();
+            recordLines[recordIndex].end = lrcPlayer.currentTime;
+            recordSpaceDown = false;
+            if (recordIndex < recordLines.length - 1) {
+                recordIndex++;
+            } else {
+                recordSequenceActive = false;
+                lrcPlayer.pause();
+            }
+            renderRecordLines();
+            unlockRecordPage();
+        }, true);
+
+        window.addEventListener('blur', unlockRecordPage);
+
+        lrcPlayer.addEventListener('play', () => setTimeout(releaseMediaFocus, 0));
+        lrcPlayer.addEventListener('seeked', () => setTimeout(releaseMediaFocus, 0));
+        lrcPlayer.addEventListener('pointerup', () => setTimeout(releaseMediaFocus, 0), true);
 
         lrcCopyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(generatedLrcString).then(() => {
+            let copyText = generatedLrcString;
+            if (recordMode) {
+                copyText = recordLrcText();
+            }
+            navigator.clipboard.writeText(copyText).then(() => {
                 const t = lrcCopyBtn.textContent;
                 lrcCopyBtn.textContent = '✔';
                 setTimeout(() => lrcCopyBtn.textContent = t, 1200);

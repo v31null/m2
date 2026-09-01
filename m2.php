@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-const M2_BROWSER_CACHE_VERSION = '5';
-const M2_PAGE_CODE_VERSION = '41';
+const M2_BROWSER_CACHE_VERSION = '13';
+const M2_PAGE_CODE_VERSION = '63';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -289,7 +289,7 @@ if (is_dir($imgDir)) {
         }
     }
 }
-$data_stmt = $pdo->prepare('SELECT category,link_id,title,lyrics,location,url,is_yes FROM song_links');
+$data_stmt = $pdo->prepare('SELECT category,link_id,title,lyrics,trans,location,url,is_yes FROM song_links');
 
 $data_stmt->execute();
 $results = $data_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -323,11 +323,38 @@ function german_to_normal_letters($text)
         return '___STYLESET___' . $matches[1] . '___';
     }, $text);
 
+    $protectedDiaereses = [];
+    $text = preg_replace_callback('/\p{L}\x{0308}/u', function ($matches) use (&$protectedDiaereses) {
+        $token = "\u{E000}" . count($protectedDiaereses) . "\u{E001}";
+        $protectedDiaereses[$token] = $matches[0];
+        return $token;
+    }, $text) ?? $text;
+
     $map = [
         ' )' => ' )',
+        ')' => ' )',
         '( ' => '( ',
-        ' ,' => ' ,',
+        '(' => '( ',
+        ' - ' => ' — ',
+        '-' => '‑',
+        '«' => '« ',
+        '»' => ' »',
+        '«  ' => '« ',
+        '  »' => ' »',
+        ' ,' => ',',
         ' ;' => ' ;',
+        ';' => ' ;',
+        ':' => ' :',
+        ' ?' => ' ?',
+        '?' => ' ?',
+        '  ?' => ' ?',
+        ' !' => ' !',
+        '!' => ' !',
+        '  ' => ' ',
+        '  !' => ' !',
+        ',' => ' ,',
+        '  ,' => ' ,',
+        '  :' => ' :',
         'z ' => 'ʒ ',
         'ç' => 'č',
         'Ç' => 'Č',
@@ -335,16 +362,15 @@ function german_to_normal_letters($text)
         'Ş' => 'Ș',
         'ı' => 'i',
         'İ' => 'I',
-        'ğ' => 'g',
-        'Ğ' => 'G',
+        'ğ' => 'ă',
+        'Ğ' => 'Ă',
         'ä' => 'aͤ',
         'Ä' => 'Ae',
         'ö' => 'oͤ',
         'Ö' => 'Oe',
         'ü' => 'uͤ',
         'Ü' => 'Ue',
-        'ß' => 'ſs',
-        'ss' => 'ſs',
+        'ss' => 'ß',
         'Tzsch' => 'Č',
         'tzsch' => 'č',
         'Zsch'  => 'Č',
@@ -362,18 +388,33 @@ function german_to_normal_letters($text)
         'Th' => 'Þ',
         'th' => 'þ',
         'TH' => 'Þ',
-        '\'' => '’'
+        '\'' => '’',
     ];
 
+    $applyMap = static function (string $part) use ($map): string {
+        foreach ($map as $from => $to) {
+            $part = str_replace($from, $to, $part);
+        }
+        $part = preg_replace('/[ \x{00A0}]+\x{00A0}/u', "\u{202F}", $part) ?? $part;
+        $part = preg_replace('/[ \x{202F}]+\x{00A0}/u', "\u{202F}", $part) ?? $part;
+        $part = preg_replace('/[ \x{00A0}]+\x{0020}/u', "\u{202F}", $part) ?? $part;
+        $part = preg_replace('/\x{00A0}\x{202F}/u', "\u{202F}", $part) ?? $part;
+        return $part;
+    };
+
     if (strpos($text, '<') !== false && strpos($text, '>') !== false) {
-        $text = preg_replace_callback('/(<[^>]*>)|([^<]+)/', function ($matches) use ($map) {
+        $text = preg_replace_callback('/(<[^>]*>)|([^<]+)/', function ($matches) use ($applyMap) {
             if (!empty($matches[1])) {
                 return $matches[1];
             }
-            return strtr($matches[2], $map);
+            return $applyMap($matches[2]);
         }, $text);
     } else {
-        $text = strtr($text, $map);
+        $text = $applyMap($text);
+    }
+
+    if ($protectedDiaereses) {
+        $text = strtr($text, $protectedDiaereses);
     }
 
     $text = preg_replace_callback('/___STYLESET___(\d{2})___/i', function ($matches) {
@@ -403,6 +444,71 @@ function normalize_german($text)
         $part = convert_st_sp_word_starts($part);
         return $part;
     }, (string)$text);
+}
+
+function render_m2_lyrics(string $raw, string $style): string
+{
+    $srtToSec = static function (string $ts): float {
+        preg_match('/(\d+):(\d+):(\d+)[,.](\d+)/', $ts, $match);
+        return (int)$match[1] * 3600 + (int)$match[2] * 60 + (int)$match[3] + (float)('0.' . $match[4]);
+    };
+    $lines = [];
+    $isSRT = (bool)preg_match('/\d{2}:\d{2}:\d{2}[,.]\d+\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d+/m', $raw);
+    $isLRC = !$isSRT && (bool)preg_match('/^\[\d{2}:\d{2}\.\d+L?\]/m', $raw);
+
+    if ($isLRC) {
+        foreach (explode("\n", $raw) as $lrcLine) {
+            $lrcLine = trim($lrcLine);
+            $stamps = [];
+            $text = preg_replace_callback(
+                '/\[(\d{2}):(\d{2}\.\d+)(L?)\]/',
+                static function (array $match) use (&$stamps): string {
+                    $stamps[] = [(int)$match[1] * 60 + (float)$match[2], $match[3] === 'L'];
+                    return '';
+                },
+                $lrcLine
+            );
+            $text = trim((string)$text);
+            foreach ($stamps as [$time, $lyric]) $lines[] = [$time, $text, null, $lyric];
+        }
+    } elseif ($isSRT) {
+        foreach (preg_split('/\r?\n\s*\r?\n/', trim($raw)) ?: [] as $block) {
+            $blockLines = preg_split('/\r?\n/', trim($block)) ?: [];
+            if (count($blockLines) < 2) continue;
+            $timestampLine = preg_match('/-->/', $blockLines[0]) ? $blockLines[0] : ($blockLines[1] ?? '');
+            if (!preg_match('/(\d{2}:\d{2}:\d{2}[,.]\d+)\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d+)/', $timestampLine, $match)) continue;
+            $start = $srtToSec($match[1]);
+            $end = $srtToSec($match[2]);
+            $lyric = preg_match('/^\s*L(?=\d{2}:\d{2}:\d{2}[,.]\d+\s*-->)/', $timestampLine) === 1;
+            $textStart = preg_match('/-->/', $blockLines[0]) ? 1 : 2;
+            $text = strip_tags(implode(' ', array_slice($blockLines, $textStart)));
+            $lines[] = [$start, trim($text), $end, $lyric];
+        }
+    }
+
+    ob_start();
+    if ($lines) {
+        usort($lines, static fn(array $a, array $b): int => $a[0] <=> $b[0]);
+        foreach ($lines as $line) {
+            $time = $line[0];
+            $text = $line[1];
+            $end = $line[2] ?? null;
+            $lyric = $line[3] ?? false;
+            if ($text === '' && !$isLRC) continue;
+            $safe = htmlspecialchars(german_to_normal_letters($text), ENT_QUOTES, 'UTF-8');
+            $attributes = sprintf('data-t="%.3f"', $time);
+            if ($end !== null) $attributes .= sprintf(' data-te="%.3f"', $end);
+            if ($lyric) $attributes .= ' data-l="1"';
+            $styleAttribute = $style !== '' ? sprintf(' style="%s"', htmlspecialchars($style, ENT_QUOTES, 'UTF-8')) : '';
+            printf('<span class="lrcLine"%s %s data-txt="%s">%s</span>', $styleAttribute, $attributes, $safe, $safe);
+        }
+    } else {
+        if ($style !== '') printf('<span style="%s">', htmlspecialchars($style, ENT_QUOTES, 'UTF-8'));
+        echo nl2br(htmlspecialchars(german_to_normal_letters($raw), ENT_QUOTES, 'UTF-8'));
+        if ($style !== '') echo '</span>';
+        echo '<div class="playHead"></div>';
+    }
+    return (string)ob_get_clean();
 }
 
 function normalize_m_song_link_text($text)
@@ -480,7 +586,7 @@ $customAlphabet = [
     'uу',
     'ùw',
     'gг',
-    'dд',
+    'dдþ',
     'eеэ',
     'żjж',
     'zз',
@@ -494,7 +600,7 @@ $customAlphabet = [
     'pп',
     'rр',
     'sс',
-    'tтþ',
+    'tт',
     'fф',
     'țц',
     'čч',
@@ -502,7 +608,7 @@ $customAlphabet = [
     'c',
     'q',
     'x',
-    'hх',
+    'hх‘',
 ];
 
 $charRanks = [];
@@ -514,12 +620,23 @@ foreach ($customAlphabet as $rank => $chars) {
     }
 }
 
-function customStrCmp($str1, $str2)
+function stripLeadingTitleMarks($text)
+{
+    $text = (string)$text;
+    return preg_replace('/^[\p{P}\p{Z}\s]+/u', '', $text) ?? $text;
+}
+
+function customStrCmp($str1, $str2, $ignoreLeadingTitleMarks = false)
 {
     global $charRanks;
 
     $str1 = html_entity_decode(strip_tags((string)$str1), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $str2 = html_entity_decode(strip_tags((string)$str2), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    if ($ignoreLeadingTitleMarks) {
+        $str1 = stripLeadingTitleMarks($str1);
+        $str2 = stripLeadingTitleMarks($str2);
+    }
 
     if (class_exists('Normalizer')) {
         $str1 = Normalizer::normalize($str1, Normalizer::FORM_D);
@@ -573,7 +690,7 @@ usort($results, function ($a, $b) {
     $catCmp = customStrCmp($a['category'], $b['category']);
     if ($catCmp !== 0) return $catCmp;
 
-    return customStrCmp($a['title'], $b['title']);
+    return customStrCmp($a['title'], $b['title'], true);
 });
 
 $cat_stmt = $pdo->query('SELECT DISTINCT category FROM song_links');
@@ -589,7 +706,7 @@ usort($cats, 'customStrCmp');
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
-    <title>Nullpunkts</title>
+    <title>Services for þe populace General et Private Musik applikation of Per.-Gen.-portal  nullpunkts as ver. 2 for General use.</title>
     <link rel="shortcut icon" href="<?= htmlspecialchars(m2_versioned_asset('/img/logomonochrome.ico'), ENT_QUOTES, 'UTF-8') ?>" type="image/x-icon">
     <style>
         @font-face {
@@ -612,6 +729,10 @@ usort($cats, 'customStrCmp');
             font-family: nullpunktsenergie;
             src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/nullpunktsenergiefont-Regular.ttf'), ENT_QUOTES, 'UTF-8') ?>');
         }
+        @font-face {
+            font-family: frank;
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/FrankRuhlLibre-VariableFont_wght.ttf'), ENT_QUOTES, 'UTF-8') ?>');
+        }
 
         @counter-style ca {
             system: alphabetic;
@@ -622,11 +743,11 @@ usort($cats, 'customStrCmp');
         }
 
         :root {
-            --page-font-stack: 'Junicode', 'nullpunktsenergiefont', 'Amiri', serif;
+            --page-font-stack: 'Junicode', 'nullpunktsenergiefont', 'frank',  'Amiri', serif;
         }
 
         body.babelstone-ready {
-            --page-font-stack: 'Junicode', 'nullpunktsenergiefont', 'BabelStone Han', 'Amiri', serif;
+            --page-font-stack: 'Junicode', 'nullpunktsenergiefont', 'BabelStone Han', 'frank',  'Amiri', serif;
         }
 
         *:not(.katex):not(.katex *) {
@@ -738,6 +859,7 @@ usort($cats, 'customStrCmp');
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     border-left: 1px solid white;
+    border-bottom: 1px solid white;
             gap: 15px;
             padding: 10px
         }
@@ -768,6 +890,14 @@ usort($cats, 'customStrCmp');
             cursor: pointer;
             color: white;
             text-decoration: none
+        }
+
+        .mLyricsToggle {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            font: inherit;
+            line-height: inherit
         }
 
         .card {
@@ -894,6 +1024,7 @@ usort($cats, 'customStrCmp');
             padding: 2px 0;
             transition: color .25s, font-size .25s;
             white-space: normal;
+            hyphens: none;
             position: relative;
         }
 
@@ -1420,13 +1551,13 @@ usort($cats, 'customStrCmp');
             text-anchor: middle;
         }
 
-        .seekRadialDisplaySegment,
-        .seekRadialDisplayColon {
+        .lts2x01Segment,
+        .lts2x01Indicator {
             fill: #f7f8f4;
         }
 
-        .seekRadialDisplaySegment.is-off,
-        .seekRadialDisplayColon.is-off {
+        .lts2x01Segment.is-off,
+        .lts2x01Indicator.is-off {
             fill: #151715;
         }
 
@@ -1575,19 +1706,17 @@ usort($cats, 'customStrCmp');
         .mDcAmpsDisplay {
             display: block;
             width: var(--swh);
-            height: auto;
             margin: 0 0 1px;
             overflow: visible;
             pointer-events: none;
             user-select: none;
         }
 
-        .mDcAmpsSegment {
-            fill: #f7f8f4;
-        }
-
-        .mDcAmpsSegment.is-off {
-            fill: #151715;
+        .mDcAmpsDisplay > svg {
+            display: block;
+            width: 100%;
+            height: auto;
+            overflow: visible;
         }
 
         .mSwitchCol {
@@ -2314,6 +2443,170 @@ usort($cats, 'customStrCmp');
         .tJump {
             overscroll-behavior: contain;
         }
+
+        #mUnderPanel {
+            width: 100%;
+            margin: 16px 0 24px;
+            padding: 0;
+            border: 0;
+            background: #000;
+            color: #fff;
+        }
+
+        #mCircuitBreakerPanelTitle {
+            width: 50%;
+            margin: 0 0 10px;
+            box-sizing: border-box;
+            color: #fff;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.8px;
+            text-align: center;
+        }
+
+        .mUnderPanelDisplay {
+            display: flex;
+            width: 100%;
+            align-items: flex-start;
+        }
+
+        #mCircuitBreakerBoard {
+            flex: 0 0 100%;
+            width: 100%;
+            min-width: 0;
+            background: #000;
+        }
+
+        .mUnderPanelFuture {
+            display: none;
+        }
+
+        .mCircuitBreakerTier {
+            display: flex;
+            width: max-content;
+            max-width: 100%;
+            min-width: 0;
+            flex-wrap: wrap;
+            align-items: stretch;
+        }
+
+        .mCircuitBreakerGroup {
+            flex: 0 0 auto;
+            width: max-content;
+            max-width: 100%;
+            min-width: 0;
+            margin: 0;
+            margin-top: 10px;
+            padding: 8px 4px 5px;
+            border: 1px solid #fff;
+            background: #000;
+        }
+
+#mCircuitBreakerBoard>.mCircuitBreakerGroup {
+    width: 50%;
+    display: flex;
+    box-sizing: border-box;
+}
+
+        .mCircuitBreakerGroup+.mCircuitBreakerGroup {
+            border-left: 0;
+        }
+
+        .mCircuitBreakerGroup legend {
+            width: auto;
+            margin: 0 auto;
+            padding: 0 5px;
+            color: #fff;
+            background: #000;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.45px;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .mCircuitBreakerCells {
+            display: flex;
+            max-width: 100%;
+            overflow: visible;
+            flex-wrap: wrap;
+            align-items: stretch;
+            align-content: flex-start;
+            justify-content: flex-start;
+            gap: 0;
+        }
+
+        .mCircuitBreaker {
+            display: flex;
+            flex: 0 0 96px;
+            width: 96px;
+            min-width: 0;
+            padding: 8px 5px 7px;
+            border: 1px solid #fff;
+            box-sizing: border-box;
+            appearance: none;
+            align-items: center;
+            flex-direction: column;
+            background: #000;
+            color: #fff;
+            cursor: pointer;
+            font-family: Arial, Helvetica, sans-serif;
+            text-align: center;
+        }
+
+        .mCircuitBreaker[data-breaker-position="center"],
+        .mCircuitBreaker[data-breaker-position="right"] {
+            border-left: 0;
+        }
+
+        .mCircuitBreaker[data-breaker-row]:not([data-breaker-row="0"]) {
+            margin-top: -1px;
+        }
+
+        .mCircuitBreakerSvg {
+            display: block;
+            width: auto;
+            height: 100px;
+            overflow: visible;
+        }
+
+        .mCircuitBreakerSvg .mCircuitBreakerBar {
+            fill: #515655;
+        }
+
+        .mCircuitBreaker[data-breaker-lamp="on"] .mCircuitBreakerBar {
+            fill: #fff86a;
+            filter: var(--m-circuit-breaker-glow);
+        }
+
+        .mCircuitBreaker:focus-visible {
+            outline: 1px solid #fff;
+            outline-offset: -4px;
+        }
+
+        .mCircuitBreakerDesignation {
+            margin-top: 6px;
+            font-size: 16px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: 0.25px;
+            overflow-wrap: anywhere;
+        }
+
+        .mCircuitBreakerName {
+            margin-top: 4px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            line-height: 1.12;
+            letter-spacing: 0.08px;
+            overflow-wrap: anywhere;
+        }
+
     </style>
 </head>
 
@@ -2438,21 +2731,30 @@ usort($cats, 'customStrCmp');
             $artPath = '';
             if ($artExt !== '') {
                 $coverRel = '/m/m/img/' . rawurlencode($url) . '.' . $artExt;
-                $posterRel = '/m/m/img/poster/' . rawurlencode($url) . '.jpg';
-                $posterAbs = $imgDir . '/poster/' . $url . '.jpg';
-                if (in_array($artExt, ['mp4', 'webm'], true)) {
+                if ($artExt === 'mp4') {
+                    $posterRel = '/m/m/img/poster/' . rawurlencode($url) . '.png';
+                    $posterAbs = $imgDir . '/poster/' . $url . '.png';
+                    $artPath = is_file($posterAbs) ? $posterRel : '';
+                } elseif ($artExt === 'webm') {
+                    $posterRel = '/m/m/img/poster/' . rawurlencode($url) . '.jpg';
+                    $posterAbs = $imgDir . '/poster/' . $url . '.jpg';
                     $artPath = is_file($posterAbs) ? $posterRel : '';
                 } elseif ($artExt === 'gif') {
-                    $artPath = is_file($posterAbs) ? $posterRel : $coverRel;
+                    $artPath = $coverRel;
                 } else {
                     $artPath = $coverRel;
                 }
             }
 
-            $lyrRaw = (string)($row['lyrics'] ?? '');
-            $isSRT = (bool)preg_match('/\d{2}:\d{2}:\d{2}[,.]\d+\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d+/m', $lyrRaw);
-            $isLRC = !$isSRT && (bool)preg_match('/^\[\d{2}:\d{2}\.\d+\]/m', $lyrRaw);
-            $hasTimed = $isSRT || $isLRC;
+            $lyrStyle = '';
+            if (preg_match('/style=(["\'])(.*?)\1/', (string)$row['title'], $styleMatch)) {
+                $styleContent = $styleMatch[2];
+                if (strpos($styleContent, 'font-variant-ligatures') !== false || strpos($styleContent, 'font-feature-settings') !== false) {
+                    $lyrStyle = $styleContent;
+                }
+            }
+            $lyricsHtml = render_m2_lyrics((string)($row['lyrics'] ?? ''), $lyrStyle);
+            $transHtml = render_m2_lyrics((string)($row['trans'] ?? ''), $lyrStyle);
 
             $mid = $row['link_id'];
             $song_coms = $organized_coms[$mid] ?? [];
@@ -2488,87 +2790,10 @@ usort($cats, 'customStrCmp');
                         </div>
                     </div>
                     <div class="cName"><?= (string)$row['title'] ?></div>
-                    <div class="cLyr"><?php
-                                        $lyrRaw = (string)($row['lyrics'] ?? '');
-                                        $lyrStyle = '';
-                                        if (preg_match('/style=(["\'])(.*?)\1/', (string)$row['title'], $mStyle)) {
-                                            $styleContent = $mStyle[2];
-                                            if (strpos($styleContent, 'font-variant-ligatures') !== false || strpos($styleContent, 'font-feature-settings') !== false) {
-                                                $lyrStyle = $styleContent;
-                                            }
-                                        }
-
-                                        $srtToSec = function (string $ts): float {
-                                            preg_match('/(\d+):(\d+):(\d+)[,.](\d+)/', $ts, $m);
-                                            return (int)$m[1] * 3600 + (int)$m[2] * 60 + (int)$m[3] + (float)('0.' . $m[4]);
-                                        };
-                                        $lrcLines = [];
-                                        $isSRT = (bool)preg_match('/\d{2}:\d{2}:\d{2}[,.]\d+\s*-->\s*\d{2}:\d{2}:\d{2}[,.]\d+/m', $lyrRaw);
-                                        $isLRC = !$isSRT && (bool)preg_match('/^\[\d{2}:\d{2}\.\d+\]/m', $lyrRaw);
-
-                                        if ($isLRC) {
-                                            foreach (explode("\n", $lyrRaw) as $lrcLine) {
-                                                $lrcLine = trim($lrcLine);
-                                                $stamps = [];
-                                                $text = preg_replace_callback(
-                                                    '/\[(\d{2}):(\d{2}\.\d+)\]/',
-                                                    function ($m) use (&$stamps) {
-                                                        $stamps[] = (int)$m[1] * 60 + (float)$m[2];
-                                                        return '';
-                                                    },
-                                                    $lrcLine
-                                                );
-                                                $text = trim($text);
-                                                foreach ($stamps as $t) {
-                                                    $lrcLines[] = [$t, $text];
-                                                }
-                                            }
-                                        } elseif ($isSRT) {
-                                            $blocks = preg_split('/\r?\n\s*\r?\n/', trim($lyrRaw));
-                                            foreach ($blocks as $block) {
-                                                $lines = preg_split('/\r?\n/', trim($block));
-                                                if (count($lines) < 2) continue;
-                                                $tsLine = (preg_match('/-->/', $lines[0])) ? $lines[0] : (isset($lines[1]) ? $lines[1] : '');
-                                                if (!preg_match('/(\d{2}:\d{2}:\d{2}[,.]\d+)\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d+)/', $tsLine, $m)) continue;
-                                                $startT = $srtToSec($m[1]);
-                                                $endT = $srtToSec($m[2]);
-                                                $textStart = (preg_match('/-->/', $lines[0])) ? 1 : 2;
-                                                $text = implode(' ', array_slice($lines, $textStart));
-                                                $text = strip_tags($text);
-                                                $lrcLines[] = [$startT, trim($text), $endT];
-                                            }
-                                        }
-
-                                        if ($lrcLines) {
-                                            usort($lrcLines, fn($a, $b) => $a[0] <=> $b[0]);
-
-                                            foreach ($lrcLines as $idx => $line) {
-                                                $t = $line[0];
-                                                $txt = $line[1];
-                                                $te = $line[2] ?? null;
-
-                                                if ($txt === '' && !$isLRC) continue;
-
-                                                $norm = german_to_normal_letters($txt);
-                                                $safe = htmlspecialchars($norm, ENT_QUOTES, 'UTF-8');
-                                                $attr = sprintf('data-t="%.3f"', $t);
-                                                if ($te !== null) $attr .= sprintf(' data-te="%.3f"', $te);
-
-                                                $styleAttr = !empty($lyrStyle) ? sprintf(' style="%s"', htmlspecialchars($lyrStyle, ENT_QUOTES, 'UTF-8')) : '';
-
-                                                printf('<span class="lrcLine"%s %s data-txt="%s">%s</span>', $styleAttr, $attr, $safe, $safe);
-                                            }
-                                        } else {
-                                            if (!empty($lyrStyle)) {
-                                                printf('<span style="%s">', htmlspecialchars($lyrStyle, ENT_QUOTES, 'UTF-8'));
-                                            }
-                                            echo nl2br(htmlspecialchars(german_to_normal_letters($lyrRaw), ENT_QUOTES, 'UTF-8'));
-                                            if (!empty($lyrStyle)) {
-                                                echo '</span>';
-                                            }
-                                        }
-                                        if (!$lrcLines) echo '<div class="playHead"></div>';
-                                        ?></div><audio crossorigin="anonymous" data-src="<?= htmlspecialchars($src, ENT_QUOTES, 'UTF-8') ?>" preload="none"></audio>
+                    <div class="cLyr"><?= $lyricsHtml ?></div>
+                    <template class="mLyricsOriginal"><?= $lyricsHtml ?></template>
+                    <template class="mLyricsTrans"><?= $transHtml ?></template>
+                    <audio crossorigin="anonymous" data-src="<?= htmlspecialchars($src, ENT_QUOTES, 'UTF-8') ?>" preload="none"></audio>
                 </div>
                 <div class="cSide">
                     <span onclick="event.stopPropagation();copyLinkId('<?= $id ?>')">§</span>
@@ -2576,6 +2801,9 @@ usort($cats, 'customStrCmp');
                     <a href="editm.php?id=<?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" class="editBtn" onclick="event.stopPropagation()">E</a>
 
                     <a href="serv/com.php?no=№ <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" id="comBtn" onclick="openCom(event, this)">C</a>
+                    <?php if (trim((string)($row['trans'] ?? '')) !== ''): ?>
+                    <button type="button" class="mLyricsToggle" aria-pressed="false" onclick="toggleCardLyrics(event, this)">L</button>
+                    <?php endif; ?>
                     <div class="loadBox">00:00</div>
                 </div>
             </div>
@@ -2592,7 +2820,7 @@ usort($cats, 'customStrCmp');
                     $cat = trim((string)$row['category']);
                     $title = trim((string)$row['title']);
                     if ($cat === '' || $title === '') continue;
-                    $plainTitle = trim(html_entity_decode(strip_tags($title), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+                    $plainTitle = stripLeadingTitleMarks(trim(html_entity_decode(strip_tags($title), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
                     if ($plainTitle === '') continue;
                     $rawFirstLower = mb_strtolower(mb_substr($plainTitle, 0, 1, 'UTF-8'), 'UTF-8');
                     $firstChar = mb_strtoupper($rawFirstLower, 'UTF-8');
@@ -2684,10 +2912,10 @@ usort($cats, 'customStrCmp');
                 </g>
                 <g>
                     <text class="seekRadialDisplayLabel" x="195" y="400">AKTIV</text>
-                    <g id="seekRadialActiveDigits" transform="translate(22 410) scale(2.2 1.6)" role="img"></g>
+                    <g id="seekRadialActiveDigits" model-segment="88:888:88" transform="translate(20 410) scale(6.1)" role="img"></g>
                     <text class="seekRadialDisplayLabel" x="195" y="545">STANDBY</text>
-                    <g id="seekRadialStandbyDigits" transform="translate(22 555) scale(2.2 1.6)" role="img"></g>
-                    <g id="seekRadialSet" class="seekRadialSet" transform="translate(109 709) scale(2.2) translate(-124 -675)" tabindex="0" role="button" aria-label="Transfer standby target to active position" aria-pressed="false">
+                    <g id="seekRadialStandbyDigits" model-segment="88:888:88" transform="translate(20 555) scale(6.1)" role="img"></g>
+                    <g id="seekRadialSet" class="seekRadialSet" transform="translate(109 709) scale(1.4) translate(-124 -675)" tabindex="0" role="button" aria-label="Transfer standby target to active position" aria-pressed="false">
                         <rect class="seekRadialButtonFace" x="86" y="650" width="76" height="50" rx="8"/>
                         <rect class="seekRadialButtonCap" x="92" y="656" width="64" height="38" rx="4"/>
                         <text class="seekRadialButtonCopy" x="124" y="684">SET</text>
@@ -2713,7 +2941,8 @@ usort($cats, 'customStrCmp');
                         <hr style="width: 84%;">
 
             <div class="mSwGroup">
-                <svg id="mDcAmpsDisplay" class="mDcAmpsDisplay" viewBox="0 0 140 43" role="img" aria-live="polite" aria-label="DC amps 0.000"></svg>
+                <span id="mDcAmpsDisplay" class="mDcAmpsDisplay" model-segment="8.888" role="img" aria-live="polite" aria-label="DC amps 0.000"></span>
+                <label class="mLbl">DCAMPS</label>
                 <div class="mCol mSwitchCol">
                     <div class="mSwSlot">
                         <div class="mSw"><img id="mNav" class="mSwimg" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/sc.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="sc.png" draggable="false" alt="prev/next"></div>
@@ -2757,8 +2986,15 @@ usort($cats, 'customStrCmp');
             <div class="mLbl">V</div>
         </div>
     </div>
-    <div class="coloredText" style="text-align:center"><a href="/index.html">aber er hat aufgehört</a></div><br>
-    <div class="coloredText" style="width:100%;text-align:center">und wir haben die Konsequenzen noch nicht gesehen。</div>
+    <br>
+    <br>
+    <section id="mUnderPanel" aria-labelledby="mCircuitBreakerPanelTitle">
+        <div id="mCircuitBreakerPanelTitle">CIRKUIT BREAKERS</div>
+        <div class="mUnderPanelDisplay">
+            <div id="mCircuitBreakerBoard"></div>
+            <div class="mUnderPanelFuture" aria-hidden="true"></div>
+        </div>
+    </section>
     <button id="spawn" class="ctlBtn" style="position:fixed;left:10px;bottom:10px;z-index:9999;display:none">J</button>
     <datalist id="catList">
         <?php foreach ($cats as $c) {
@@ -2769,6 +3005,297 @@ usort($cats, 'customStrCmp');
     <script>
         const M2_BROWSER_CACHE_VERSION = <?= json_encode(M2_BROWSER_CACHE_VERSION, JSON_UNESCAPED_SLASHES) ?>;
         const M2_PAGE_CODE_VERSION = <?= json_encode(M2_PAGE_CODE_VERSION, JSON_UNESCAPED_SLASHES) ?>;
+
+        class ThreeBarCircuitBreaker {
+            static sequence = 0;
+
+            constructor(host, circuit) {
+                this.host = host;
+                this.circuit = circuit;
+                this.closed = circuit.initialClosed !== false;
+                this.conducting = false;
+                this.render();
+                this.host.addEventListener('click', () => this.setClosed(!this.closed));
+            }
+
+            render() {
+                const glowId = `mCircuitBreakerGlow${++ThreeBarCircuitBreaker.sequence}`;
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.classList.add('mCircuitBreakerSvg');
+                svg.setAttribute('viewBox', '55 25 110 175');
+                svg.setAttribute('aria-hidden', 'true');
+                svg.style.setProperty('--m-circuit-breaker-glow', `url(#${glowId})`);
+                svg.innerHTML = `<defs><filter id="${glowId}" x="-120%" y="-40%" width="340%" height="180%"><feGaussianBlur stdDeviation="3.2" result="blur"></feGaussianBlur><feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter></defs><rect x="63" y="34" width="94" height="157" rx="5" fill="#050606" stroke="#252828" stroke-width="1.5"></rect><rect x="70" y="43" width="80" height="139" rx="3" fill="#101211" stroke="#030303" stroke-width="3"></rect><rect class="mCircuitBreakerBar" x="87" y="68" width="10" height="89" rx="1"></rect><rect class="mCircuitBreakerBar" x="105" y="68" width="10" height="89" rx="1"></rect><rect class="mCircuitBreakerBar" x="123" y="68" width="10" height="89" rx="1"></rect>`;
+                const designation = document.createElement('span');
+                designation.className = 'mCircuitBreakerDesignation';
+                designation.textContent = this.circuit.designation;
+                const name = document.createElement('span');
+                name.className = 'mCircuitBreakerName';
+                name.textContent = this.circuit.name;
+                this.host.className = 'mCircuitBreaker';
+                this.host.setAttribute('model-circuit-breaker', this.circuit.id);
+                this.host.dataset.circuitId = this.circuit.id;
+                this.host.dataset.circuitMembers = this.circuit.members.join(' ');
+                this.host.title = `${this.circuit.designation} ${this.circuit.name}`;
+                this.host.setAttribute('aria-label', this.host.title);
+                this.host.replaceChildren(svg, designation, name);
+                this.synchronizeState();
+            }
+
+            setClosed(closed, emit = true) {
+                const next = Boolean(closed);
+                if (next === this.closed) return false;
+                this.closed = next;
+                this.synchronizeState();
+                if (emit) {
+                    this.host.dispatchEvent(new CustomEvent('breakercommand', {
+                        bubbles: true,
+                        detail: {
+                            id: this.circuit.id,
+                            closed: this.closed,
+                            members: [...this.circuit.members]
+                        }
+                    }));
+                }
+                return true;
+            }
+
+            setConducting(conducting) {
+                const next = Boolean(conducting);
+                if (next === this.conducting) return false;
+                this.conducting = next;
+                this.synchronizeState();
+                return true;
+            }
+
+            synchronizeState() {
+                this.host.dataset.contactState = this.closed ? 'closed' : 'open';
+                this.host.dataset.breakerLamp = this.closed && this.conducting ? 'on' : 'off';
+                this.host.setAttribute('aria-pressed', String(this.closed));
+            }
+        }
+
+        class M2CircuitBreakerPanel {
+            constructor(root, layout) {
+                this.root = root;
+                this.layout = layout;
+                this.breakers = new Map();
+                this.pendingCells = new Set();
+                this.resizeObserver = new ResizeObserver(entries => {
+                    entries.forEach(entry => this.scheduleRowLayout(entry.target));
+                });
+                this.render();
+            }
+
+            render() {
+                this.breakers.clear();
+                this.root.replaceChildren(this.createGroup(this.layout));
+            }
+
+            createTier(groups) {
+                const tier = document.createElement('div');
+                tier.className = 'mCircuitBreakerTier';
+                groups.forEach(group => tier.append(this.createGroup(group)));
+                return tier;
+            }
+
+            createGroup(group) {
+                const fieldset = document.createElement('fieldset');
+                fieldset.className = 'mCircuitBreakerGroup';
+                fieldset.setAttribute('model-circuit-breaker-group', group.busbar);
+                fieldset.dataset.busbar = group.busbar;
+                const legend = document.createElement('legend');
+                legend.textContent = group.busbar;
+                const cells = document.createElement('div');
+                cells.className = 'mCircuitBreakerCells';
+                group.circuits.forEach(circuit => {
+                    const host = document.createElement('button');
+                    host.type = 'button';
+                    cells.append(host);
+                    this.breakers.set(
+                        circuit.id,
+                        new ThreeBarCircuitBreaker(host, circuit)
+                    );
+                });
+                fieldset.append(legend, cells);
+                (group.rows || []).forEach(row => fieldset.append(this.createTier(row)));
+                this.resizeObserver.observe(cells);
+                this.scheduleRowLayout(cells);
+                return fieldset;
+            }
+
+            getBreaker(id) {
+                return this.breakers.get(id) || null;
+            }
+
+            scheduleRowLayout(cells) {
+                if (this.pendingCells.has(cells)) return;
+                this.pendingCells.add(cells);
+                requestAnimationFrame(() => {
+                    this.pendingCells.delete(cells);
+                    this.layoutRows(cells);
+                });
+            }
+
+            layoutRows(cells) {
+                const breakers = [...cells.children];
+                breakers.forEach(breaker => {
+                    delete breaker.dataset.breakerPosition;
+                    delete breaker.dataset.breakerRow;
+                });
+                const rows = [];
+                breakers.forEach(breaker => {
+                    const top = breaker.offsetTop;
+                    const row = rows.find(candidate => Math.abs(candidate.top - top) <= 1);
+                    if (row) {
+                        row.breakers.push(breaker);
+                    } else {
+                        rows.push({ top, breakers: [breaker] });
+                    }
+                });
+                rows.forEach((row, rowIndex) => {
+                    row.breakers.forEach((breaker, index) => {
+                        breaker.dataset.breakerRow = String(rowIndex);
+                        breaker.dataset.breakerPosition = row.breakers.length === 1
+                            ? 'single'
+                            : (index === 0 ? 'left' : (index === row.breakers.length - 1 ? 'right' : 'center'));
+                    });
+                });
+            }
+        }
+
+        const m2CircuitBreakerLayout = {
+            busbar: 'PAGE CONTROL BUS',
+            circuits: [
+                {
+                    id: 'pageControlBreaker',
+                    designation: 'MASTER',
+                    name: 'PAGE CONTROL',
+                    members: [
+                        'pagePower',
+                        'pageModeSelector',
+                        'tier1Relay',
+                        'tier2Relay',
+                        'tier3Relay',
+                        'mainSystemsRelay',
+                        'readieLamp'
+                    ]
+                }
+            ],
+            rows: [
+                [
+                    {
+                        busbar: 'CONTROL BUS',
+                        circuits: [
+                            {
+                                id: 'archiveBreaker',
+                                designation: 'A4',
+                                name: 'ARCHIVE CONTROLLER',
+                                members: [
+                                    'archiveSystemsLoad',
+                                    'archiveActivityLoad',
+                                    'ARCHIVE_PAGE_ARCHIVE_R2'
+                                ]
+                            },
+                            {
+                                id: 'lightingBreaker',
+                                designation: 'A5',
+                                name: 'LIGHTING CONTROL UNIT',
+                                members: [
+                                    'lightingSystemsLoad',
+                                    'topMainBusStrobe',
+                                    'leftPlaybackStrobe',
+                                    'rightPlaybackStrobe',
+                                    'bottomLeftCurrentStrobe',
+                                    'bottomRightPanelStrobe'
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        busbar: 'MAIN POWER BUS',
+                        circuits: [
+                            {
+                                id: 'mainSenseBreaker',
+                                designation: 'A0',
+                                name: 'MAIN AVIONICS BUS SENSE',
+                                members: ['mainSystemsLoad']
+                            },
+                            {
+                                id: 'panelBreaker',
+                                designation: 'A1',
+                                name: 'PANEL CONTROLLER',
+                                members: ['panelSystemsLoad']
+                            },
+                            {
+                                id: 'playbackBreaker',
+                                designation: 'A2',
+                                name: 'PLAYBACK CONTROLLER',
+                                members: [
+                                    'playbackSystemsLoad',
+                                    'playbackActivityLoad',
+                                    'PLAYBACK_PL',
+                                    'PLAYBACK_ISR_OFF',
+                                    'PLAYBACK_ISR_R',
+                                    'PLAYBACK_ISR_I',
+                                    'PLAYBACK_ISR_S',
+                                    'PLAYBACK_K_OFF',
+                                    'PLAYBACK_K_ON',
+                                    'PLAYBACK_R3',
+                                    'PLAYBACK_KR_OFF',
+                                    'PLAYBACK_KR_ON',
+                                    'PLAYBACK_M_U',
+                                    'PLAYBACK_M_C',
+                                    'PLAYBACK_M_D'
+                                ]
+                            },
+                            {
+                                id: 'soundBreaker',
+                                designation: 'A3',
+                                name: 'SOUND CONTROLLER',
+                                members: [
+                                    'soundSystemsLoad',
+                                    'soundActivityLoad',
+                                    'SOUND_SOUND_L_COUPLING_OFF',
+                                    'SOUND_SOUND_L_COUPLING_ON',
+                                    'SOUND_VOLUME',
+                                    'SOUND_SPEED',
+                                    'SOUND_REVERB'
+                                ]
+                            }
+                        ],
+                        rows: [
+                            [
+                                {
+                                    busbar: 'TIME BUS',
+                                    circuits: [
+                                        {
+                                            id: 'timeBreaker',
+                                            designation: 'TIME',
+                                            name: 'TIME BUS',
+                                            members: [
+                                                'timeActiveDisplay',
+                                                'timeStandbyDisplay',
+                                                'timeDcAmpsDisplay',
+                                                'mainSeekSensor',
+                                                'sectionSensor',
+                                                'timeSensor',
+                                                'setInput'
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        ]
+                    }
+                ]
+            ]
+        };
+
+        const m2CircuitBreakerPanel = new M2CircuitBreakerPanel(
+            document.getElementById('mCircuitBreakerBoard'),
+            m2CircuitBreakerLayout
+        );
 
         function m2VersionedAssetUrl(rawUrl) {
             if (!rawUrl || /^(?:blob:|data:|about:)/i.test(rawUrl)) return rawUrl;
@@ -3664,6 +4191,8 @@ usort($cats, 'customStrCmp');
         class ArchiveAvionicsUnit extends EventTarget {
             #checkPromise = null;
             #installPromise = null;
+            #operationController = null;
+            #generation = 0;
 
             constructor(bus, powerContact, checker, installer) {
                 super();
@@ -3681,6 +4210,11 @@ usort($cats, 'customStrCmp');
                         if (operation && typeof operation.catch === 'function') operation.catch(() => {});
                     });
                     else {
+                        this.#generation++;
+                        this.#operationController?.abort();
+                        this.#operationController = null;
+                        this.#checkPromise = null;
+                        this.#installPromise = null;
                         this.state = 'standby';
                         this.setActive(false);
                         this.dispatchEvent(new Event('statechange'));
@@ -3700,19 +4234,23 @@ usort($cats, 'customStrCmp');
                 if (!this.powerContact.closed) return false;
                 if (this.#installPromise) return this.#installPromise;
                 if (this.#checkPromise) return this.#checkPromise;
+                const generation = this.#generation;
+                const controller = new AbortController();
+                this.#operationController = controller;
                 this.state = 'checking';
                 this.setActive(true);
                 this.dispatchEvent(new Event('statechange'));
                 const operation = Promise.resolve()
-                    .then(() => this.checker())
+                    .then(() => this.checker(controller.signal))
                     .then(result => {
-                        if (this.powerContact.closed && !this.#installPromise) {
+                        if (generation === this.#generation && this.powerContact.closed && !this.#installPromise) {
                             this.state = result?.complete ? 'ready' : 'incomplete';
                             this.dispatchEvent(new Event('statechange'));
                         }
                         return result;
                     })
                     .catch(error => {
+                        if (generation !== this.#generation || error?.name === 'AbortError') return false;
                         if (this.powerContact.closed && !this.#installPromise) {
                             this.state = 'fault';
                             this.dispatchEvent(new Event('statechange'));
@@ -3720,7 +4258,9 @@ usort($cats, 'customStrCmp');
                         throw error;
                     })
                     .finally(() => {
+                        if (generation !== this.#generation) return;
                         if (this.#checkPromise === operation) this.#checkPromise = null;
+                        if (this.#operationController === controller) this.#operationController = null;
                         if (!this.#installPromise) this.setActive(false);
                     });
                 this.#checkPromise = operation;
@@ -3730,28 +4270,36 @@ usort($cats, 'customStrCmp');
             install() {
                 if (!this.powerContact.closed) return false;
                 if (this.#installPromise) return this.#installPromise;
+                const generation = this.#generation;
                 this.state = 'installing';
                 this.setActive(true);
                 this.dispatchEvent(new Event('statechange'));
                 const pendingCheck = this.#checkPromise;
+                let controller = null;
                 const operation = Promise.resolve()
                     .then(() => pendingCheck?.catch(() => null))
                     .then(() => {
-                        if (!this.powerContact.closed) throw new Error('ARCHIVE AVIONICS UNIT lost S0 power');
-                        return this.installer();
+                        if (generation !== this.#generation || !this.powerContact.closed) return false;
+                        controller = new AbortController();
+                        this.#operationController = controller;
+                        return this.installer(controller.signal);
                     })
                     .then(result => {
+                        if (generation !== this.#generation || !this.powerContact.closed || result === false) return false;
                         this.state = result?.complete === false ? 'incomplete' : 'ready';
                         this.dispatchEvent(new Event('statechange'));
                         return result;
                     })
                     .catch(error => {
+                        if (generation !== this.#generation || error?.name === 'AbortError') return false;
                         this.state = 'fault';
                         this.dispatchEvent(new Event('statechange'));
                         throw error;
                     })
                     .finally(() => {
+                        if (generation !== this.#generation) return;
                         if (this.#installPromise === operation) this.#installPromise = null;
+                        if (this.#operationController === controller) this.#operationController = null;
                         if (!this.#checkPromise) this.setActive(false);
                     });
                 this.#installPromise = operation;
@@ -3779,8 +4327,8 @@ usort($cats, 'customStrCmp');
         const archiveCircuit = new ArchiveAvionicsUnit(
             avionicsBus,
             archiveAvionicsPower,
-            () => checkM2BrowserArchive(),
-            () => installM2BrowserArchive()
+            signal => checkM2BrowserArchive(signal),
+            signal => installM2BrowserArchive(signal)
         );
         const lIsOn = () => soundCircuit.coupling.effectivePosition === 'ON';
         const mainSystemsEvents = new EventTarget();
@@ -3953,10 +4501,11 @@ usort($cats, 'customStrCmp');
             return url.href;
         }
 
-        async function requestM2ArchiveCatalogue() {
+        async function requestM2ArchiveCatalogue(signal = null) {
             const response = await fetch(new URL('/m/m2list.json', location.origin).href, {
                 cache: 'no-store',
-                credentials: 'same-origin'
+                credentials: 'same-origin',
+                signal
             });
             if (!response.ok) throw new Error('Archive catalogue HTTP ' + response.status);
             const result = await response.json();
@@ -3982,8 +4531,9 @@ usort($cats, 'customStrCmp');
             });
         }
 
-        function runM2BrowserArchive(installMissing) {
+        function runM2BrowserArchive(installMissing, signal = null) {
             return (async () => {
+                if (signal?.aborted) throw new DOMException('Archive operation aborted', 'AbortError');
                 const root = document.documentElement;
                 root.dataset.m2ArchiveVersion = M2_BROWSER_CACHE_VERSION;
                 if (!('serviceWorker' in navigator) || !window.isSecureContext) {
@@ -4014,8 +4564,9 @@ usort($cats, 'customStrCmp');
                 }));
                 let catalogue = null;
                 try {
-                    catalogue = await requestM2ArchiveCatalogue();
+                    catalogue = await requestM2ArchiveCatalogue(signal);
                 } catch (error) {
+                    if (error?.name === 'AbortError') throw error;
                     root.dataset.m2ArchiveState = 'offline';
                 }
                 if (catalogue && String(catalogue.v) !== M2_BROWSER_CACHE_VERSION) {
@@ -4045,12 +4596,20 @@ usort($cats, 'customStrCmp');
                     let reconciliationStarted = false;
                     const finish = result => {
                         navigator.serviceWorker.removeEventListener('message', onMessage);
+                        signal?.removeEventListener('abort', onAbort);
                         resolve(result);
                     };
                     const fail = error => {
                         navigator.serviceWorker.removeEventListener('message', onMessage);
+                        signal?.removeEventListener('abort', onAbort);
                         root.dataset.m2ArchiveState = 'fault';
                         reject(error instanceof Error ? error : new Error(String(error)));
+                    };
+                    const onAbort = () => {
+                        navigator.serviceWorker.removeEventListener('message', onMessage);
+                        signal?.removeEventListener('abort', onAbort);
+                        root.dataset.m2ArchiveState = 'standby';
+                        reject(new DOMException('Archive operation aborted', 'AbortError'));
                     };
                     const onMessage = event => {
                         const message = event.data;
@@ -4118,6 +4677,11 @@ usort($cats, 'customStrCmp');
                         }
                     };
                     navigator.serviceWorker.addEventListener('message', onMessage);
+                    signal?.addEventListener('abort', onAbort, { once: true });
+                    if (signal?.aborted) {
+                        onAbort();
+                        return;
+                    }
                     worker.postMessage({
                         type: 'M2_ARCHIVE_CHECK',
                         requestId,
@@ -4127,6 +4691,7 @@ usort($cats, 'customStrCmp');
                     });
                 });
             })().catch(error => {
+                if (error?.name === 'AbortError') throw error;
                 window.dispatchEvent(new CustomEvent('m2archivefault', {
                     detail: {
                         state: document.documentElement.dataset.m2ArchiveState || 'fault',
@@ -4139,12 +4704,12 @@ usort($cats, 'customStrCmp');
             });
         }
 
-        function checkM2BrowserArchive() {
-            return runM2BrowserArchive(false);
+        function checkM2BrowserArchive(signal = null) {
+            return runM2BrowserArchive(false, signal);
         }
 
-        function installM2BrowserArchive() {
-            return runM2BrowserArchive(true);
+        function installM2BrowserArchive(signal = null) {
+            return runM2BrowserArchive(true, signal);
         }
 
         window.m2Archive = Object.freeze({
@@ -4651,8 +5216,8 @@ usort($cats, 'customStrCmp');
                 .filter(Boolean);
         }
 
-        function virtualSeriesTitle(group) {
-            if (!group.length) return 'series';
+        function virtualSeriesPrefixLength(group) {
+            if (!group.length) return 0;
             let prefixLength = group[0].words.length;
             for (let i = 1; i < group.length; i++) {
                 prefixLength = Math.min(prefixLength, group[i].words.length);
@@ -4665,11 +5230,23 @@ usort($cats, 'customStrCmp');
             }
 
             const displayWords = group[0].title.replace(/\s+/g, ' ').trim().split(' ');
-            const prefix = displayWords.slice(0, prefixLength);
-            while (prefix.length && /^(?:№|&|[\u2010-\u2015\u2212-]+)$/u.test(prefix[prefix.length - 1])) {
-                prefix.pop();
+            while (prefixLength && /^(?:№|&|[\u2010-\u2015\u2212-]+)$/u.test(displayWords[prefixLength - 1])) {
+                prefixLength--;
             }
-            return (prefix.join(' ') || group[0].title) + ' series';
+            return prefixLength;
+        }
+
+        function virtualSeriesTitle(group, prefixLength) {
+            if (!group.length) return 'series';
+            const displayWords = group[0].title.replace(/\s+/g, ' ').trim().split(' ');
+            return (displayWords.slice(0, prefixLength).join(' ') || group[0].title) + ' series';
+        }
+
+        function virtualMemberDisplayTitle(title, prefixLength) {
+            const displayWords = title.replace(/\s+/g, ' ').trim().split(' ');
+            const displayTitle = displayWords.slice(prefixLength).join(' ')
+                .replace(/^[\u2010-\u2015\u2212-]+\s*/u, '');
+            return displayTitle || title;
         }
 
         function collectVirtualGroups(items) {
@@ -4735,6 +5312,23 @@ usort($cats, 'customStrCmp');
             return info ? info.members[info.activeIndex] : null;
         }
 
+        function synchronizeVirtualMemberControls(info, member) {
+            const sourceEdit = member.wrap.querySelector('.editBtn');
+            const editHref = sourceEdit?.getAttribute('href');
+            if (editHref) {
+                info.hostWrap.querySelectorAll('.editBtn').forEach(button => {
+                    button.setAttribute('href', editHref);
+                });
+            }
+            const sourceComment = member.wrap.querySelector('#comBtn, .mob-com-btn');
+            const commentHref = sourceComment?.getAttribute('href');
+            if (commentHref) {
+                info.hostWrap.querySelectorAll('#comBtn, .mob-com-btn').forEach(button => {
+                    button.setAttribute('href', commentHref);
+                });
+            }
+        }
+
         function setActiveVirtualMember(audio) {
             const info = audio?.__virtualSong;
             if (!info) return null;
@@ -4752,6 +5346,7 @@ usort($cats, 'customStrCmp');
                 if (member.line) member.line.classList.toggle('lrcActive', member === active);
             });
             info.hostCard.dataset.art = active.art || '';
+            synchronizeVirtualMemberControls(info, active);
             if (active.media && window.loadMediaEl) window.loadMediaEl(active.media);
             return active;
         }
@@ -4892,10 +5487,11 @@ usort($cats, 'customStrCmp');
                 collectVirtualGroups(items).forEach(group => {
                     group.sort((a, b) => a.order - b.order);
                     const hostItem = group[0];
+                    const displayPrefixLength = virtualSeriesPrefixLength(group);
                     const info = {
                         hostCard: hostItem.card,
                         hostWrap: hostItem.wrap,
-                        seriesTitle: virtualSeriesTitle(group),
+                        seriesTitle: virtualSeriesTitle(group, displayPrefixLength),
                         activeIndex: 0,
                         members: []
                     };
@@ -4910,6 +5506,7 @@ usort($cats, 'customStrCmp');
                             mediaDisplay: media?.style.display || '',
                             id: item.card.id,
                             title: item.title,
+                            displayTitle: virtualMemberDisplayTitle(item.title, displayPrefixLength),
                             art: item.card.dataset.art || '',
                             index
                         };
@@ -4947,10 +5544,10 @@ usort($cats, 'customStrCmp');
                             const line = document.createElement('span');
                             line.className = 'lrcLine virtual-song-line';
                             line.dataset.t = '';
-                            line.dataset.txt = member.title;
+                            line.dataset.txt = member.displayTitle;
                             line.dataset.songId = member.id;
                             line.dataset.virtualMember = String(member.index);
-                            line.textContent = member.title;
+                            line.textContent = member.displayTitle;
                             member.line = line;
                             lyricEl.appendChild(line);
                         });
@@ -4984,33 +5581,280 @@ usort($cats, 'customStrCmp');
             prevBtn = stub();
         const seekRadialSvg = document.getElementById('seekRadial');
         const seekRadialNamespace = 'http://www.w3.org/2000/svg';
-        const seekRadialSegmentMap = Object.freeze({
-            '0': 'abcdef',
-            '1': 'bc',
-            '2': 'abdeg',
-            '3': 'abcdg',
-            '4': 'bcfg',
-            '5': 'acdfg',
-            '6': 'acdefg',
-            '7': 'abc',
-            '8': 'abcdefg',
-            '9': 'abcdfg',
-            ' ': ''
-        });
-        const seekRadialSegmentPaths = Object.freeze({
-            a: 'M3 1H12L14 3L12 5H3L1 3Z',
-            b: 'M13 4L15 6V16L13 18L11 16V6Z',
-            c: 'M13 20L15 22V32L13 34L11 32V22Z',
-            d: 'M3 33H12L14 35L12 37H3L1 35Z',
-            e: 'M2 20L4 22V32L2 34L0 32V22Z',
-            f: 'M2 4L4 6V16L2 18L0 16V6Z',
-            g: 'M3 17H12L14 19L12 21H3L1 19Z'
-        });
         const seekRadialNode = (tag, attributes = {}) => {
             const node = document.createElementNS(seekRadialNamespace, tag);
             Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, String(value)));
             return node;
         };
+        const m2SegmentDisplays = new Map();
+
+        class LTS2X01ALTD2000SERIESLTC2000 extends EventTarget {
+            static DIGIT_HEIGHT = 7;
+            static DIGIT_WIDTH = 4.85;
+            static SEGMENT_THICKNESS = .85;
+            static DIGIT_PITCH = 7.62;
+            static COLON_ADVANCE = 2.77;
+            static DECIMAL_X = 5.7;
+            static INDICATOR_RADIUS = .425;
+            static SLANT = Math.tan(10 * Math.PI / 180);
+            static FORWARD_CURRENT = .001;
+            static FORWARD_VOLTAGE = 1.6;
+            static NOMINAL_VOLTAGE = 28;
+            static EFFECTIVE_SEGMENT_RESISTANCE = 28000;
+            static SEGMENTS = Object.freeze({
+                '0': 'abcdef',
+                '1': 'bc',
+                '2': 'abdeg',
+                '3': 'abcdg',
+                '4': 'bcfg',
+                '5': 'acdfg',
+                '6': 'acdefg',
+                '7': 'abc',
+                '8': 'abcdefg',
+                '9': 'abcdfg',
+                '-': 'g',
+                ' ': ''
+            });
+
+            static slantAt(y) {
+                return (this.DIGIT_HEIGHT - y) * this.SLANT;
+            }
+
+            static leftAt(y) {
+                return this.slantAt(y) + this.SEGMENT_THICKNESS / 2;
+            }
+
+            static rightAt(y) {
+                return this.slantAt(y) + this.DIGIT_WIDTH - this.DIGIT_HEIGHT * this.SLANT -
+                    this.SEGMENT_THICKNESS / 2;
+            }
+
+            static segmentPath(start, end) {
+                const dx = end.x - start.x;
+                const dy = end.y - start.y;
+                const length = Math.hypot(dx, dy);
+                const ux = dx / length;
+                const uy = dy / length;
+                const half = this.SEGMENT_THICKNESS / 2;
+                const px = -uy * half;
+                const py = ux * half;
+                const points = [
+                    [start.x, start.y],
+                    [start.x + ux * half + px, start.y + uy * half + py],
+                    [end.x - ux * half + px, end.y - uy * half + py],
+                    [end.x, end.y],
+                    [end.x - ux * half - px, end.y - uy * half - py],
+                    [start.x + ux * half - px, start.y + uy * half - py]
+                ];
+                return points.map(([x, y], index) =>
+                    `${index === 0 ? 'M' : 'L'}${x.toFixed(3)} ${y.toFixed(3)}`
+                ).join('') + 'Z';
+            }
+
+            static segmentPaths() {
+                const top = this.SEGMENT_THICKNESS / 2;
+                const middle = this.DIGIT_HEIGHT / 2;
+                const bottom = this.DIGIT_HEIGHT - this.SEGMENT_THICKNESS / 2;
+                const upperStart = this.SEGMENT_THICKNESS;
+                const upperEnd = middle - this.SEGMENT_THICKNESS / 2;
+                const lowerStart = middle + this.SEGMENT_THICKNESS / 2;
+                const lowerEnd = this.DIGIT_HEIGHT - this.SEGMENT_THICKNESS;
+                return Object.freeze({
+                    a: this.segmentPath(
+                        { x: this.leftAt(top), y: top },
+                        { x: this.rightAt(top), y: top }
+                    ),
+                    b: this.segmentPath(
+                        { x: this.rightAt(upperStart), y: upperStart },
+                        { x: this.rightAt(upperEnd), y: upperEnd }
+                    ),
+                    c: this.segmentPath(
+                        { x: this.rightAt(lowerStart), y: lowerStart },
+                        { x: this.rightAt(lowerEnd), y: lowerEnd }
+                    ),
+                    d: this.segmentPath(
+                        { x: this.leftAt(bottom), y: bottom },
+                        { x: this.rightAt(bottom), y: bottom }
+                    ),
+                    e: this.segmentPath(
+                        { x: this.leftAt(lowerStart), y: lowerStart },
+                        { x: this.leftAt(lowerEnd), y: lowerEnd }
+                    ),
+                    f: this.segmentPath(
+                        { x: this.leftAt(upperStart), y: upperStart },
+                        { x: this.leftAt(upperEnd), y: upperEnd }
+                    ),
+                    g: this.segmentPath(
+                        { x: this.leftAt(middle), y: middle },
+                        { x: this.rightAt(middle), y: middle }
+                    )
+                });
+            }
+
+            constructor(host, { powerContact = null, label = '' } = {}) {
+                super();
+                if (!host) throw new TypeError('LTS-2X01A/LTD-2000/LTC-2000 display host required');
+                this.host = host;
+                this.model = host.getAttribute('model-segment') || '';
+                this.powerContact = powerContact;
+                this.label = label || host.getAttribute('aria-label') || 'Segment display';
+                this.value = '';
+                this.accessibleText = this.label;
+                this.digits = [];
+                this.indicators = [];
+                this.connections = new Map();
+                this.conductingSegmentCount = -1;
+                this.initialize();
+                this.powerContact?.addEventListener('change', () => this.render());
+                m2SegmentDisplays.set(host.id, this);
+            }
+
+            initialize() {
+                if (!this.model || ![...this.model].every(character => '8:.'.includes(character))) {
+                    throw new TypeError('Invalid model-segment: ' + this.model);
+                }
+                const svgHost = this.host.namespaceURI === seekRadialNamespace;
+                if (svgHost) {
+                    this.layer = this.host;
+                } else {
+                    this.svg = seekRadialNode('svg', {
+                        class: 'lts2x01Display',
+                        'aria-hidden': 'true',
+                        focusable: 'false',
+                        preserveAspectRatio: 'xMidYMid meet'
+                    });
+                    this.layer = seekRadialNode('g');
+                    this.svg.append(this.layer);
+                    this.host.replaceChildren(this.svg);
+                }
+                const paths = this.constructor.segmentPaths();
+                let cursor = 0;
+                let maximumX = 0;
+                [...this.model].forEach((character, modelIndex) => {
+                    if (character === '8') {
+                        const digit = seekRadialNode('g', {
+                            transform: `translate(${cursor} 0)`,
+                            'data-digit-slot': this.digits.length
+                        });
+                        const segments = Object.fromEntries(Object.entries(paths).map(([name, path]) => {
+                            const segment = seekRadialNode('path', {
+                                class: 'lts2x01Segment is-off',
+                                d: path,
+                                'data-segment': name
+                            });
+                            digit.append(segment);
+                            return [name, segment];
+                        }));
+                        const decimal = seekRadialNode('circle', {
+                            class: 'lts2x01Indicator is-off',
+                            cx: this.constructor.DECIMAL_X,
+                            cy: this.constructor.DIGIT_HEIGHT - this.constructor.INDICATOR_RADIUS,
+                            r: this.constructor.INDICATOR_RADIUS
+                        });
+                        digit.append(decimal);
+                        this.layer.append(digit);
+                        this.digits.push({ modelIndex, segments, decimal, decimalEnabled: false });
+                        maximumX = Math.max(
+                            maximumX,
+                            cursor + this.constructor.DECIMAL_X + this.constructor.INDICATOR_RADIUS
+                        );
+                        cursor += this.constructor.DIGIT_PITCH;
+                        return;
+                    }
+                    if (character === '.') {
+                        const digit = this.digits[this.digits.length - 1];
+                        if (!digit || digit.decimalEnabled) {
+                            throw new TypeError('Invalid decimal placement in model-segment: ' + this.model);
+                        }
+                        digit.decimalEnabled = true;
+                        return;
+                    }
+                    const x = cursor;
+                    [2.25, 4.75].forEach(y => {
+                        const indicator = seekRadialNode('circle', {
+                            class: 'lts2x01Indicator is-off',
+                            cx: x,
+                            cy: y,
+                            r: this.constructor.INDICATOR_RADIUS
+                        });
+                        this.layer.append(indicator);
+                        this.indicators.push(indicator);
+                    });
+                    maximumX = Math.max(maximumX, x + this.constructor.INDICATOR_RADIUS);
+                    cursor += this.constructor.COLON_ADVANCE;
+                });
+                if (this.svg) {
+                    this.svg.setAttribute(
+                        'viewBox',
+                        `0 0 ${maximumX.toFixed(3)} ${this.constructor.DIGIT_HEIGHT}`
+                    );
+                }
+                this.setValue(this.model.replaceAll('8', '0'));
+            }
+
+            setValue(value, accessibleText = null) {
+                this.value = String(value ?? '');
+                if (accessibleText !== null) this.accessibleText = String(accessibleText);
+                else this.accessibleText = `${this.label} ${this.value.trim()}`.trim();
+                this.render();
+            }
+
+            receive(signal) {
+                this.setValue(signal?.value ?? '', `${this.label} ${signal?.value ?? ''}`.trim());
+            }
+
+            connectElectricalLoad(load, nominalVoltage = this.constructor.NOMINAL_VOLTAGE) {
+                if (!load || typeof load.setResistance !== 'function') {
+                    throw new TypeError('Segment display electrical load required');
+                }
+                if (this.connections.has(load)) return load;
+                const synchronize = () => {
+                    const count = this.conductingSegmentCount;
+                    const resistance = count > 0 ?
+                        nominalVoltage / (this.constructor.FORWARD_CURRENT * count) :
+                        Number.MAX_SAFE_INTEGER;
+                    load.setResistance(resistance);
+                };
+                this.connections.set(load, synchronize);
+                this.addEventListener('loadchange', synchronize);
+                synchronize();
+                return load;
+            }
+
+            render() {
+                const powered = !this.powerContact || this.powerContact.closed;
+                const formatted = this.value.padStart(this.model.length, ' ').slice(-this.model.length);
+                let conductingSegmentCount = 0;
+                this.digits.forEach(digit => {
+                    const lit = this.constructor.SEGMENTS[formatted[digit.modelIndex] ?? ' '] ?? '';
+                    conductingSegmentCount += lit.length;
+                    Object.entries(digit.segments).forEach(([name, segment]) => {
+                        segment.classList.toggle('is-off', !powered || !lit.includes(name));
+                    });
+                    digit.decimal.classList.toggle('is-off', !powered || !digit.decimalEnabled);
+                    if (digit.decimalEnabled) conductingSegmentCount++;
+                });
+                this.indicators.forEach(indicator => indicator.classList.toggle('is-off', !powered));
+                conductingSegmentCount += this.indicators.length;
+                this.host.dataset.segmentCount = String(conductingSegmentCount);
+                this.host.dataset.timePowered = String(powered);
+                this.host.setAttribute(
+                    'aria-label',
+                    powered ? this.accessibleText : `${this.label}, unpowered`
+                );
+                if (conductingSegmentCount !== this.conductingSegmentCount) {
+                    this.conductingSegmentCount = conductingSegmentCount;
+                    this.dispatchEvent(new CustomEvent('loadchange', {
+                        detail: Object.freeze({
+                            segments: conductingSegmentCount,
+                            forwardCurrent: this.constructor.FORWARD_CURRENT,
+                            forwardVoltage: this.constructor.FORWARD_VOLTAGE
+                        })
+                    }));
+                }
+            }
+        }
+
         const SEEK_RADIAL_MAX_SECONDS = 999 * 60 - 1;
         const seekRadialDisplayFields = seconds => {
             const elapsed = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.floor(seconds || 0)));
@@ -5026,62 +5870,30 @@ usort($cats, 'customStrCmp');
 
         class SeekRadialReadout {
             constructor(group, label) {
-                this.group = group;
                 this.label = label;
-                const positions = [0, 19, 47, 66, 85, 113, 132];
-                positions.forEach((x, slot) => {
-                    const digit = seekRadialNode('g', {
-                        transform: `translate(${x} 0)`,
-                        'data-digit-slot': slot
-                    });
-                    Object.entries(seekRadialSegmentPaths).forEach(([segment, path]) => {
-                        digit.append(seekRadialNode('path', {
-                            class: 'seekRadialDisplaySegment is-off',
-                            d: path,
-                            'data-segment': segment
-                        }));
-                    });
-                    group.append(digit);
-                });
-                [39, 105].forEach(x => {
-                    group.append(seekRadialNode('circle', {
-                        class: 'seekRadialDisplayColon',
-                        cx: x,
-                        cy: 13,
-                        r: 1.7
-                    }));
-                    group.append(seekRadialNode('circle', {
-                        class: 'seekRadialDisplayColon',
-                        cx: x,
-                        cy: 25,
-                        r: 1.7
-                    }));
+                this.display = new LTS2X01ALTD2000SERIESLTC2000(group, {
+                    powerContact: timeBusPower,
+                    label
                 });
             }
 
-            render(section, seconds, powered) {
+            render(section, seconds) {
                 const safeSection = Math.max(0, Math.min(99, Math.trunc(section || 0)));
                 const fields = seekRadialDisplayFields(seconds);
                 const value = String(safeSection).padStart(2, ' ') +
-                    String(fields.minutes).padStart(3, ' ') +
+                    ':' + String(fields.minutes).padStart(3, ' ') + ':' +
                     String(fields.seconds).padStart(2, '0');
-                this.group.querySelectorAll('[data-digit-slot]').forEach((digit, slot) => {
-                    const lit = powered ? seekRadialSegmentMap[value[slot] ?? ' '] ?? '' : '';
-                    digit.querySelectorAll('[data-segment]').forEach(segment => {
-                        segment.classList.toggle('is-off', !lit.includes(segment.dataset.segment));
-                    });
-                });
-                this.group.querySelectorAll('.seekRadialDisplayColon').forEach(colon => {
-                    colon.classList.toggle('is-off', !powered);
-                });
-                this.group.setAttribute(
-                    'aria-label',
-                    powered ?
-                        `${this.label}, section ${safeSection}, ${seekRadialDisplayTime(seconds)}` :
-                        `${this.label}, unpowered`
+                this.display.setValue(
+                    value,
+                    `${this.label}, section ${safeSection}, ${seekRadialDisplayTime(seconds)}`
                 );
             }
         }
+
+        const mDcAmpsSegmentDisplay = new LTS2X01ALTD2000SERIESLTC2000(
+            document.getElementById('mDcAmpsDisplay'),
+            { powerContact: timeBusPower, label: 'DC amps' }
+        );
 
         class SeekRadialInstrument {
             constructor(svg, onTarget, onTraverse, onSet, onSectionAdjust, onTimeAdjust) {
@@ -5455,10 +6267,11 @@ usort($cats, 'customStrCmp');
                 const requestedHandMotion = this.requestedHandMotion;
                 const sectionMode = model.activeDomain?.sectionMode === true;
                 const domainModeChanged = this.hasRenderedModel && sectionMode !== this.lastSectionMode;
+                const ownerChanged = this.hasRenderedModel && model.owner !== this.lastOwner;
                 const sectionChanged = this.hasRenderedModel &&
-                    (model.owner !== this.lastOwner || activeSection !== this.lastActiveSection);
+                    (ownerChanged || activeSection !== this.lastActiveSection);
                 let boundaryDirection = 0;
-                if (this.powered && this.pointerId === null && this.hasRenderedModel && sectionChanged) {
+                if (this.powered && this.pointerId === null && this.hasRenderedModel && sectionChanged && !ownerChanged) {
                     if (this.lastActivePercent >= 85 && activePercent <= 15) boundaryDirection = 1;
                     else if (this.lastActivePercent <= 15 && activePercent >= 85) boundaryDirection = -1;
                 }
@@ -5473,8 +6286,8 @@ usort($cats, 'customStrCmp');
                     this.handMotion = null;
                     this.renderedHandAngle = this.manualHandAngle;
                 } else {
-                    if ((boundaryDirection || this.releaseHandMotion || poweringUp || domainModeChanged || requestedHandMotion) &&
-                        (!this.handMotion || domainModeChanged || requestedHandMotion)) {
+                    if ((sectionChanged || this.releaseHandMotion || poweringUp || domainModeChanged || requestedHandMotion) &&
+                        (!this.handMotion || sectionChanged || domainModeChanged || requestedHandMotion)) {
                         this.handMotion = {
                             from: this.renderedHandAngle,
                             to: handTarget,
@@ -5512,8 +6325,8 @@ usort($cats, 'customStrCmp');
                 }
                 this.targetHand.setAttribute('transform', `rotate(${this.renderedHandAngle} 195 190)`);
                 this.sectionHand.setAttribute('transform', `rotate(${this.renderedSectionAngle} 195 190)`);
-                this.activeReadout.render(activeSection, model.activeSeconds, this.powered);
-                this.standbyReadout.render(model.targetSection, model.targetSeconds, this.powered);
+                this.activeReadout.render(activeSection, model.activeSeconds);
+                this.standbyReadout.render(model.targetSection, model.targetSeconds);
                 this.sectionRotor.setAttribute('transform', `rotate(${this.sectionMechanicalAngle})`);
                 this.timeRotor.setAttribute('transform', `rotate(${this.timeMechanicalAngle})`);
                 this.sectionKnob.setAttribute('aria-valuemax', String(model.sectionCount || 0));
@@ -5822,9 +6635,10 @@ usort($cats, 'customStrCmp');
         }
 
         function processKrSectionBoundary(audio, time = playbackTime(audio)) {
-            if (!krFeedEnergized() || audio !== currentAudio || krLoopAudio !== audio ||
-                krLoopStart === null || krLoopEnd === null || audio.paused || audio.seeking ||
+            if (!krFeedEnergized() || audio !== currentAudio || audio.paused || audio.seeking ||
                 !Number.isFinite(time)) return false;
+            syncKrSectionLoop(audio, time);
+            if (krLoopAudio !== audio || krLoopStart === null || krLoopEnd === null) return false;
             const generation = krLoopGeneration;
             if (krBoundaryPendingGeneration === generation ||
                 time < krLoopEnd - krBoundaryLeadSeconds(audio)) return false;
@@ -6030,60 +6844,78 @@ usort($cats, 'customStrCmp');
         }
         updateSeek();
 
+        function syncCardLyricsPresentation(lyr) {
+            const playHead = lyr.querySelector('.playHead');
+            lyr.style.color = playHead ? 'white' : '';
+            lyr.classList.toggle('hasPlayHead', !!playHead);
+        }
+
+        function toggleCardLyrics(event, button) {
+            event.preventDefault();
+            event.stopPropagation();
+            const card = button.closest('.cardWrap')?.querySelector('.card');
+            const lyrics = card?.querySelector('.cLyr');
+            if (!card || !lyrics) return;
+            const showTrans = button.getAttribute('aria-pressed') !== 'true';
+            const template = card.querySelector(showTrans ? '.mLyricsTrans' : '.mLyricsOriginal');
+            if (!template) return;
+            lyrics.replaceChildren(template.content.cloneNode(true));
+            lyrics.scrollTop = 0;
+            button.setAttribute('aria-pressed', String(showTrans));
+            syncCardLyricsPresentation(lyrics);
+            if (currentAudio?.closest('.card') === card) lastActiveLine = null;
+        }
+
         document.querySelectorAll('.cLyr').forEach(lyr => {
-            if (lyr.querySelector('.playHead')) {
-                lyr.style.color = 'white';
-                lyr.classList.add('hasPlayHead');
-                const ph = lyr.querySelector('.playHead');
-                lyr.addEventListener('scroll', () => {
-                    if (ph) ph.style.transform = `translateY(${lyr.scrollTop}px)`;
-                });
-                lyr.addEventListener('click', e => {
-                    e.stopPropagation();
-                    const card = lyr.closest('.card');
-                    const cardAudio = audioForCard(card);
-                    if (!cardAudio) return;
-                    const rect = lyr.getBoundingClientRect();
-                    const clickY = e.clientY - rect.top;
-                    const pct = Math.max(0, Math.min(1, clickY / rect.height));
+            syncCardLyricsPresentation(lyr);
+            lyr.addEventListener('scroll', () => {
+                const playHead = lyr.querySelector('.playHead');
+                if (playHead) playHead.style.transform = `translateY(${lyr.scrollTop}px)`;
+            });
+            lyr.addEventListener('click', e => {
+                if (!lyr.querySelector('.playHead')) return;
+                e.stopPropagation();
+                const card = lyr.closest('.card');
+                const cardAudio = audioForCard(card);
+                if (!cardAudio) return;
+                const rect = lyr.getBoundingClientRect();
+                const clickY = e.clientY - rect.top;
+                const pct = Math.max(0, Math.min(1, clickY / rect.height));
 
-                    const wasPlaying = (currentAudio === cardAudio && !cardAudio.paused);
+                const wasPlaying = currentAudio === cardAudio && !cardAudio.paused;
 
-                    if (currentAudio !== cardAudio) {
-                        document.querySelectorAll('audio').forEach(a => {
-                            if (a !== cardAudio) {
-                                a.pause();
-                                a.loop = false;
-                            }
-                        });
-                        currentAudio = cardAudio;
-                        loadAudio(currentAudio);
-                        currentAudio.volume = soundCircuit.volume.value;
-                        currentAudio.playbackRate = soundCircuit.playbackRate;
-                    }
-
-                    if (wasPlaying) {
-                        const setPct = () => {
-                            const duration = playbackDuration(currentAudio);
-                            if (duration) {
-                                seekPlayback(currentAudio, pct * duration);
-                            }
-                        };
-
-                        if (currentAudio.readyState >= 1) {
-                            setPct();
-                        } else {
-                            currentAudio.addEventListener('loadedmetadata', function onMeta() {
-                                setPct();
-                                currentAudio.removeEventListener('loadedmetadata', onMeta);
-                            });
+                if (currentAudio !== cardAudio) {
+                    document.querySelectorAll('audio').forEach(audio => {
+                        if (audio !== cardAudio) {
+                            audio.pause();
+                            audio.loop = false;
                         }
+                    });
+                    currentAudio = cardAudio;
+                    loadAudio(currentAudio);
+                    currentAudio.volume = soundCircuit.volume.value;
+                    currentAudio.playbackRate = soundCircuit.playbackRate;
+                }
+
+                if (wasPlaying) {
+                    const setPosition = () => {
+                        const duration = playbackDuration(currentAudio);
+                        if (duration) seekPlayback(currentAudio, pct * duration);
+                    };
+
+                    if (currentAudio.readyState >= 1) {
+                        setPosition();
                     } else {
-                        updateLoopState();
-                        playAudio(currentAudio, 'card resume');
+                        currentAudio.addEventListener('loadedmetadata', function onMetadata() {
+                            setPosition();
+                            currentAudio.removeEventListener('loadedmetadata', onMetadata);
+                        });
                     }
-                });
-            }
+                } else {
+                    updateLoopState();
+                    playAudio(currentAudio, 'card resume');
+                }
+            });
         });
         function updateSpeedVisuals() {
             renderSpeedKnob();
@@ -6292,7 +7124,7 @@ usort($cats, 'customStrCmp');
         function getCollageSegments(audio) {
             const card = audio.closest('.card');
             if (!card) return null;
-            const lines = [...card.querySelectorAll('.lrcLine')];
+            const lines = [...card.querySelectorAll('.lrcLine:not([data-l])')];
             if (!lines.length) return null;
             const dur = playbackDuration(audio) || audio.duration;
             if (!dur || !isFinite(dur)) return null;
@@ -6388,6 +7220,7 @@ usort($cats, 'customStrCmp');
             if (!audio) return;
             markBoundaryContinued(signal);
             clearKrSectionLoop();
+            seekRadialInstrument.crossNextHandBoundary(1);
             const target = seekPlayback(audio, 0, true) || audio;
             if (!audio.__virtualSong) playAudio(target, 'whole-card repeat coil');
         }
@@ -6437,6 +7270,54 @@ usort($cats, 'customStrCmp');
             visibleWhole: transferToRandom,
             visibleSection: transferToRandom
         }, playbackAvionicsPower);
+        let playbackPowerRecovery = null;
+        const applyPlaybackCircuitPower = () => {
+            const powered = playbackAvionicsPower.closed;
+            if (!powered) {
+                const audio = currentAudio;
+                const media = audio ? activeMediaForCard(audio.closest('.card')) : null;
+                const video = media?.matches('video[data-sync="true"]') ? media : null;
+                playbackPowerRecovery = audio ? {
+                    audio,
+                    time: playbackTime(audio),
+                    wasPlaying: !audio.paused
+                } : null;
+                playbackCircuit.dropPl();
+                playbackCircuit.clearActivity();
+                clearKrSectionLoop();
+                if (audio && !audio.paused) audio.pause();
+                if (video) {
+                    video.pause();
+                    video.__m2SyncPending = false;
+                    video.load();
+                }
+                return;
+            }
+            const recovery = playbackPowerRecovery;
+            playbackPowerRecovery = null;
+            if (!recovery?.audio || recovery.audio !== currentAudio) return;
+            const audio = recovery.audio;
+            let restored = false;
+            const restore = () => {
+                if (restored || !playbackAvionicsPower.closed || audio !== currentAudio) return;
+                restored = true;
+                audio.removeEventListener('loadedmetadata', restore);
+                seekPlayback(audio, recovery.time, false);
+                syncVideoToAudio(audio, recovery.wasPlaying);
+                if (recovery.wasPlaying && soundAvionicsPower.closed) {
+                    playAudio(audio, 'A2 breaker reset');
+                }
+            };
+            loadAudio(audio);
+            audio.addEventListener('loadedmetadata', restore, { once: true });
+            audio.preload = 'auto';
+            audio.load();
+            queueMicrotask(() => {
+                if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) restore();
+            });
+        };
+        playbackAvionicsPower.addEventListener('change', applyPlaybackCircuitPower);
+        applyPlaybackCircuitPower();
         const applySoundCircuitPower = () => {
             const powered = soundCircuit.powerContact.closed;
             if (masterGain && audioCtx) {
@@ -6989,6 +7870,10 @@ usort($cats, 'customStrCmp');
         srchEl.addEventListener('input', () => {
             const v = foldSearch(srchEl.textContent || '');
             document.querySelectorAll('.cardWrap').forEach(w => {
+                if (w.classList.contains('virtual-song-member')) {
+                    w.style.display = 'none';
+                    return;
+                }
                 if (w.__search === undefined) {
                     const name = w.querySelector('.cName');
                     const lyrics = w.querySelector('.cLyr');
@@ -7119,6 +8004,7 @@ usort($cats, 'customStrCmp');
             }
 
             if (cLyr && cLyr.querySelector('.lrcLine')) {
+                if (card.__virtualSong) return;
                 const rect = cLyr.getBoundingClientRect();
                 const clickY = e.clientY - rect.top;
                 const pct = Math.max(0, Math.min(1, clickY / rect.height));
@@ -7175,12 +8061,14 @@ usort($cats, 'customStrCmp');
             let handled = false;
             if (kIsOn()) {
                 const card = audio.closest('.card');
+                const partLines = card ? [...card.querySelectorAll('.lrcLine:not([data-l])')] : [];
                 let activeLine = audio.__virtualSong ?
                     activeVirtualMember(audio.__virtualSong)?.line || null :
                     (card ? card.querySelector('.lrcLine.lrcActive') : null);
+                if (activeLine?.dataset.l !== undefined) activeLine = null;
                 if (!activeLine && card) {
                     const time = playbackTime(audio);
-                    for (const line of card.querySelectorAll('.lrcLine')) {
+                    for (const line of partLines) {
                         const start = parseFloat(line.dataset.t);
                         if (isFinite(start) && start <= time) activeLine = line;
                         else if (isFinite(start) && start > time) break;
@@ -7189,8 +8077,8 @@ usort($cats, 'customStrCmp');
                 if (activeLine) {
                     const start = parseFloat(activeLine.dataset.t);
                     let end = duration;
-                    const next = activeLine.nextElementSibling;
-                    if (next && next.classList.contains('lrcLine')) {
+                    const next = partLines[partLines.indexOf(activeLine) + 1];
+                    if (next) {
                         end = parseFloat(next.dataset.t);
                     }
                     const lineDur = end - start;
@@ -7858,6 +8746,17 @@ usort($cats, 'customStrCmp');
                     return this.#energized;
                 }
 
+                setResistance(resistance) {
+                    const next = Number(resistance);
+                    if (!Number.isFinite(next) || next <= 0) {
+                        throw new TypeError('Invalid load resistance: ' + this.name);
+                    }
+                    if (Math.abs(next - this.resistance) < 1e-9) return false;
+                    this.resistance = next;
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
                 applyVoltage(voltage, authority = null) {
                     if (authority !== DC_SOLVER_AUTHORITY) {
                         throw new Error('Load voltage is determined by circuit continuity: ' + this.name);
@@ -7929,6 +8828,7 @@ usort($cats, 'customStrCmp');
                     }
                     this.#names.add(load.name);
                     this.loads.push(load);
+                    load.addEventListener('change', () => this.solve());
                     this.solve();
                     return load;
                 }
@@ -8852,6 +9752,84 @@ usort($cats, 'customStrCmp');
                 }
             }
 
+            class DcBranchCircuitBreaker extends EventTarget {
+                #authority = Symbol('DC BRANCH CIRCUIT BREAKER');
+                #conducting = false;
+
+                constructor(name, circuit, poleIds, lampResistance = 1400) {
+                    super();
+                    this.name = name;
+                    this.circuit = circuit;
+                    this.primaryPole = poleIds[0];
+                    this.poles = new Map(poleIds.map(id => [
+                        id,
+                        circuit.addContact(new ElectricalContact(
+                            `${name} ${id.toUpperCase()} POLE`,
+                            true,
+                            this.#authority
+                        ))
+                    ]));
+                    this.lamp = circuit.addLoad(new DcPoweredLoad(
+                        `${name} INTERNAL THREE-BAR LAMP`,
+                        { resistance: lampResistance }
+                    ));
+                    this.connectedPoles = new Set();
+                    this.lampConnected = false;
+                    this.lamp.addEventListener('statechange', () => this.synchronize());
+                }
+
+                get closed() {
+                    return [...this.poles.values()].every(contact => contact.closed);
+                }
+
+                get conducting() {
+                    return this.#conducting;
+                }
+
+                connectPole(id, supply, returnTerminal, wire) {
+                    const contact = this.poles.get(id);
+                    if (!contact) throw new Error(`Unknown breaker pole ${this.name}:${id}`);
+                    if (this.connectedPoles.has(id)) throw new Error(`Breaker pole already connected ${this.name}:${id}`);
+                    wire(`${this.name} ${id.toUpperCase()} FEED`, supply, contact.line);
+                    this.connectedPoles.add(id);
+                    if (id === this.primaryPole && !this.lampConnected) {
+                        wire(`${this.name} INTERNAL LAMP FEED`, contact.load, this.lamp.a1);
+                        wire(`${this.name} INTERNAL LAMP RETURN`, this.lamp.a2, returnTerminal);
+                        this.lampConnected = true;
+                    }
+                    return contact.load;
+                }
+
+                setClosed(closed) {
+                    const next = Boolean(closed);
+                    if (next === this.closed) return false;
+                    this.circuit.transaction(() => {
+                        this.poles.forEach(contact => contact.setClosed(next, this.#authority));
+                    });
+                    this.synchronize();
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
+                synchronize() {
+                    const next = this.closed && this.lamp.energized && this.lamp.current > 0;
+                    if (next === this.#conducting) return false;
+                    this.#conducting = next;
+                    this.dispatchEvent(new Event('statechange'));
+                    return true;
+                }
+
+                snapshot() {
+                    return {
+                        closed: this.closed,
+                        conducting: this.conducting,
+                        lampVoltage: this.lamp.voltage,
+                        lampCurrent: this.lamp.current,
+                        poles: Object.fromEntries([...this.poles].map(([id, contact]) => [id, contact.closed]))
+                    };
+                }
+            }
+
             class RotarySelector extends EventTarget {
                 #index = 0;
                 #camAuthority = Symbol('ROTARY SELECTOR CAM');
@@ -9026,8 +10004,77 @@ usort($cats, 'customStrCmp');
                         return conductor;
                     };
 
+                    let breakerWireNumber = 0;
+                    const breakerWire = (name, from, to) => wire(
+                        `breaker${++breakerWireNumber}`,
+                        name,
+                        from,
+                        to
+                    );
+                    const branchBreakers = {
+                        pageControl: new DcBranchCircuitBreaker(
+                            'CB-P0 PAGE CONTROL', circuit, ['control']
+                        ),
+                        mainSense: new DcBranchCircuitBreaker(
+                            'CB-A0 MAIN AVIONICS BUS SENSE', circuit, ['main']
+                        ),
+                        panel: new DcBranchCircuitBreaker(
+                            'CB-A1 PANEL CONTROLLER', circuit, ['main']
+                        ),
+                        playback: new DcBranchCircuitBreaker(
+                            'CB-A2 PLAYBACK CONTROLLER', circuit, ['main', 'r3']
+                        ),
+                        sound: new DcBranchCircuitBreaker(
+                            'CB-A3 SOUND CONTROLLER', circuit, ['main']
+                        ),
+                        archive: new DcBranchCircuitBreaker(
+                            'CB-A4 ARCHIVE CONTROLLER', circuit, ['control']
+                        ),
+                        lighting: new DcBranchCircuitBreaker(
+                            'CB-A5 LIGHTING CONTROL UNIT', circuit, ['control', 'l', 'obs']
+                        ),
+                        time: new DcBranchCircuitBreaker(
+                            'CB-TIME TIME BUS', circuit, ['time']
+                        )
+                    };
+                    const breakerSupplies = {
+                        pageControl: branchBreakers.pageControl.connectPole(
+                            'control', circuit.source.positive, circuit.source.negative, breakerWire
+                        ),
+                        mainSense: branchBreakers.mainSense.connectPole(
+                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                        ),
+                        panel: branchBreakers.panel.connectPole(
+                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                        ),
+                        playback: branchBreakers.playback.connectPole(
+                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                        ),
+                        playbackR3: branchBreakers.playback.connectPole(
+                            'r3', kR3Contact.load, circuit.source.negative, breakerWire
+                        ),
+                        sound: branchBreakers.sound.connectPole(
+                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                        ),
+                        archive: branchBreakers.archive.connectPole(
+                            'control', this.pagePower.load, circuit.source.negative, breakerWire
+                        ),
+                        lightingControl: branchBreakers.lighting.connectPole(
+                            'control', this.pagePower.load, circuit.source.negative, breakerWire
+                        ),
+                        lightingL: branchBreakers.lighting.connectPole(
+                            'l', lightingTierContacts.load.load, circuit.source.negative, breakerWire
+                        ),
+                        lightingObs: branchBreakers.lighting.connectPole(
+                            'obs', lightingTierContacts.observe.load, circuit.source.negative, breakerWire
+                        ),
+                        time: branchBreakers.time.connectPole(
+                            'time', timeBusContact.load, circuit.source.negative, breakerWire
+                        )
+                    };
+
                     wire('sourceToMaster', 'W001 SOURCE L+ TO S0 LINE',
-                        circuit.source.positive, this.pagePower.line);
+                        breakerSupplies.pageControl, this.pagePower.line);
 
                     wire('masterToTier1', 'W101 S0 LOAD TO K1 A1',
                         this.pagePower.load, coils.tier1.a1);
@@ -9093,38 +10140,62 @@ usort($cats, 'customStrCmp');
 
                     const netlist = new DcNetlist(circuit, dcDeviceRegistry, {
                         supplies: {
-                            control: this.pagePower.load,
-                            main: mainSystemsContact.load,
-                            lightingL: lightingTierContacts.load.load,
-                            lightingObs: lightingTierContacts.observe.load,
-                            k: kR3Contact.load,
-                            time: timeBusContact.load
+                            mainSense: breakerSupplies.mainSense,
+                            panel: breakerSupplies.panel,
+                            playback: breakerSupplies.playback,
+                            sound: breakerSupplies.sound,
+                            archive: breakerSupplies.archive,
+                            lightingControl: breakerSupplies.lightingControl,
+                            lightingL: breakerSupplies.lightingL,
+                            lightingObs: breakerSupplies.lightingObs,
+                            k: breakerSupplies.playbackR3,
+                            time: breakerSupplies.time
                         },
                         returns: { dc: circuit.source.negative },
-                        protectedSupplies: ['control', 'main', 'lightingL', 'lightingObs', 'k', 'time']
+                        protectedSupplies: [
+                            'mainSense',
+                            'panel',
+                            'playback',
+                            'sound',
+                            'archive',
+                            'lightingControl',
+                            'lightingL',
+                            'lightingObs',
+                            'k',
+                            'time'
+                        ]
                     });
                     const equipmentLoads = netlist.install([
-                        { id: 'mainSystemsLoad', type: 'avionics-unit', name: 'A0 MAIN AVIONICS BUS SENSE', supply: 'main', return: 'dc', resistance: 28000 },
-                        { id: 'panelSystemsLoad', type: 'avionics-unit', name: 'A1 PANEL CONTROLLER', supply: 'main', return: 'dc', resistance: 560 },
-                        { id: 'playbackSystemsLoad', type: 'avionics-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'main', return: 'dc', resistance: 560 },
-                        { id: 'soundSystemsLoad', type: 'avionics-unit', name: 'A3 SOUND CONTROLLER', supply: 'main', return: 'dc', resistance: 280 },
-                        { id: 'archiveSystemsLoad', type: 'avionics-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'control', return: 'dc', resistance: 1120 },
-                        { id: 'lightingSystemsLoad', type: 'avionics-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'control', return: 'dc', resistance: 1120 }
+                        { id: 'mainSystemsLoad', type: 'avionics-unit', name: 'A0 MAIN AVIONICS BUS SENSE', supply: 'mainSense', return: 'dc', resistance: 28000 },
+                        { id: 'panelSystemsLoad', type: 'avionics-unit', name: 'A1 PANEL CONTROLLER', supply: 'panel', return: 'dc', resistance: 560 },
+                        { id: 'playbackSystemsLoad', type: 'avionics-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'playback', return: 'dc', resistance: 560 },
+                        { id: 'soundSystemsLoad', type: 'avionics-unit', name: 'A3 SOUND CONTROLLER', supply: 'sound', return: 'dc', resistance: 280 },
+                        { id: 'archiveSystemsLoad', type: 'avionics-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'dc', resistance: 1120 },
+                        { id: 'lightingSystemsLoad', type: 'avionics-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'dc', resistance: 1120 }
                     ]);
                     const activityLoads = netlist.install([
-                        { id: 'playbackActivityLoad', type: 'switched-load', name: 'A2-L PLAYBACK MEDIA LOAD', supply: 'main', return: 'dc', resistance: 560 },
-                        { id: 'soundActivityLoad', type: 'switched-load', name: 'A3-L SOUND OUTPUT LOAD', supply: 'main', return: 'dc', resistance: 140 },
-                        { id: 'archiveActivityLoad', type: 'switched-load', name: 'A4-L ARCHIVE WORK LOAD', supply: 'control', return: 'dc', resistance: 280 / 3 }
+                        { id: 'playbackActivityLoad', type: 'switched-load', name: 'A2-L PLAYBACK MEDIA LOAD', supply: 'playback', return: 'dc', resistance: 560 },
+                        { id: 'soundActivityLoad', type: 'switched-load', name: 'A3-L SOUND OUTPUT LOAD', supply: 'sound', return: 'dc', resistance: 140 },
+                        { id: 'archiveActivityLoad', type: 'switched-load', name: 'A4-L ARCHIVE WORK LOAD', supply: 'archive', return: 'dc', resistance: 280 / 3 }
                     ]);
                     const timeBusLoads = netlist.install([
-                        { id: 'timeActiveDisplay', type: 'lamp', name: 'H7 TIME BUS ACTIVE DISPLAY', supply: 'time', return: 'dc', resistance: 5600 },
-                        { id: 'timeStandbyDisplay', type: 'lamp', name: 'H8 TIME BUS STANDBY DISPLAY', supply: 'time', return: 'dc', resistance: 5600 },
-                        { id: 'timeDcAmpsDisplay', type: 'lamp', name: 'H9 TIME BUS DC AMPS DISPLAY', supply: 'time', return: 'dc', resistance: 5600 },
+                        { id: 'timeActiveDisplay', type: 'lamp', name: 'H7 TIME BUS ACTIVE DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
+                        { id: 'timeStandbyDisplay', type: 'lamp', name: 'H8 TIME BUS STANDBY DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
+                        { id: 'timeDcAmpsDisplay', type: 'lamp', name: 'H9 TIME BUS DC AMPS DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
                         { id: 'mainSeekSensor', type: 'analog-input', name: 'T1 TIME BUS MAIN SEEK SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
                         { id: 'sectionSensor', type: 'analog-input', name: 'T2 TIME BUS SECTION SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
                         { id: 'timeSensor', type: 'analog-input', name: 'T3 TIME BUS TIME SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
                         { id: 'setInput', type: 'discrete-input', name: 'S2 TIME BUS SET INPUT', supply: 'time', return: 'dc', resistance: 28000, powerContact: timeBusPower }
                     ]);
+                    [
+                        ['seekRadialActiveDigits', timeBusLoads.timeActiveDisplay],
+                        ['seekRadialStandbyDigits', timeBusLoads.timeStandbyDisplay],
+                        ['mDcAmpsDisplay', timeBusLoads.timeDcAmpsDisplay]
+                    ].forEach(([id, load]) => {
+                        const display = m2SegmentDisplays.get(id);
+                        if (!display) throw new Error('Missing segment display: ' + id);
+                        display.connectElectricalLoad(load, circuit.source.nominalVoltage);
+                    });
                     timeBusInputs = Object.freeze({
                         mainSeekSensor: timeBusLoads.mainSeekSensor,
                         sectionSensor: timeBusLoads.sectionSensor,
@@ -9132,7 +10203,7 @@ usort($cats, 'customStrCmp');
                         setInput: timeBusLoads.setInput
                     });
                     const lightingLoads = netlist.install([
-                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'control', return: 'dc', resistance: 5600 },
+                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'lightingControl', return: 'dc', resistance: 5600 },
                         { id: 'leftPlaybackStrobe', type: 'switched-load', name: 'H3 LEFT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 },
                         { id: 'rightPlaybackStrobe', type: 'switched-load', name: 'H4 RIGHT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 },
                         { id: 'bottomLeftCurrentStrobe', type: 'switched-load', name: 'H5 BOTTOM LEFT CURRENT GREEN STROBE POWER SUPPLY', supply: 'lightingL', return: 'dc', resistance: 5600 },
@@ -9155,7 +10226,7 @@ usort($cats, 'customStrCmp');
                     });
                     playbackCircuit.board.connectElectricalNetlist(netlist, {
                         prefix: 'PLAYBACK',
-                        supply: 'main',
+                        supply: 'playback',
                         return: 'dc',
                         inputResistance: 28000
                     });
@@ -9181,24 +10252,24 @@ usort($cats, 'customStrCmp');
                     synchronizeKR3Contact();
                     m2ExpansionBoard.connectElectricalNetlist(netlist, {
                         prefix: 'ARCHIVE',
-                        supply: 'control',
+                        supply: 'archive',
                         return: 'dc',
                         inputResistance: 28000
                     });
                     netlist.attachSelector('SOUND_L_COUPLING', soundCircuit.coupling, {
                         prefix: 'SOUND',
-                        supply: 'main',
+                        supply: 'sound',
                         return: 'dc',
                         inputResistance: 28000
                     });
                     netlist.attachAnalog('SOUND_VOLUME', soundCircuit.volume, {
-                        supply: 'main', return: 'dc', resistance: 56000
+                        supply: 'sound', return: 'dc', resistance: 56000
                     });
                     netlist.attachAnalog('SOUND_SPEED', soundCircuit.speed, {
-                        supply: 'main', return: 'dc', resistance: 56000
+                        supply: 'sound', return: 'dc', resistance: 56000
                     });
                     netlist.attachAnalog('SOUND_REVERB', soundCircuit.reverb, {
-                        supply: 'main', return: 'dc', resistance: 56000
+                        supply: 'sound', return: 'dc', resistance: 56000
                     });
                     const synchronizeActivityLoads = () => {
                         activityLoads.playbackActivityLoad.setActive(playbackCircuit.active);
@@ -9230,6 +10301,33 @@ usort($cats, 'customStrCmp');
                     );
                     this.lighting = lightingController;
 
+                    const circuitBreakerBindings = Object.freeze({
+                        pageControlBreaker: branchBreakers.pageControl,
+                        mainSenseBreaker: branchBreakers.mainSense,
+                        panelBreaker: branchBreakers.panel,
+                        playbackBreaker: branchBreakers.playback,
+                        soundBreaker: branchBreakers.sound,
+                        archiveBreaker: branchBreakers.archive,
+                        lightingBreaker: branchBreakers.lighting,
+                        timeBreaker: branchBreakers.time
+                    });
+                    Object.entries(circuitBreakerBindings).forEach(([id, breaker]) => {
+                        const control = m2CircuitBreakerPanel.getBreaker(id);
+                        if (!control) throw new Error('Missing circuit breaker control: ' + id);
+                        const synchronize = () => {
+                            control.setClosed(breaker.closed, false);
+                            control.setConducting(breaker.conducting);
+                        };
+                        control.host.addEventListener('breakercommand', event => {
+                            if (event.detail.id !== id) return;
+                            breaker.setClosed(event.detail.closed);
+                            synchronize();
+                        });
+                        breaker.addEventListener('change', synchronize);
+                        breaker.addEventListener('statechange', synchronize);
+                        synchronize();
+                    });
+
                     this.schematic = Object.freeze({
                         source: circuit.source,
                         masterSwitch: this.pagePower,
@@ -9254,6 +10352,7 @@ usort($cats, 'customStrCmp');
                         activityLoads: Object.freeze(activityLoads),
                         lightingLoads: Object.freeze(lightingLoads),
                         lightingController,
+                        branchBreakers: circuitBreakerBindings,
                         readieLamp,
                         wires: Object.freeze(wires),
                         netlist
@@ -9275,6 +10374,13 @@ usort($cats, 'customStrCmp');
                         },
                         get lighting() {
                             return freezeTelemetry(lightingController.snapshot());
+                        },
+                        get breakers() {
+                            return freezeTelemetry(Object.fromEntries(
+                                Object.entries(circuitBreakerBindings).map(
+                                    ([id, breaker]) => [id, breaker.snapshot()]
+                                )
+                            ));
                         },
                         get timeBus() {
                             const loads = Object.fromEntries(Object.entries(timeBusLoads).map(([id, device]) => [id, {
@@ -9318,99 +10424,6 @@ usort($cats, 'customStrCmp');
                 }
             }
 
-            class M2SevenSegmentReadout {
-                constructor(target, powerContact = null) {
-                    this.target = target;
-                    this.powerContact = powerContact;
-                    this.value = '0.000';
-                    this.svgNamespace = 'http://www.w3.org/2000/svg';
-                    this.segmentMap = Object.freeze({
-                        '0': 'abcdef',
-                        '1': 'bc',
-                        '2': 'abdeg',
-                        '3': 'abcdg',
-                        '4': 'bcfg',
-                        '5': 'acdfg',
-                        '6': 'acdefg',
-                        '7': 'abc',
-                        '8': 'abcdefg',
-                        '9': 'abcdfg',
-                        ' ': ''
-                    });
-                    this.segmentPaths = Object.freeze({
-                        a: 'M3 1H12L14 3L12 5H3L1 3Z',
-                        b: 'M13 4L15 6V16L13 18L11 16V6Z',
-                        c: 'M13 20L15 22V32L13 34L11 32V22Z',
-                        d: 'M3 33H12L14 35L12 37H3L1 35Z',
-                        e: 'M2 20L4 22V32L2 34L0 32V22Z',
-                        f: 'M2 4L4 6V16L2 18L0 16V6Z',
-                        g: 'M3 17H12L14 19L12 21H3L1 19Z'
-                    });
-                    this.displaySlotXs = Object.freeze([8, 29.5, 51, 79, 100.5, 122]);
-                    this.initialize();
-                    this.powerContact?.addEventListener('change', () => this.render());
-                    this.receive({ value: '0.000' });
-                }
-
-                createSvg(tag, attributes = {}) {
-                    const node = document.createElementNS(this.svgNamespace, tag);
-                    Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, String(value)));
-                    return node;
-                }
-
-                initialize() {
-                    this.displaySlotXs.forEach((x, slot) => {
-                        const digit = this.createSvg('g', {
-                            transform: `translate(${x} 8) scale(1.12 .75)`,
-                            'data-digit-slot': slot
-                        });
-                        Object.entries(this.segmentPaths).forEach(([segment, path]) => {
-                            digit.append(this.createSvg('path', {
-                                class: 'mDcAmpsSegment is-off',
-                                d: path,
-                                'data-segment': segment
-                            }));
-                        });
-                        this.target.append(digit);
-                    });
-                    this.target.append(this.createSvg('circle', {
-                        class: 'mDcAmpsSegment is-off',
-                        cx: 73,
-                        cy: 34,
-                        r: 2,
-                        'data-decimal': ''
-                    }));
-                }
-
-                layout(value) {
-                    const normalized = String(value);
-                    const [whole = '', fraction = ''] = normalized.split('.');
-                    return {
-                        characters: [...whole.slice(-3).padStart(3, ' '), ...fraction.slice(0, 3).padEnd(3, '0')],
-                        decimal: normalized.includes('.')
-                    };
-                }
-
-                receive(signal) {
-                    this.value = String(signal?.value ?? '0.000');
-                    this.render();
-                }
-
-                render() {
-                    const powered = !this.powerContact || this.powerContact.closed;
-                    const layout = this.layout(this.value);
-                    this.target.querySelectorAll('[data-digit-slot]').forEach((digit, slot) => {
-                        const lit = powered ? this.segmentMap[layout.characters[slot] ?? ' '] ?? '' : '';
-                        digit.querySelectorAll('[data-segment]').forEach(segment => {
-                            segment.classList.toggle('is-off', !lit.includes(segment.dataset.segment));
-                        });
-                    });
-                    this.target.querySelector('[data-decimal]').classList.toggle('is-off', !powered || !layout.decimal);
-                    this.target.dataset.timePowered = String(powered);
-                    this.target.setAttribute('aria-label', powered ? 'DC amps ' + this.value : 'DC amps unpowered');
-                }
-            }
-
             class InstrumentSignalCable {
                 constructor(source, receiver) {
                     this.source = source;
@@ -9419,12 +10432,86 @@ usort($cats, 'customStrCmp');
                 }
             }
 
+            class DcAmmeterShunt {
+                constructor(circuit, bypassLoads = []) {
+                    if (!circuit?.source || !Array.isArray(circuit.loads)) {
+                        throw new TypeError('DC ammeter shunt circuit required');
+                    }
+                    if (!Array.isArray(bypassLoads) || bypassLoads.some(load => !circuit.loads.includes(load))) {
+                        throw new TypeError('DC ammeter shunt bypass load is not in circuit');
+                    }
+                    this.circuit = circuit;
+                    this.bypassLoads = Object.freeze([...bypassLoads]);
+                }
+
+                measure() {
+                    const sourceCurrent = Math.abs(this.circuit.source.current);
+                    const bypassCurrent = this.bypassLoads.reduce(
+                        (sum, load) => sum + Math.abs(load.current || 0),
+                        0
+                    );
+                    return Math.max(0, sourceCurrent - bypassCurrent);
+                }
+            }
+
+            class DcElectricalEngine extends EventTarget {
+                constructor(circuit, frequency = 4, currentShunt = null) {
+                    super();
+                    if (!circuit || typeof circuit.solve !== 'function') {
+                        throw new TypeError('DC electrical circuit required');
+                    }
+                    if (!Number.isFinite(frequency) || frequency <= 0) {
+                        throw new TypeError('DC electrical engine frequency must be positive');
+                    }
+                    if (currentShunt !== null && typeof currentShunt.measure !== 'function') {
+                        throw new TypeError('DC electrical engine current shunt required');
+                    }
+                    this.circuit = circuit;
+                    this.frequency = frequency;
+                    this.period = 1000 / frequency;
+                    this.currentShunt = currentShunt;
+                    this.sequence = 0;
+                    this.timer = null;
+                }
+
+                pulse() {
+                    this.circuit.solve();
+                    this.sequence++;
+                    const sourceCurrent = this.circuit.source.current;
+                    this.dispatchEvent(new CustomEvent('cycle', {
+                        detail: Object.freeze({
+                            sequence: this.sequence,
+                            frequency: this.frequency,
+                            sourceCurrent,
+                            measuredCurrent: this.currentShunt?.measure() ?? sourceCurrent,
+                            sourceVoltage: this.circuit.source.nominalVoltage,
+                            tripped: this.circuit.source.tripped
+                        })
+                    }));
+                }
+
+                start() {
+                    if (this.timer !== null) return false;
+                    this.pulse();
+                    this.timer = window.setInterval(() => this.pulse(), this.period);
+                    return true;
+                }
+
+                stop() {
+                    if (this.timer === null) return false;
+                    window.clearInterval(this.timer);
+                    this.timer = null;
+                    return true;
+                }
+            }
+
             class PageBusPanel {
-                constructor(bus, control, knob, light) {
+                constructor(bus, control, knob, light, currentShunt = null) {
                     this.bus = bus;
                     this.control = control;
                     this.knob = knob;
                     this.light = light;
+                    this.currentShunt = currentShunt;
                     this.instrument = control.querySelector('#pageBusInstrument');
                     this.archiveButton = control.querySelector('#pageArchiveR2');
                     this.archive = {
@@ -9447,13 +10534,13 @@ usort($cats, 'customStrCmp');
                         ])
                     );
                     this.angles = [0, 57, 102];
+                    this.sampledSourceCurrent = currentShunt?.measure() ?? bus.circuit.source.current;
 
                     bus.selector.addEventListener('change', () => this.render());
                     [bus.tier1, bus.tier2, bus.tier3].forEach(stage => {
                         stage.addEventListener('statechange', () => this.render());
                     });
                     bus.pagePower.addEventListener('change', () => this.render());
-                    bus.circuit.addEventListener('solved', () => this.render());
                     window.addEventListener('m2archiveprogress', event => {
                         this.archive.state = event.detail?.state || 'installing';
                         this.archive.completed = Number(event.detail?.completed || 0);
@@ -9516,6 +10603,11 @@ usort($cats, 'customStrCmp');
                     this.render();
                 }
 
+                sampleElectricalCycle(event) {
+                    this.sampledSourceCurrent = event.detail.measuredCurrent;
+                    this.render();
+                }
+
                 forward() {
                     if (this.bus.selector.pulseForward()) playMechanicalSound('click');
                 }
@@ -9541,7 +10633,7 @@ usort($cats, 'customStrCmp');
                         ? Math.min(100, archiveCompleted / archiveTotal * 100).toFixed(1)
                         : (this.archive.state === 'complete' ? '100.0' : '0.0');
                     const values = {
-                        dcAmps: controlPowerAvailable ? source.current.toFixed(3) : '0.000',
+                        dcAmps: controlPowerAvailable ? this.sampledSourceCurrent.toFixed(3) : '0.000',
                         archivePercent: this.archive.state === 'fault' ? 'FAULT' : archivePercent,
                         dcVolts: controlPowerAvailable ? source.nominalVoltage.toFixed(1) : '0.0',
                         archiveCompleted: String(archiveCompleted),
@@ -9851,11 +10943,18 @@ usort($cats, 'customStrCmp');
                 const dcAmpsSignal = control.querySelector('[data-bus-signal="dcAmps"]');
                 const dcAmpsDisplay = document.getElementById('mDcAmpsDisplay');
                 if (dcAmpsSignal && dcAmpsDisplay) {
-                    new InstrumentSignalCable(dcAmpsSignal, new M2SevenSegmentReadout(dcAmpsDisplay, timeBusPower));
+                    new InstrumentSignalCable(dcAmpsSignal, mDcAmpsSegmentDisplay);
                 }
-                new PageBusPanel(bus, control, knob, light);
+                const dcAmpsShunt = new DcAmmeterShunt(
+                    bus.circuit,
+                    [bus.schematic.timeBus.loads.timeDcAmpsDisplay]
+                );
+                const panel = new PageBusPanel(bus, control, knob, light, dcAmpsShunt);
+                const electricalEngine = new DcElectricalEngine(bus.circuit, 4, dcAmpsShunt);
+                electricalEngine.addEventListener('cycle', event => panel.sampleElectricalCycle(event));
                 new StrobeField(bus.lighting, strobeField);
                 bus.powerOn();
+                electricalEngine.start();
             });
         })();
 
@@ -9888,7 +10987,7 @@ usort($cats, 'customStrCmp');
                 if (!card) return null;
                 const dur = window.__npPlaybackDuration ? window.__npPlaybackDuration(audio) : audio.duration;
                 if (!dur || !isFinite(dur)) return null;
-                const lines = card.querySelectorAll('.lrcLine');
+                const lines = card.querySelectorAll('.lrcLine:not([data-l])');
                 if (lines.length < 2) return null;
                 const segs = [];
                 for (let i = 0; i < lines.length; i++) {

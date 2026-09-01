@@ -17,27 +17,22 @@ function Get-Frame($src, $ts, $out) {
     return 0
 }
 
-$sources = Get-ChildItem -Path $imgDir -File | Where-Object { $_.Extension -match '^\.(mp4|webm|gif)$' }
+$sources = Get-ChildItem -Path $imgDir -File | Where-Object { $_.Extension -match '^\.(mp4|webm)$' }
 $made = 0; $skipped = 0; $failed = 0
 
 foreach ($s in $sources) {
     $base = [System.IO.Path]::GetFileNameWithoutExtension($s.Name)
-    $out = Join-Path $posterDir "$base.jpg"
+    $posterExtension = if ($s.Extension -ieq '.mp4') { 'png' } else { 'jpg' }
+    $out = Join-Path $posterDir "$base.$posterExtension"
 
     if ((Test-Path $out) -and -not $Force -and (Get-Item $out).LastWriteTime -ge $s.LastWriteTime) {
         $skipped++
         continue
     }
 
-    if ($s.Extension -eq '.gif') {
-        if ((Get-Frame $s.FullName 0 $out) -gt 0) { $made++ }
-        else { $failed++; Write-Host "FAIL: $($s.Name)" }
-        continue
-    }
-
     $best = 0; $bestTmp = $null
     foreach ($t in @(0, 5, 15, 30, 60, 90, 120, 180)) {
-        $tmp = Join-Path $posterDir ("_tmp_{0}_{1}.jpg" -f $base, $t)
+        $tmp = Join-Path $posterDir ("_tmp_{0}_{1}.{2}" -f $base, $t, $posterExtension)
         $sz = Get-Frame $s.FullName $t $tmp
         if ($sz -gt $best) {
             if ($bestTmp) { Remove-Item $bestTmp -Force -ErrorAction SilentlyContinue }
