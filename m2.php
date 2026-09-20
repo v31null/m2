@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-const M2_BROWSER_CACHE_VERSION = '13';
-const M2_PAGE_CODE_VERSION = '63';
+const M2_BROWSER_CACHE_VERSION = '46';
+const M2_PAGE_CODE_VERSION = '97';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -167,9 +167,9 @@ function m2_archive_inventory(): array
 {
     $root = realpath((string)$_SERVER['DOCUMENT_ROOT']);
     if ($root === false) throw new RuntimeException('Document root is unavailable');
-    $allowed = '/\.(?:mp3|mp4|webm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf|css|js)$/i';
+    $allowed = '/\.(?:mp3|wav|mp4|webm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf|css|js)$/i';
     $files = [];
-    foreach (['/m/m', '/m/img', '/css/fonts'] as $relativeDirectory) {
+    foreach (['/m/m', '/m/img', '/css/fonts', '/m/css/cursors'] as $relativeDirectory) {
         $directory = realpath($root . str_replace('/', DIRECTORY_SEPARATOR, $relativeDirectory));
         if ($directory === false || !is_dir($directory)) continue;
         $iterator = new RecursiveIteratorIterator(
@@ -289,7 +289,7 @@ if (is_dir($imgDir)) {
         }
     }
 }
-$data_stmt = $pdo->prepare('SELECT category,link_id,title,lyrics,trans,location,url,is_yes FROM song_links');
+$data_stmt = $pdo->prepare('SELECT category,link_id,title,lyrics,trans,location,url,is_yes,alt FROM song_links');
 
 $data_stmt->execute();
 $results = $data_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -315,7 +315,7 @@ foreach ($coms_by_mid as $m => $coms) {
     }
     $organized_coms[$m] = $org;
 }
-function german_to_normal_letters($text)
+function substituteforanrealnormaliserfromforeigntextsaswellasbrokendatabaseentriesþoughmostlylanguagenaturalneedsonelychangingþemaparray($text)
 {
     $text = (string)$text;
 
@@ -355,7 +355,6 @@ function german_to_normal_letters($text)
         ',' => ' ,',
         '  ,' => ' ,',
         '  :' => ' :',
-        'z ' => 'ʒ ',
         'ç' => 'č',
         'Ç' => 'Č',
         'ş' => 'ș',
@@ -388,6 +387,7 @@ function german_to_normal_letters($text)
         'Th' => 'Þ',
         'th' => 'þ',
         'TH' => 'Þ',
+        ' \'' => '‘',
         '\'' => '’',
     ];
 
@@ -440,7 +440,7 @@ function normalize_german($text)
             return $matches[1];
         }
         $part = $matches[2];
-        $part = german_to_normal_letters($part);
+        $part = substituteforanrealnormaliserfromforeigntextsaswellasbrokendatabaseentriesþoughmostlylanguagenaturalneedsonelychangingþemaparray($part);
         $part = convert_st_sp_word_starts($part);
         return $part;
     }, (string)$text);
@@ -495,7 +495,7 @@ function render_m2_lyrics(string $raw, string $style): string
             $end = $line[2] ?? null;
             $lyric = $line[3] ?? false;
             if ($text === '' && !$isLRC) continue;
-            $safe = htmlspecialchars(german_to_normal_letters($text), ENT_QUOTES, 'UTF-8');
+            $safe = htmlspecialchars(substituteforanrealnormaliserfromforeigntextsaswellasbrokendatabaseentriesþoughmostlylanguagenaturalneedsonelychangingþemaparray($text), ENT_QUOTES, 'UTF-8');
             $attributes = sprintf('data-t="%.3f"', $time);
             if ($end !== null) $attributes .= sprintf(' data-te="%.3f"', $end);
             if ($lyric) $attributes .= ' data-l="1"';
@@ -504,7 +504,7 @@ function render_m2_lyrics(string $raw, string $style): string
         }
     } else {
         if ($style !== '') printf('<span style="%s">', htmlspecialchars($style, ENT_QUOTES, 'UTF-8'));
-        echo nl2br(htmlspecialchars(german_to_normal_letters($raw), ENT_QUOTES, 'UTF-8'));
+        echo nl2br(htmlspecialchars(substituteforanrealnormaliserfromforeigntextsaswellasbrokendatabaseentriesþoughmostlylanguagenaturalneedsonelychangingþemaparray($raw), ENT_QUOTES, 'UTF-8'));
         if ($style !== '') echo '</span>';
         echo '<div class="playHead"></div>';
     }
@@ -562,14 +562,30 @@ function create_m_song_item_id(array $row): string
     return preg_replace('/[^\x20-\x7E]/', '', $id);
 }
 
+function split_m2_title(string $title): array
+{
+    $title = trim($title);
+    if (preg_match('/^\[([^\]]+)\]\s*(.+)$/us', $title, $matches)) {
+        return ['sort' => trim($matches[1]), 'display' => trim($matches[2]), 'has_sort_key' => true];
+    }
+    if (preg_match('/^(<span[^>]*>)\s*\[([^\]]+)\]\s*(.+?)(<\/span>)$/usi', $title, $matches)) {
+        return ['sort' => trim($matches[2]), 'display' => $matches[1] . trim($matches[3]) . $matches[4], 'has_sort_key' => true];
+    }
+    return ['sort' => $title, 'display' => $title, 'has_sort_key' => false];
+}
+
 foreach ($results as &$row) {
+    $parsedTitle = split_m2_title((string)($row['title'] ?? ''));
+    $row['sort_title'] = normalize_german($parsedTitle['sort']);
+    $row['display_title'] = normalize_german($parsedTitle['display']);
+    $row['sort_key_raw'] = $parsedTitle['has_sort_key'] ? $parsedTitle['sort'] : '';
+    $row['title'] = $row['display_title'];
     $row['_m_song_item_id'] = create_m_song_item_id($row);
     $row['category'] = normalize_german($row['category']);
-    $row['title'] = normalize_german($row['title']);
 }
 unset($row);
 
-$customAlphabet = [
+$fixþebrokenorderingofdefaultphpineedtomakeþisanklaßlatertobefairwellfornowweshallkeepusingþischangenotnameofþisvartwillbeanfunktionwiþtimejslaterwewillimportsotakeþisasantodoplease = [
     '0',
     '1',
     '2',
@@ -591,7 +607,7 @@ $customAlphabet = [
     'żjж',
     'zз',
     'iи',
-    'yíй',
+    'íyй',
     'kк',
     'lл',
     'mм',
@@ -612,7 +628,7 @@ $customAlphabet = [
 ];
 
 $charRanks = [];
-foreach ($customAlphabet as $rank => $chars) {
+foreach ($fixþebrokenorderingofdefaultphpineedtomakeþisanklaßlatertobefairwellfornowweshallkeepusingþischangenotnameofþisvartwillbeanfunktionwiþtimejslaterwewillimportsotakeþisasantodoplease as $rank => $chars) {
     if ((string)$chars !== '') {
         foreach (mb_str_split(mb_strtolower((string)$chars)) as $c) {
             $charRanks[$c] = $rank;
@@ -632,6 +648,13 @@ function customStrCmp($str1, $str2, $ignoreLeadingTitleMarks = false)
 
     $str1 = html_entity_decode(strip_tags((string)$str1), ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $str2 = html_entity_decode(strip_tags((string)$str2), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+    if (preg_match('/^\s*\[([^\]]+)\]/u', $str1, $m1)) {
+        $str1 = $m1[1];
+    }
+    if (preg_match('/^\s*\[([^\]]+)\]/u', $str2, $m2)) {
+        $str2 = $m2[1];
+    }
 
     if ($ignoreLeadingTitleMarks) {
         $str1 = stripLeadingTitleMarks($str1);
@@ -690,7 +713,10 @@ usort($results, function ($a, $b) {
     $catCmp = customStrCmp($a['category'], $b['category']);
     if ($catCmp !== 0) return $catCmp;
 
-    return customStrCmp($a['title'], $b['title'], true);
+    $titleCmp = customStrCmp($a['sort_title'] ?? $a['title'], $b['sort_title'] ?? $b['title'], true);
+    if ($titleCmp !== 0) return $titleCmp;
+
+    return customStrCmp($a['display_title'] ?? $a['title'], $b['display_title'] ?? $b['title'], true);
 });
 
 $cat_stmt = $pdo->query('SELECT DISTINCT category FROM song_links');
@@ -734,10 +760,15 @@ usort($cats, 'customStrCmp');
             src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/FrankRuhlLibre-VariableFont_wght.ttf'), ENT_QUOTES, 'UTF-8') ?>');
         }
 
+        @font-face {
+            font-family: anyocr;
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/BoeingCDU-Large.ttf'), ENT_QUOTES, 'UTF-8') ?>');
+        }
+
         @counter-style ca {
             system: alphabetic;
             prefix: " ( ";
-            symbols: "a" "b" "ú" "u" "ù" "g" "d" "e" "ż" "z" "i" "y" "k" "l" "m" "n" "o" "p" "r" "s" "t" "f" "ț" "č" "c" "q" "x" "h";
+            symbols: "a" "b" "ú" "u" "ù" "g" "d" "e" "ż" "z" "i" "í" "k" "l" "m" "n" "o" "p" "r" "s" "t" "f" "ț" "č" "ș" "h";
             suffix: " ) ";
             fallback: lower-alpha;
         }
@@ -763,6 +794,19 @@ usort($cats, 'customStrCmp');
 
         :root {
             --text-primary: #111111;
+            --m2-cursor-default: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_DEFAULT_ARROW.png'), ENT_QUOTES, 'UTF-8') ?>') 4 2, auto;
+            --m2-cursor-pointer: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_POINTING_HAND.png'), ENT_QUOTES, 'UTF-8') ?>') 10 3, pointer;
+            --m2-cursor-grab: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_GRABBING_HAND_OPEN.png'), ENT_QUOTES, 'UTF-8') ?>') 15 17, grab;
+            --m2-cursor-grabbing: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_GRABBING_HAND_CLOSED.png'), ENT_QUOTES, 'UTF-8') ?>') 15 15, grabbing;
+            --m2-cursor-curvy-left: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_BIG_CURVY_ARROW_LEFT.png'), ENT_QUOTES, 'UTF-8') ?>') 20 10, pointer;
+            --m2-cursor-curvy-right: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_BIG_CURVY_ARROW_RIGHT.png'), ENT_QUOTES, 'UTF-8') ?>') 8 10, pointer;
+            --m2-cursor-small-curvy-left: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_SMALL_CURVY_ARROW_LEFT.png'), ENT_QUOTES, 'UTF-8') ?>') 20 10, pointer;
+            --m2-cursor-small-curvy-right: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_SMALL_CURVY_ARROW_RIGHT.png'), ENT_QUOTES, 'UTF-8') ?>') 8 10, pointer;
+            --m2-cursor-upside-down-curvy-left: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_UPSIDEDOWN_CURVY_ARROW_LEFT.png'), ENT_QUOTES, 'UTF-8') ?>') 20 10, pointer;
+            --m2-cursor-upside-down-curvy-right: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_UPSIDEDOWN_CURVY_ARROW_RIGHT.png'), ENT_QUOTES, 'UTF-8') ?>') 8 9, pointer;
+            --m2-cursor-switch-left: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_LEFT_ARROW.png'), ENT_QUOTES, 'UTF-8') ?>') 29 7, pointer;
+            --m2-cursor-switch-right: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_RIGHT_ARROW.png'), ENT_QUOTES, 'UTF-8') ?>') 2 7, pointer;
+            --m2-cursor-switch-both: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/cursors/MOUSE_LEFT_RIGHT_ARROW.png'), ENT_QUOTES, 'UTF-8') ?>') 15 15, pointer;
         }
 
         body {
@@ -774,7 +818,14 @@ usort($cats, 'customStrCmp');
             padding-right: 130px;
             padding-left: 60px;
             box-sizing: border-box;
-            overflow-x: hidden
+            overflow-x: hidden;
+            cursor: var(--m2-cursor-default)
+        }
+
+        a[href],
+        button:not(:disabled),
+        [role="button"] {
+            cursor: var(--m2-cursor-pointer);
         }
 
         .tBar {
@@ -847,7 +898,7 @@ usort($cats, 'customStrCmp');
             width: 100%;
             text-align: center;
             padding: 6px 10px;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             font-style: italic;
             font-size: 1.1em;
             border: 1px solid white;
@@ -867,11 +918,11 @@ usort($cats, 'customStrCmp');
         .cardWrap {
             display: flex;
             flex-direction: row;
-            cursor: pointer
+            cursor: var(--m2-cursor-pointer)
         }
 
         .cSide {
-            cursor: auto;
+            cursor: var(--m2-cursor-default);
             user-select: none;
             width: 25px;
             min-width: 25px;
@@ -887,7 +938,7 @@ usort($cats, 'customStrCmp');
         }
 
         .cSide * {
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             color: white;
             text-decoration: none
         }
@@ -932,7 +983,7 @@ usort($cats, 'customStrCmp');
             justify-content: center;
             position: relative;
             overflow: hidden;
-            cursor: pointer
+            cursor: var(--m2-cursor-pointer)
         }
 
         .cImg img,
@@ -982,10 +1033,11 @@ usort($cats, 'customStrCmp');
             mix-blend-mode: difference;
             pointer-events: none;
             z-index: 5;
+            
         }
 
         .cLyr.hasPlayHead {
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
         }
 
         .pfp-stack {
@@ -1002,7 +1054,7 @@ usort($cats, 'customStrCmp');
             height: 1lh;
             border-radius: 50%;
             object-fit: cover;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             margin-left: -0.6em;
             border: 1px solid black;
         }
@@ -1134,6 +1186,23 @@ usort($cats, 'customStrCmp');
         #rBar #lBtn {
             padding: 0 2px;
             font-size: 1em;
+            cursor: var(--m2-cursor-grab);
+            transform-origin: center;
+            transition: transform .16s ease;
+            touch-action: none;
+        }
+
+        #rBar #lBtn.lPopped {
+            transform: scale(1.4);
+        }
+
+        #rBar #lBtn.lInactive {
+            cursor: var(--m2-cursor-pointer);
+        }
+
+        #rBar #lBtn.m2CursorGrabbing {
+            cursor: var(--m2-cursor-grabbing);
+            transition: none;
         }
 
         #rBar button,
@@ -1141,7 +1210,7 @@ usort($cats, 'customStrCmp');
             background: none;
             border: none;
             color: white;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             font-family: inherit;
             font-size: 1.2em;
             text-decoration: none;
@@ -1167,7 +1236,7 @@ usort($cats, 'customStrCmp');
             background: rgba(255, 255, 255, .2);
             margin: 4px 0;
             position: relative;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
         }
 
         #speedWrapWrap,
@@ -1243,7 +1312,7 @@ usort($cats, 'customStrCmp');
             left: 50%;
             transform: translate(-50%, -50%);
             top: 0%;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             z-index: 2
         }
 
@@ -1269,7 +1338,7 @@ usort($cats, 'customStrCmp');
             background: transparent;
             outline: none;
             margin: 0;
-            cursor: pointer
+            cursor: var(--m2-cursor-pointer)
         }
 
         #volSlider::-webkit-slider-runnable-track {
@@ -1323,7 +1392,7 @@ usort($cats, 'customStrCmp');
             padding: 3px 2px;
             white-space: pre-line;
             line-height: 1.1;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
         }
 
         .tJumpCat:hover,
@@ -1499,7 +1568,7 @@ usort($cats, 'customStrCmp');
         }
 
         .seekRadialControl {
-            cursor: crosshair;
+            cursor: var(--m2-cursor-pointer);
             outline: none;
         }
 
@@ -1562,7 +1631,7 @@ usort($cats, 'customStrCmp');
         }
 
         .seekRadialSet {
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             outline: none;
         }
 
@@ -1597,7 +1666,7 @@ usort($cats, 'customStrCmp');
         }
 
         .seekRadialKnobControl {
-            cursor: ns-resize;
+            cursor: var(--m2-cursor-pointer);
             outline: none;
         }
 
@@ -1648,13 +1717,9 @@ usort($cats, 'customStrCmp');
             background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform-origin: 49.5% 55.2%;
             transform: rotate(0deg);
-            cursor: grab;
+            cursor: var(--m2-cursor-pointer);
             touch-action: none;
             margin: 4px auto;
-        }
-
-        .mKnob.dragging {
-            cursor: grabbing;
         }
 
         .mKnob2 {
@@ -1663,13 +1728,9 @@ usort($cats, 'customStrCmp');
             background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/rotate.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform-origin: 50% 50%;
             transform: rotate(0deg);
-            cursor: grab;
+            cursor: var(--m2-cursor-pointer);
             touch-action: none;
             margin: 4px auto;
-        }
-
-        .mKnob2.dragging {
-            cursor: grabbing;
         }
 
         .mKnobsWrap {
@@ -1689,7 +1750,7 @@ usort($cats, 'customStrCmp');
             background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform-origin: 49.5% 55.2%;
             transform: translate(-49.5%, -55.2%) rotate(0deg);
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             touch-action: none;
         }
 
@@ -1794,7 +1855,7 @@ usort($cats, 'customStrCmp');
             top: 50%;
             width: var(--msw);
             transform: translate(-49.2%, -49.1%);
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             touch-action: none;
             user-select: none;
         }
@@ -1802,7 +1863,7 @@ usort($cats, 'customStrCmp');
         .mBtn {
             height: var(--knob-h);
             width: auto;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             user-select: none;
             touch-action: none;
             -webkit-user-drag: none;
@@ -1833,7 +1894,7 @@ usort($cats, 'customStrCmp');
             text-align: center;
             line-height: 1em;
             vertical-align: middle;
-            cursor: pointer
+            cursor: var(--m2-cursor-pointer)
         }
 
         audio::-webkit-media-controls-panel,
@@ -1915,7 +1976,7 @@ usort($cats, 'customStrCmp');
             height: 1lh;
             border-radius: 50%;
             object-fit: cover;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             transition: all 0.2s;
         }
 
@@ -2107,7 +2168,7 @@ usort($cats, 'customStrCmp');
                 height: 1.3em;
                 border-radius: 50%;
                 object-fit: cover;
-                cursor: pointer;
+                cursor: var(--m2-cursor-pointer);
                 margin-left: -0.5em;
                 border: 1px solid black;
             }
@@ -2204,7 +2265,7 @@ usort($cats, 'customStrCmp');
                 color: var(--text-primary, #111111);
                 border: 1px solid rgba(0, 0, 0, 0.1);
                 border-radius: 50%;
-                cursor: pointer;
+                cursor: var(--m2-cursor-pointer);
                 align-items: center;
                 justify-content: center;
                 transition: all 0.2s ease;
@@ -2323,8 +2384,59 @@ usort($cats, 'customStrCmp');
             height: var(--knob-h);
             transform: translate(-49.5%, -55.2%) rotate(0deg);
             transform-origin: 50% 50%;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             touch-action: none;
+        }
+
+        .mKnob.m2CursorLeft,
+        .mKnob2.m2CursorLeft,
+        .mKnobsWrap .mKdial.m2CursorLeft,
+        .pageBusKnob.m2CursorLeft {
+            cursor: var(--m2-cursor-curvy-left);
+        }
+
+        .mKnob.m2CursorRight,
+        .mKnob2.m2CursorRight,
+        .mKnobsWrap .mKdial.m2CursorRight,
+        .pageBusKnob.m2CursorRight {
+            cursor: var(--m2-cursor-curvy-right);
+        }
+
+        #seekRadialSectionKnob.m2CursorLeft {
+            cursor: var(--m2-cursor-upside-down-curvy-left);
+        }
+
+        #seekRadialSectionKnob.m2CursorRight {
+            cursor: var(--m2-cursor-upside-down-curvy-right);
+        }
+
+        #seekRadialTimeKnob.m2CursorLeft {
+            cursor: var(--m2-cursor-small-curvy-left);
+        }
+
+        #seekRadialTimeKnob.m2CursorRight {
+            cursor: var(--m2-cursor-small-curvy-right);
+        }
+
+        .mKnob.dragging,
+        .mKnob2.dragging,
+        .mKnob.m2CursorGrabbing,
+        .mKnob2.m2CursorGrabbing,
+        #seekRadialSectionKnob.m2CursorGrabbing,
+        #seekRadialTimeKnob.m2CursorGrabbing {
+            cursor: var(--m2-cursor-grabbing);
+        }
+
+        .mSwimg[data-m2-switch-cursor="left"] {
+            cursor: var(--m2-cursor-switch-left);
+        }
+
+        .mSwimg[data-m2-switch-cursor="right"] {
+            cursor: var(--m2-cursor-switch-right);
+        }
+
+        .mSwimg[data-m2-switch-cursor="both"] {
+            cursor: var(--m2-cursor-switch-both);
         }
 
         .pageBusLight {
@@ -2553,7 +2665,7 @@ usort($cats, 'customStrCmp');
             flex-direction: column;
             background: #000;
             color: #fff;
-            cursor: pointer;
+            cursor: var(--m2-cursor-pointer);
             font-family: Arial, Helvetica, sans-serif;
             text-align: center;
         }
@@ -2607,6 +2719,269 @@ usort($cats, 'customStrCmp');
             overflow-wrap: anywhere;
         }
 
+        #mTerminal {
+            display: flex;
+            width: max-content;
+            max-width: 100%;
+            min-width: 0;
+            margin: 0 0 24px;
+            padding: 12px 20px;
+            align-items: flex-start;
+            gap: 34px;
+            background: #000;
+            color: #fff;
+            border: 1px solid #fff;
+            font-size: 16px;
+            overflow-x: auto;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #mTerminal,
+        #mTerminal * {
+            font-family: anyocr, monospace;
+        }
+
+        .mTerminalConsole {
+            display: grid;
+            grid-template-columns: 38px minmax(380px, 470px) 38px;
+            align-items: start;
+            gap: 14px;
+            flex: 0 0 auto;
+        }
+
+        .mTerminalDashColumn {
+            display: grid;
+            height: 356px;
+            padding-top: 48px;
+            grid-template-rows: repeat(8, 50px);
+            align-content: start;
+        }
+
+        .mTerminalDash,
+        .mTerminalKey {
+            min-width: 0;
+            border: 1px solid #fff;
+            border-radius: 2px;
+            background: #000;
+            color: #fff;
+            cursor: var(--m2-cursor-pointer);
+            font: inherit;
+            line-height: 0;
+        }
+
+        .mTerminalDash {
+            width: 38px;
+            display: inline-flex;
+            height: 24px;
+            padding: 0px;
+            align-self: start;
+            margin-top: 18.5px;
+            font-size: 2.2em;
+            line-height: 0.4;
+            padding-left: 8px;
+        }
+
+        #mTerminalScreen {
+            display: grid;
+            min-width: 0;
+            height: 356px;
+            grid-template-columns: minmax(0, 1fr);
+            grid-template-rows: 48px minmax(0, 1fr) 58px;
+            border: 1px solid #fff;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .mTerminalRow {
+            display: grid;
+            min-width: 0;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .mTerminalHeader {
+            position: relative;
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .mTerminalHeader span,
+        .mTerminalInput span,
+        .mTerminalSide span {
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            padding: 0 9px;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .mTerminalSide:last-child span {
+            width: 100%;
+            justify-content: flex-end;
+            text-align: right;
+        }
+
+        .mTerminalHeader span:first-child {
+            font-size: 1.3em;
+        }
+
+        .mTerminalHeader span:last-child {
+            position: absolute;
+            right: 0;
+            font-size: 14px;
+        }
+
+        .mTerminalRows {
+            display: grid;
+            min-width: 0;
+            height: 400px;
+            grid-template-rows: repeat(8, minmax(0, 1fr));
+        }
+
+        .mTerminalSide {
+            min-width: 0;
+            flex-direction: column;
+            justify-content: space-around;
+        }
+
+        .mTerminalMain {
+            font-size: 1.5em;
+        }
+
+        .mTerminalTitle {
+            font-size: .85em;
+            min-height: 1.4em;
+        }
+
+        .mTerminalInput {
+            display: grid;
+            min-width: 0;
+            grid-template-rows: repeat(2, minmax(0, 1fr));
+            align-items: center;
+            position: relative;
+            background: #000;
+        }
+
+        .mTerminalInput span:first-child {
+            font-size: .85em;
+        }
+
+        .mTerminalInput span:last-child {
+            font-size: 1.5em;
+            margin-bottom: 0.6em;
+        }
+
+        .mTerminalKeys {
+            display: flex;
+            flex: 0 0 auto;
+            align-items: flex-start;
+            gap: 30px;
+        }
+
+        .mTerminalKeyGrid {
+            display: grid;
+            grid-template-columns: repeat(5, 46px);
+            column-gap: 10px;
+            row-gap: 16px;
+        }
+
+        .mTerminalNumeralSection {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .mTerminalSpecialisenBox {
+            display: grid;
+            width: 270px;
+            height: 176px;
+            box-sizing: border-box;
+            grid-template-columns: repeat(5, 46px);
+            column-gap: 4px;
+            row-gap: 10px;
+            align-content: start;
+            margin-top: 16px;
+            padding: 8px;
+            border: 1px solid #fff;
+        }
+
+        .mTerminalSpecialButton,
+        .mTerminalSave {
+            min-width: 0;
+            height: 46px;
+            border: 1px solid #fff;
+            border-radius: 2px;
+            background: #000;
+            color: #fff;
+            cursor: var(--m2-cursor-pointer);
+            font: inherit;
+            line-height: 0;
+        }
+
+        .mTerminalSpecialButton {
+            width: 46px;
+            transition: transform .08s ease;
+        }
+
+        .mTerminalSpecialButton:active {
+            transform: translateY(2px);
+        }
+
+        .mTerminalSave {
+            position: relative;
+            grid-column: span 2;
+        }
+
+        .mTerminalSaveLight {
+            position: absolute;
+            right: 8px;
+            bottom: 7px;
+            left: 8px;
+            height: 2px;
+            background: #000;
+        }
+
+        .mTerminalSave.is-saving .mTerminalSaveLight {
+            background: #fff;
+            box-shadow: 0 0 8px #fff;
+        }
+
+        .mTerminalKey {
+    width: 46px;
+    display: inline-flex;
+    height: 46px;
+    padding: 0px;
+    line-height: 2;
+    padding-left: 17px;
+    font-size: 1.25em;
+    transition: transform .08s ease;
+        }
+.mTerminalNumeralSection > .mTerminalKeyGrid > .mTerminalKey {
+    width: 2.2em;
+    height: 2.2em;
+}
+        .mTerminalKey:active {
+            transform: translateY(2px);
+        }
+
+        .mTerminalNumeralSection .mTerminalKey {
+            border-radius: 50%;
+        }
+
+        .mTerminalKeyWord {
+    font-size: .8em;
+    line-height: 3.4;
+    padding-left: 15px;
+        }
+
+        @media (max-width: 900px) {
+            #mTerminal {
+                padding: 16px;
+            }
+        }
+
     </style>
 </head>
 
@@ -2650,7 +3025,7 @@ usort($cats, 'customStrCmp');
         </div>
     </div>
     <div class="tBar">
-        <a id="npTitle" style="color:inherit;text-decoration:none;cursor:pointer">―</a>
+        <a id="npTitle" style="color:inherit;text-decoration:none;cursor:var(--m2-cursor-pointer)">―</a>
         <div id="srch" contenteditable="true"></div>
     </div>
     <div class="uBox">
@@ -2766,7 +3141,7 @@ usort($cats, 'customStrCmp');
                 $cLeftHTML .= '<img data-src="' . htmlspecialchars($pfp, ENT_QUOTES) . '" onclick="openComFromPfp(event, ' . $c['id'] . ', this)">';
             }
             $cLeftHTML .= '</div>';
-        ?><div class="cardWrap" data-category="<?= htmlspecialchars($rowCat, ENT_QUOTES, 'UTF-8') ?>">
+        ?><div class="cardWrap" data-category="<?= htmlspecialchars($rowCat, ENT_QUOTES, 'UTF-8') ?>"<?php if (!empty($row['sort_key_raw'])): ?> data-sort-key="<?= htmlspecialchars((string)$row['sort_key_raw'], ENT_QUOTES, 'UTF-8') ?>"<?php endif; ?>>
                 <?= $cLeftHTML ?>
                 <div class="card" id="<?= $id ?>" data-title="<?= htmlspecialchars((string)$row['title'], ENT_QUOTES, 'UTF-8') ?>" data-art="<?= htmlspecialchars($artPath, ENT_QUOTES, 'UTF-8') ?>">
                     <button class="mob-copy-btn" onclick="event.stopPropagation();copyLinkId('<?= $id ?>')">§</button>
@@ -2780,9 +3155,9 @@ usort($cats, 'customStrCmp');
                                 if (in_array($ext, ['mp4', 'webm'])):
                                     $isSync = !empty($row['is_yes']);
                             ?>
-                                    <video <?= $isSync ? 'loop muted playsinline preload="none" data-sync="true"' : 'autoplay loop muted playsinline' ?> style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1" data-src="<?= $fullPath ?>"></video>
+                                    <video <?= $isSync ? 'loop muted playsinline preload="none" data-sync="true"' : 'autoplay loop muted playsinline' ?> alt="<?= htmlspecialchars((string)($row['alt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1" data-src="<?= $fullPath ?>"></video>
                                 <?php else: ?>
-                                    <img data-src="<?= $fullPath ?>" style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1">
+                                    <img data-src="<?= $fullPath ?>" alt="<?= htmlspecialchars((string)($row['alt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" style="position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;z-index:1">
                             <?php
                                 endif;
                             endif;
@@ -2818,7 +3193,7 @@ usort($cats, 'customStrCmp');
                 $catLetters = [];
                 foreach ($results as $row) {
                     $cat = trim((string)$row['category']);
-                    $title = trim((string)$row['title']);
+                    $title = trim((string)($row['sort_title'] ?? $row['title']));
                     if ($cat === '' || $title === '') continue;
                     $plainTitle = stripLeadingTitleMarks(trim(html_entity_decode(strip_tags($title), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
                     if ($plainTitle === '') continue;
@@ -2826,7 +3201,7 @@ usort($cats, 'customStrCmp');
                     $firstChar = mb_strtoupper($rawFirstLower, 'UTF-8');
                     if (isset($charRanks[$rawFirstLower])) {
                         $rank = $charRanks[$rawFirstLower];
-                        $canonicalLower = mb_substr($customAlphabet[$rank], 0, 1, 'UTF-8');
+                        $canonicalLower = mb_substr($fixþebrokenorderingofdefaultphpineedtomakeþisanklaßlatertobefairwellfornowweshallkeepusingþischangenotnameofþisvartwillbeanfunktionwiþtimejslaterwewillimportsotakeþisasantodoplease[$rank], 0, 1, 'UTF-8');
                         $firstChar = mb_strtoupper($canonicalLower, 'UTF-8');
                     }
                     if (!isset($catLetters[$cat][$firstChar])) {
@@ -2995,6 +3370,94 @@ usort($cats, 'customStrCmp');
             <div class="mUnderPanelFuture" aria-hidden="true"></div>
         </div>
     </section>
+    <section id="mTerminal">
+        <div class="mTerminalConsole">
+            <div class="mTerminalDashColumn">
+                <button type="button" class="mTerminalDash" data-terminal-field="1">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="2">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="3">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="4">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="5">—</button>
+            </div>
+            <div id="mTerminalScreen">
+                <div class="mTerminalHeader"><span>ABVUWE</span><span>P.1/1</span></div>
+                <div class="mTerminalRows">
+                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 1</span><span class="mTerminalMain" data-terminal-field="1"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 6</span><span class="mTerminalMain" data-terminal-field="6"></span></div></div>
+                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 2</span><span class="mTerminalMain" data-terminal-field="2"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 7</span><span class="mTerminalMain" data-terminal-field="7"></span></div></div>
+                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 3</span><span class="mTerminalMain" data-terminal-field="3"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 8</span><span class="mTerminalMain" data-terminal-field="8"></span></div></div>
+                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 4</span><span class="mTerminalMain" data-terminal-field="4"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 9</span><span class="mTerminalMain" data-terminal-field="9"></span></div></div>
+                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 5</span><span class="mTerminalMain" data-terminal-field="5"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 10</span><span class="mTerminalMain" data-terminal-field="10"></span></div></div>
+                </div>
+                <div class="mTerminalInput"><span>------------------------------------------------------------</span><span></span></div>
+            </div>
+            <div class="mTerminalDashColumn">
+                <button type="button" class="mTerminalDash" data-terminal-field="6">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="7">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="8">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="9">—</button>
+                <button type="button" class="mTerminalDash" data-terminal-field="10">—</button>
+            </div>
+        </div>
+        <div class="mTerminalKeys">
+            <div class="mTerminalKeyGrid">
+                <button type="button" class="mTerminalKey">A</button>
+                <button type="button" class="mTerminalKey">B</button>
+                <button type="button" class="mTerminalKey">C</button>
+                <button type="button" class="mTerminalKey">D</button>
+                <button type="button" class="mTerminalKey">E</button>
+                <button type="button" class="mTerminalKey">F</button>
+                <button type="button" class="mTerminalKey">G</button>
+                <button type="button" class="mTerminalKey">H</button>
+                <button type="button" class="mTerminalKey">I</button>
+                <button type="button" class="mTerminalKey">J</button>
+                <button type="button" class="mTerminalKey">K</button>
+                <button type="button" class="mTerminalKey">L</button>
+                <button type="button" class="mTerminalKey">M</button>
+                <button type="button" class="mTerminalKey">N</button>
+                <button type="button" class="mTerminalKey">O</button>
+                <button type="button" class="mTerminalKey">P</button>
+                <button type="button" class="mTerminalKey">Q</button>
+                <button type="button" class="mTerminalKey">R</button>
+                <button type="button" class="mTerminalKey">S</button>
+                <button type="button" class="mTerminalKey">T</button>
+                <button type="button" class="mTerminalKey">U</button>
+                <button type="button" class="mTerminalKey">V</button>
+                <button type="button" class="mTerminalKey">W</button>
+                <button type="button" class="mTerminalKey">X</button>
+                <button type="button" class="mTerminalKey">Y</button>
+                <button type="button" class="mTerminalKey">Z</button>
+                <button type="button" class="mTerminalKey mTerminalKeyWord">SP</button>
+                <button type="button" class="mTerminalKey mTerminalKeyWord">DL</button>
+                <button type="button" class="mTerminalKey">/</button>
+                <button type="button" class="mTerminalKey mTerminalKeyWord">BS</button>
+            </div>
+            <div class="mTerminalNumeralSection">
+                <div class="mTerminalKeyGrid">
+                    <button type="button" class="mTerminalKey">0</button>
+                    <button type="button" class="mTerminalKey">1</button>
+                    <button type="button" class="mTerminalKey">2</button>
+                    <button type="button" class="mTerminalKey">3</button>
+                    <button type="button" class="mTerminalKey">4</button>
+                    <button type="button" class="mTerminalKey">5</button>
+                    <button type="button" class="mTerminalKey">6</button>
+                    <button type="button" class="mTerminalKey">7</button>
+                    <button type="button" class="mTerminalKey">8</button>
+                    <button type="button" class="mTerminalKey">9</button>
+                    <button type="button" class="mTerminalKey">-</button>
+                    <button type="button" class="mTerminalKey">+</button>
+                    <button type="button" class="mTerminalKey">.</button>
+                    <button type="button" class="mTerminalKey">,</button>
+                    <button type="button" class="mTerminalKey">*</button>
+                </div>
+                <div class="mTerminalSpecialisenBox">
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="first">FP</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="last">LP</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="index">IN</button>
+                    <button type="button" class="mTerminalSave" data-terminal-special="save">SAVE<span class="mTerminalSaveLight"></span></button>
+                </div>
+            </div>
+        </div>
+    </section>
     <button id="spawn" class="ctlBtn" style="position:fixed;left:10px;bottom:10px;z-index:9999;display:none">J</button>
     <datalist id="catList">
         <?php foreach ($cats as $c) {
@@ -3005,6 +3468,42 @@ usort($cats, 'customStrCmp');
     <script>
         const M2_BROWSER_CACHE_VERSION = <?= json_encode(M2_BROWSER_CACHE_VERSION, JSON_UNESCAPED_SLASHES) ?>;
         const M2_PAGE_CODE_VERSION = <?= json_encode(M2_PAGE_CODE_VERSION, JSON_UNESCAPED_SLASHES) ?>;
+
+        const blockBrowserContextMenu = target => {
+            target.addEventListener('contextmenu', event => event.preventDefault(), true);
+        };
+        blockBrowserContextMenu(document);
+        document.addEventListener('DOMContentLoaded', () => {
+            const frame = document.getElementById('comFrame');
+            frame?.addEventListener('load', () => {
+                if (frame.contentDocument) blockBrowserContextMenu(frame.contentDocument);
+            });
+        });
+
+        function bindM2DirectionalCursor(element, grabbable) {
+            if (!element) return;
+            const update = event => {
+                const rect = element.getBoundingClientRect();
+                const right = event.clientX >= rect.left + rect.width / 2;
+                element.classList.toggle('m2CursorRight', right);
+                element.classList.toggle('m2CursorLeft', !right);
+            };
+            const release = () => element.classList.remove('m2CursorGrabbing');
+            element.addEventListener('pointerenter', update);
+            element.addEventListener('pointermove', update);
+            element.addEventListener('pointerdown', event => {
+                if (event.button !== 0) return;
+                update(event);
+                if (grabbable) element.classList.add('m2CursorGrabbing');
+            });
+            element.addEventListener('pointerup', release);
+            element.addEventListener('pointercancel', release);
+            element.addEventListener('lostpointercapture', release);
+            element.addEventListener('pointerleave', event => {
+                element.classList.remove('m2CursorLeft', 'm2CursorRight');
+                if (!element.hasPointerCapture?.(event.pointerId)) release();
+            });
+        }
 
         class ThreeBarCircuitBreaker {
             static sequence = 0;
@@ -3048,6 +3547,7 @@ usort($cats, 'customStrCmp');
                 this.closed = next;
                 this.synchronizeState();
                 if (emit) {
+                    panelSoundBank.play('PRSTButtonOut');
                     this.host.dispatchEvent(new CustomEvent('breakercommand', {
                         bubbles: true,
                         detail: {
@@ -4387,20 +4887,55 @@ usort($cats, 'customStrCmp');
 
 
 
+        const PANEL_SOUND_GROUPS = {
+            ambient: ['177453744'],
+            lHold: ['111819169'],
+            lRelease: ['346954404'],
+            lClickIn: ['914468481'],
+            attendantcall: ['631327589'],
+            mPl: ['724533677', '735346396'],
+            mR2: ['908114107', '114859927'],
+            MCPFD: ['47948028', '107515464', '327588892', '829893984', '1071964624'],
+            fmcbutton: ['23241251', '32529879', '193750109', '469742299', '648317260', '919666272', '927494565', '947016727'],
+            RadioKnobSmall: ['248188445', '707423860', '889538338', '890116213', '991818329'],
+            RadioKnobLarge: ['188329246', '225809707', '646941696', '965108196', '1063255697'],
+            MCPAltRotary: ['118362385', '231899970', '261572059', '279596147', '382269597', '430349130', '733227784', '786115389'],
+            MCPVSRotary: ['665625102', '676588915', '841433751', '894826028', '1022663785', '1048800092'],
+            apuswitchonoff: ['170719619', '177501697', '820688366', '914468481'],
+            LLGangBarOn: ['171057543', '185280866', '230386663', '310757194', '349497041', '375577561', '397341398', '428440949', '523923703', '672653334', '776937022', '798009520', '901634826', '938498470', '1044353637'],
+            LandingLightSwitch: ['171057543', '310757194', '349497041', '523923703', '776937022', '798009520', '901634826', '938498470'],
+            genswitch: ['270312930', '600825204', '830737197', '906891840'],
+            GroundStartRelease: ['23849211', '96279692', '582713912'],
+            PRSTButtonOut: ['460872579', '533713888', '591444713', '751895121'],
+            GearHorn: ['512845995'],
+            outerHand: ['417087732'],
+            innerHand: ['755522096']
+        };
+        PANEL_SOUND_GROUPS.landingLights = [...new Set([
+            ...PANEL_SOUND_GROUPS.LLGangBarOn,
+            ...PANEL_SOUND_GROUPS.LandingLightSwitch
+        ])];
+        Object.freeze(PANEL_SOUND_GROUPS);
+        const PANEL_SOUND_LOOPS = Object.freeze({
+            '177453744': [29245 / 48000, 150025 / 48000],
+            '111819169': [8604 / 44100, 36992 / 44100],
+            '417087732': [48073 / 44100, 251783 / 44100],
+            '755522096': [78221 / 44100, 222247 / 44100]
+        });
+        const PANEL_WAV_IDS = [...new Set(Object.values(PANEL_SOUND_GROUPS).flat())];
+
         const UI_SOUND_FILES = {
             chime: '/m/img/chime.mp3',
-            chimetwice: '/m/img/chimetwice.mp3',
             arm: '/m/img/arm.mp3',
             noava: '/m/img/noava.mp3',
             click: '/m/img/click.mp3',
-            firealarm: '/m/img/fire-alarm.mp3',
-            singelpress: '/m/img/singelpress.mp3'
+            firealarm: '/m/img/fire-alarm.mp3'
         };
         const MECHANICAL_SOUND_NAMES = new Set([
-            'arm', 'click', 'singelpress'
+            'arm', 'click'
         ]);
         const ELECTRICAL_SOUND_NAMES = new Set([
-            'chime', 'chimetwice', 'noava'
+            'chime', 'noava'
         ]);
         const uiAudio = {};
         const ASSET = {};
@@ -4441,25 +4976,494 @@ usort($cats, 'customStrCmp');
             });
         }
 
+        const panelSoundBank = (() => {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            let context = null;
+            const buffers = new Map();
+            const loading = new Map();
+            const active = new Set();
+            const held = new Map();
+            const hands = new Map();
+            const rotary = new Map();
+            const rotaryTextures = new Map();
+            const innerMotion = {
+                bed: null, intro: null, outro: null, idleTimer: null,
+                phase: 'idle', rate: NaN, level: NaN,
+                lastUpdate: -Infinity, lastOutroStart: -Infinity
+            };
+
+            const getContext = () => context || (context = new AudioContext({ latencyHint: 'interactive' }));
+            const unlock = () => {
+                const ctx = getContext();
+                if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            };
+            const load = id => {
+                if (buffers.has(id)) return Promise.resolve(buffers.get(id));
+                if (loading.has(id)) return loading.get(id);
+                const pending = fetchRequiredBlob('/m/img/' + id + '.wav')
+                    .then(blob => blob.arrayBuffer())
+                    .then(bytes => getContext().decodeAudioData(bytes))
+                    .then(buffer => {
+                        buffers.set(id, buffer);
+                        return buffer;
+                    })
+                    .catch(error => {
+                        loading.delete(id);
+                        throw error;
+                    });
+                loading.set(id, pending);
+                return pending;
+            };
+
+            const choose = group => {
+                const ids = PANEL_SOUND_GROUPS[group];
+                return ids?.length ? ids[Math.floor(Math.random() * ids.length)] : null;
+            };
+
+            const stop = (slot, fade = 0.04) => {
+                if (!slot || slot.stopping) return;
+                slot.stopping = true;
+                const time = getContext().currentTime;
+                if (typeof slot.gain.gain.cancelAndHoldAtTime === 'function') {
+                    slot.gain.gain.cancelAndHoldAtTime(time);
+                } else {
+                    const level = slot.gain.gain.value;
+                    slot.gain.gain.cancelScheduledValues(time);
+                    slot.gain.gain.setValueAtTime(level, time);
+                }
+                slot.gain.gain.linearRampToValueAtTime(0, time + fade);
+                try { slot.source.stop(time + fade); } catch (error) {}
+            };
+
+            const start = (id, { loop = false, electrical = false, gain = 1, offset = 0, duration = null, bufferOverride = null, lowpass = null } = {}) => {
+                const buffer = bufferOverride || buffers.get(id);
+                if (!buffer || (electrical && !soundCircuit.powerContact.closed)) return null;
+                const ctx = getContext();
+                unlock();
+                const source = ctx.createBufferSource();
+                const level = ctx.createGain();
+                source.buffer = buffer;
+                source.loop = loop;
+                if (loop && PANEL_SOUND_LOOPS[id]) {
+                    source.loopStart = PANEL_SOUND_LOOPS[id][0];
+                    source.loopEnd = PANEL_SOUND_LOOPS[id][1];
+                }
+                level.gain.value = gain * (electrical ? soundCircuit.volume.value : 1);
+                const filter = lowpass === null ? null : ctx.createBiquadFilter();
+                if (filter) {
+                    filter.type = 'lowpass';
+                    filter.frequency.value = lowpass;
+                    source.connect(filter);
+                    filter.connect(level);
+                } else {
+                    source.connect(level);
+                }
+                level.connect(ctx.destination);
+                const slot = { source, gain: level, baseGain: gain, electrical, stopping: false };
+                active.add(slot);
+                source.onended = () => {
+                    active.delete(slot);
+                    if (innerMotion.bed === slot) innerMotion.bed = null;
+                    if (innerMotion.intro === slot) innerMotion.intro = null;
+                    if (innerMotion.outro === slot) innerMotion.outro = null;
+                    rotary.forEach(state => {
+                        if (state.bed === slot) state.bed = null;
+                        state.clicks.delete(slot);
+                    });
+                    source.disconnect();
+                    if (filter) filter.disconnect();
+                    level.disconnect();
+                };
+                if (duration === null) source.start(0, offset);
+                else source.start(0, offset, duration);
+                return slot;
+            };
+
+            const play = (group, options = {}) => {
+                const id = choose(group);
+                if (!id) return null;
+                if (!buffers.has(id)) {
+                    load(id).then(() => start(id, options)).catch(() => {});
+                    return null;
+                }
+                return start(id, options);
+            };
+
+            const rotaryTexture = group => {
+                if (rotaryTextures.has(group)) return rotaryTextures.get(group);
+                const base = buffers.get(PANEL_SOUND_GROUPS[group]?.[0]);
+                if (!base) return null;
+                const rate = base.sampleRate;
+                const offset = Math.round(rate * 0.014);
+                const length = Math.round(rate * 0.065);
+                const overlap = Math.round(rate * 0.012);
+                const texture = getContext().createBuffer(base.numberOfChannels, length, rate);
+                for (let channel = 0; channel < base.numberOfChannels; channel++) {
+                    const input = base.getChannelData(channel);
+                    const output = texture.getChannelData(channel);
+                    for (let index = 0; index < length; index++) {
+                        const value = input[offset + index] || 0;
+                        output[index] = index < overlap ?
+                            (input[offset + length + index] || 0) * (1 - index / overlap) + value * (index / overlap) :
+                            value;
+                    }
+                }
+                rotaryTextures.set(group, texture);
+                return texture;
+            };
+
+            const driveRotary = (group, key, degrees, detent) => {
+                if (!Number.isFinite(degrees) || !degrees || !Number.isFinite(detent) || detent <= 0) return;
+                let state = rotary.get(key);
+                if (!state) {
+                    state = { bed: null, clicks: new Set(), timer: null, lastMove: -Infinity,
+                        lastClick: -Infinity, speed: 0, travel: 0 };
+                    rotary.set(key, state);
+                }
+                const now = performance.now();
+                const elapsed = now - state.lastMove;
+                const previousDetent = Math.trunc((Math.abs(state.travel) + 0.000001) / detent) * Math.sign(state.travel);
+                state.travel += degrees;
+                const nextDetent = Math.trunc((Math.abs(state.travel) + 0.000001) / detent) * Math.sign(state.travel);
+                const instantSpeed = Math.min(900, Math.abs(degrees) * 1000 / Math.max(16, elapsed > 120 ? 16 : elapsed));
+                state.speed = elapsed > 120 ?
+                    (Math.abs(degrees) > detent * 2 ? instantSpeed * 0.5 : 0) :
+                    state.speed * 0.65 + instantSpeed * 0.35;
+                state.lastMove = now;
+                if (nextDetent !== previousDetent && now - state.lastClick >= 0.065 * 1000) {
+                    const id = choose(group);
+                    const buffer = buffers.get(id);
+                    if (buffer) {
+                        while (state.clicks.size >= 3) {
+                            const oldest = state.clicks.values().next().value;
+                            state.clicks.delete(oldest);
+                            stop(oldest, 0.015);
+                        }
+                        const duration = Math.min(buffer.duration, 0.16);
+                        const click = start(id, { duration });
+                        if (click) {
+                            state.clicks.add(click);
+                            const time = getContext().currentTime;
+                            click.gain.gain.setValueAtTime(1, time + Math.max(0, duration - 0.025));
+                            click.gain.gain.linearRampToValueAtTime(0, time + duration);
+                            state.lastClick = now;
+                        }
+                    }
+                }
+                const intensity = Math.max(0, Math.min(1, (state.speed - 70) / 320));
+                if (intensity > 0 && (!state.bed || !active.has(state.bed) || state.bed.stopping)) {
+                    const texture = rotaryTexture(group);
+                    if (texture) state.bed = start(PANEL_SOUND_GROUPS[group][0], {
+                        loop: true, gain: 0, bufferOverride: texture, lowpass: 1800
+                    });
+                }
+                if (state.bed) {
+                    const time = getContext().currentTime;
+                    const volume = state.bed.gain.gain;
+                    if (typeof volume.cancelAndHoldAtTime === 'function') volume.cancelAndHoldAtTime(time);
+                    else {
+                        const current = volume.value;
+                        volume.cancelScheduledValues(time);
+                        volume.setValueAtTime(current, time);
+                    }
+                    volume.linearRampToValueAtTime(0.14 * intensity, time + 0.045);
+                    state.bed.source.playbackRate.setTargetAtTime(0.9 + 0.25 * intensity, time, 0.025);
+                }
+                if (state.timer !== null) return;
+                const checkIdle = () => {
+                    const remaining = 70 - (performance.now() - state.lastMove);
+                    if (remaining > 0) {
+                        state.timer = setTimeout(checkIdle, Math.max(1, remaining));
+                        return;
+                    }
+                    if (state.bed) stop(state.bed, 0.035);
+                    state.bed = null;
+                    state.speed = 0;
+                    state.timer = null;
+                };
+                state.timer = setTimeout(checkIdle, 70);
+            };
+
+            const stopRotary = key => {
+                const state = rotary.get(key);
+                if (!state) return;
+                if (state.timer !== null) clearTimeout(state.timer);
+                if (state.bed) stop(state.bed, 0.035);
+                state.bed = null;
+                state.speed = 0;
+                state.timer = null;
+            };
+
+            const startHeld = (group, owner = group) => {
+                const existing = held.get(group);
+                if (existing) {
+                    existing.owners.add(owner);
+                    return existing.slot;
+                }
+                const id = choose(group);
+                if (!id) return null;
+                const slot = start(id, { loop: true, gain: 0 });
+                if (slot) {
+                    held.set(group, { slot, owners: new Set([owner]) });
+                    const time = getContext().currentTime;
+                    slot.gain.gain.setValueAtTime(0, time);
+                    slot.gain.gain.linearRampToValueAtTime(1, time + (group === 'lHold' ? 0.35 : group === 'ambient' ? 1 : 0.04));
+                }
+                return slot;
+            };
+
+            const stopHeld = (group, owner = group) => {
+                const current = held.get(group);
+                if (!current) return;
+                current.owners.delete(owner);
+                if (current.owners.size) return;
+                stop(current.slot, group === 'lHold' ? 0.35 : 0.04);
+                held.delete(group);
+            };
+
+            const driveHand = (group, angle, now = performance.now()) => {
+                let state = hands.get(group);
+                if (!state) {
+                    state = {
+                        angle, time: now, slot: null, timer: null,
+                        velocity: 0, rawVelocity: 0, lastMove: -Infinity,
+                        rate: NaN, level: NaN, updateTime: -Infinity
+                    };
+                    hands.set(group, state);
+                    return;
+                }
+                const elapsed = now - state.time;
+                const moved = Math.abs(angle - state.angle);
+                state.angle = angle;
+                state.time = now;
+                if (elapsed <= 0) return;
+                if (moved > 0.00001) {
+                    state.rawVelocity = moved * 1000 / elapsed;
+                    state.lastMove = now;
+                }
+                if ((!state.slot || state.slot.stopping) && moved > 0.00001) {
+                    state.slot = start(PANEL_SOUND_GROUPS[group][0], { loop: true, gain: 0 });
+                    state.velocity = 0;
+                    state.rate = NaN;
+                    state.level = NaN;
+                    state.updateTime = -Infinity;
+                }
+                if (!state.slot) return;
+                const raw = now - state.lastMove < 90 ? state.rawVelocity : 0;
+                const easing = 1 - Math.exp(-elapsed / (raw > state.velocity ? 180 : 220));
+                state.velocity += (raw - state.velocity) * easing;
+                const strength = Math.min(1, state.velocity / 360);
+                const rate = 1 + 0.2 * strength;
+                const level = 0.5 * Math.sqrt(strength);
+                if ((!Number.isFinite(state.rate) || Math.abs(rate - state.rate) >= 0.01 ||
+                    Math.abs(level - state.level) >= 0.02) && now - state.updateTime >= 40) {
+                    const time = getContext().currentTime;
+                    const pitch = state.slot.source.playbackRate;
+                    const volume = state.slot.gain.gain;
+                    for (const param of [pitch, volume]) {
+                        if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(time);
+                        else {
+                            const value = param.value;
+                            param.cancelScheduledValues(time);
+                            param.setValueAtTime(value, time);
+                        }
+                    }
+                    pitch.setTargetAtTime(rate, time, 0.1);
+                    volume.setTargetAtTime(level, time, 0.12);
+                    state.rate = rate;
+                    state.level = level;
+                    state.updateTime = now;
+                }
+                if (state.timer !== null) return;
+                const checkIdle = () => {
+                    const remaining = 450 - (performance.now() - state.lastMove);
+                    if (remaining > 0) {
+                        state.timer = setTimeout(checkIdle, Math.max(1, remaining));
+                        return;
+                    }
+                    if (state.slot) stop(state.slot, 0.12);
+                    state.slot = null;
+                    state.velocity = 0;
+                    state.timer = null;
+                };
+                state.timer = setTimeout(checkIdle, 450);
+            };
+
+            const moveInnerParam = (param, value, time, constant) => {
+                if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(time);
+                else {
+                    const current = param.value;
+                    param.cancelScheduledValues(time);
+                    param.setValueAtTime(current, time);
+                }
+                param.setTargetAtTime(value, time, constant);
+            };
+
+            const driveInner = (phase, speed, maximum, now = performance.now(), brakeSeconds = 0) => {
+                const id = PANEL_SOUND_GROUPS.innerHand[0];
+                if (phase === 'idle') {
+                    if (innerMotion.phase === 'idle') return;
+                    const time = getContext().currentTime;
+                    innerMotion.phase = 'idle';
+                    if (innerMotion.intro) {
+                        stop(innerMotion.intro, 0.25);
+                        innerMotion.intro = null;
+                    }
+                    if (innerMotion.bed) {
+                        moveInnerParam(innerMotion.bed.gain.gain, 0, time, 0.09);
+                        const bed = innerMotion.bed;
+                        innerMotion.idleTimer = setTimeout(() => {
+                            if (innerMotion.phase === 'idle' && innerMotion.bed === bed) {
+                                stop(bed, 0.05);
+                                innerMotion.bed = null;
+                            }
+                            innerMotion.idleTimer = null;
+                        }, 600);
+                    }
+                    innerMotion.rate = NaN;
+                    innerMotion.level = 0;
+                    innerMotion.lastUpdate = -Infinity;
+                    return;
+                }
+                const time = getContext().currentTime;
+                if (innerMotion.idleTimer !== null) {
+                    clearTimeout(innerMotion.idleTimer);
+                    innerMotion.idleTimer = null;
+                }
+                const strength = Math.max(0, Math.min(1, Math.abs(speed) / maximum));
+                const previousPhase = innerMotion.phase;
+                if (!innerMotion.bed || innerMotion.bed.stopping) {
+                    innerMotion.bed = start(id, {
+                        loop: true, gain: 0, offset: PANEL_SOUND_LOOPS[id][0]
+                    });
+                    innerMotion.intro = start(id, {
+                        gain: 0, duration: PANEL_SOUND_LOOPS[id][0]
+                    });
+                    if (innerMotion.intro) {
+                        innerMotion.intro.gain.gain.linearRampToValueAtTime(0.3, time + 0.28);
+                    }
+                    innerMotion.rate = NaN;
+                    innerMotion.level = NaN;
+                    innerMotion.lastUpdate = -Infinity;
+                }
+                if (innerMotion.outro && phase !== 'brake') {
+                    stop(innerMotion.outro, 0.3);
+                    innerMotion.outro = null;
+                }
+                if (phase === 'brake' && previousPhase !== 'brake') {
+                    if (innerMotion.outro) {
+                        stop(innerMotion.outro, 0.25);
+                        innerMotion.outro = null;
+                    }
+                    if (innerMotion.intro) {
+                        stop(innerMotion.intro, Math.min(0.35, Math.max(0.18, brakeSeconds * 0.5)));
+                        innerMotion.intro = null;
+                    }
+                    if (now - innerMotion.lastOutroStart >= 300) {
+                        const ending = PANEL_SOUND_LOOPS[id][1];
+                        const duration = buffers.get(id)?.duration || ending;
+                        const remaining = Math.max(0, duration - ending);
+                        const matchingOffset = (1 - strength) * 0.43;
+                        const timedOffset = remaining - 1.2 * Math.max(0.06, brakeSeconds);
+                        const offset = Math.max(0, Math.min(remaining - 0.08, Math.max(matchingOffset, timedOffset)));
+                        innerMotion.outro = start(id, { gain: 0, offset: ending + offset });
+                        if (innerMotion.outro) {
+                            const endingDuration = remaining - offset;
+                            const rate = Math.min(1.2, Math.max(0.15, endingDuration / Math.max(0.06, brakeSeconds)));
+                            const level = Math.min(0.45, 0.18 + 0.32 * strength);
+                            const fade = Math.min(0.38, Math.max(0.2, brakeSeconds * 0.45));
+                            innerMotion.outro.source.playbackRate.setValueAtTime(rate, time);
+                            innerMotion.outro.gain.gain.linearRampToValueAtTime(level, time + fade);
+                            innerMotion.lastOutroStart = now;
+                        }
+                    }
+                }
+                innerMotion.phase = phase;
+                if (!innerMotion.bed) return;
+                const rate = 0.75 + 0.45 * strength;
+                const level = 0.9 * Math.sqrt(strength);
+                if (now - innerMotion.lastUpdate < 40 && Number.isFinite(innerMotion.rate)) return;
+                if (Math.abs(rate - innerMotion.rate) < 0.01 && Math.abs(level - innerMotion.level) < 0.02) return;
+                moveInnerParam(innerMotion.bed.source.playbackRate, rate, time, 0.12);
+                moveInnerParam(innerMotion.bed.gain.gain, level, time, 0.1);
+                innerMotion.rate = rate;
+                innerMotion.level = level;
+                innerMotion.lastUpdate = now;
+            };
+
+            const updateVolume = () => {
+                if (!context) return;
+                active.forEach(slot => {
+                    if (slot.stopping || !slot.electrical) return;
+                    slot.gain.gain.setTargetAtTime(
+                        slot.baseGain * soundCircuit.volume.value,
+                        context.currentTime,
+                        0.01
+                    );
+                });
+            };
+
+            const stopElectrical = () => active.forEach(slot => {
+                if (slot.electrical) stop(slot);
+            });
+
+            const stopAll = () => {
+                active.forEach(slot => stop(slot));
+                held.clear();
+                if (innerMotion.idleTimer !== null) clearTimeout(innerMotion.idleTimer);
+                innerMotion.bed = null;
+                innerMotion.intro = null;
+                innerMotion.outro = null;
+                innerMotion.idleTimer = null;
+                innerMotion.phase = 'idle';
+                innerMotion.lastOutroStart = -Infinity;
+                hands.forEach(state => {
+                    if (state.timer !== null) clearTimeout(state.timer);
+                    state.slot = null;
+                    state.timer = null;
+                });
+                rotary.forEach(state => {
+                    if (state.timer !== null) clearTimeout(state.timer);
+                    state.bed = null;
+                    state.clicks.clear();
+                    state.speed = 0;
+                    state.timer = null;
+                });
+            };
+
+            return { load, unlock, play, driveRotary, stopRotary, startHeld, stopHeld, driveHand, driveInner, updateVolume, stopElectrical, stopAll };
+        })();
+        document.addEventListener('m2terminalsound', event => {
+            const group = event.detail;
+            if (group !== 'MCPFD' && group !== 'fmcbutton') return;
+            panelSoundBank.unlock();
+            panelSoundBank.play(group);
+        });
+        PANEL_SOUND_GROUPS.genswitch.forEach(id => panelSoundBank.load(id).catch(() => {}));
+
         let tierOneResourcePromise = null;
         function loadTierOneResources(report = () => {}) {
             if (tierOneResourcePromise) return tierOneResourcePromise;
             const controlEntries = CONTROL_ASSET_FILES.map(name => ({ kind: 'control', name, url: '/m/img/' + name }));
             const soundEntries = Object.entries(UI_SOUND_FILES).map(([name, url]) => ({ kind: 'sound', name, url }));
-            const entries = [...controlEntries, ...soundEntries];
+            const wavEntries = PANEL_WAV_IDS.map(name => ({ kind: 'wav', name }));
+            const entries = [...controlEntries, ...soundEntries, ...wavEntries];
             let completed = 0;
-            tierOneResourcePromise = Promise.all(entries.map(entry =>
-                fetchRequiredBlob(entry.url).then(async blob => {
+            tierOneResourcePromise = Promise.all(entries.map(async entry => {
+                if (entry.kind === 'wav') {
+                    await panelSoundBank.load(entry.name);
+                } else {
+                    const blob = await fetchRequiredBlob(entry.url);
                     const objectUrl = URL.createObjectURL(blob);
                     if (entry.kind === 'control') {
                         ASSET[entry.name] = objectUrl;
                     } else if (entry.kind === 'sound') {
                         uiAudio[entry.name] = await prepareUiAudio(objectUrl);
                     }
-                    completed += 1;
-                    report(completed, entries.length);
-                })
-            )).then(() => {
+                }
+                completed += 1;
+                report(completed, entries.length);
+            })).then(() => {
                 applyAssetBlobs();
                 mSyncControls();
             });
@@ -4473,8 +5477,22 @@ usort($cats, 'customStrCmp');
             '/css/fonts/nullpunktsenergiefont-Regular.ttf',
             '/m/img/BabelStoneHan.ttf',
             '/m/serv/npfp.png',
+            '/m/css/cursors/MOUSE_DEFAULT_ARROW.png',
+            '/m/css/cursors/MOUSE_POINTING_HAND.png',
+            '/m/css/cursors/MOUSE_GRABBING_HAND_OPEN.png',
+            '/m/css/cursors/MOUSE_GRABBING_HAND_CLOSED.png',
+            '/m/css/cursors/MOUSE_BIG_CURVY_ARROW_LEFT.png',
+            '/m/css/cursors/MOUSE_BIG_CURVY_ARROW_RIGHT.png',
+            '/m/css/cursors/MOUSE_SMALL_CURVY_ARROW_LEFT.png',
+            '/m/css/cursors/MOUSE_SMALL_CURVY_ARROW_RIGHT.png',
+            '/m/css/cursors/MOUSE_UPSIDEDOWN_CURVY_ARROW_LEFT.png',
+            '/m/css/cursors/MOUSE_UPSIDEDOWN_CURVY_ARROW_RIGHT.png',
+            '/m/css/cursors/MOUSE_LEFT_ARROW.png',
+            '/m/css/cursors/MOUSE_RIGHT_ARROW.png',
+            '/m/css/cursors/MOUSE_LEFT_RIGHT_ARROW.png',
             ...CONTROL_ASSET_FILES.map(name => '/m/img/' + name),
-            ...Object.values(UI_SOUND_FILES)
+            ...Object.values(UI_SOUND_FILES),
+            ...PANEL_WAV_IDS.map(id => '/m/img/' + id + '.wav')
         ];
 
         function collectM2ArchiveManifest() {
@@ -4765,6 +5783,7 @@ usort($cats, 'customStrCmp');
             bindUiSoundActivity(a);
             try {
                 a.loop = false;
+                a.volume = soundCircuit.volume.value;
                 a.currentTime = 0;
                 soundCircuit.setActivity(a, true);
                 const result = a.play();
@@ -4788,6 +5807,7 @@ usort($cats, 'customStrCmp');
             bindUiSoundActivity(a);
             try {
                 a.loop = true;
+                a.volume = soundCircuit.volume.value;
                 a.currentTime = 0;
                 soundCircuit.setActivity(a, true);
                 const result = a.play();
@@ -4863,13 +5883,13 @@ usort($cats, 'customStrCmp');
             h('previoustrack', () => prevBtn.click());
             h('nexttrack', () => nextBtn.click());
             h('seekbackward', (d) => {
-                if (currentAudio) seekPlayback(currentAudio, Math.max(0, playbackTime(currentAudio) - (d.seekOffset || 5)));
+                if (currentAudio) queuePhysicalSeek(currentAudio, Math.max(0, playbackTime(currentAudio) - (d.seekOffset || 5)));
             });
             h('seekforward', (d) => {
-                if (currentAudio) seekPlayback(currentAudio, Math.min(playbackDuration(currentAudio), playbackTime(currentAudio) + (d.seekOffset || 5)));
+                if (currentAudio) queuePhysicalSeek(currentAudio, Math.min(playbackDuration(currentAudio), playbackTime(currentAudio) + (d.seekOffset || 5)));
             });
             h('seekto', (d) => {
-                if (currentAudio && d.seekTime != null) seekPlayback(currentAudio, d.seekTime);
+                if (currentAudio && d.seekTime != null) queuePhysicalSeek(currentAudio, d.seekTime);
             });
         }
 
@@ -4886,6 +5906,16 @@ usort($cats, 'customStrCmp');
             if (revTime) revTime.textContent = Math.round(reverb * 100) + '%';
             renderRevKnob();
             if (wetGain && dryGain && audioCtx && wetInputGain && convolver) {
+                const time = audioCtx.currentTime;
+                const retarget = (param, value) => {
+                    if (typeof param.cancelAndHoldAtTime === 'function') param.cancelAndHoldAtTime(time);
+                    else {
+                        const current = param.value;
+                        param.cancelScheduledValues(time);
+                        param.setValueAtTime(current, time);
+                    }
+                    param.setTargetAtTime(value, time, 0.05);
+                };
                 if (reverb > 0) {
                     if (!convolverConnected) {
                         try {
@@ -4894,8 +5924,8 @@ usort($cats, 'customStrCmp');
                             convolverConnected = true;
                         } catch (e) {}
                     }
-                    wetGain.gain.setTargetAtTime(reverb * 1.5, audioCtx.currentTime, 0.05);
-                    dryGain.gain.setTargetAtTime(1 - (reverb * 0.5), audioCtx.currentTime, 0.05);
+                    retarget(wetGain.gain, reverb * 1.5);
+                    retarget(dryGain.gain, 1 - (reverb * 0.5));
                 } else {
                     if (convolverConnected) {
                         try {
@@ -4904,8 +5934,8 @@ usort($cats, 'customStrCmp');
                             convolverConnected = false;
                         } catch (e) {}
                     }
-                    wetGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.05);
-                    dryGain.gain.setTargetAtTime(1.0, audioCtx.currentTime, 0.05);
+                    retarget(wetGain.gain, 0);
+                    retarget(dryGain.gain, 1);
                 }
             }
         }
@@ -4913,7 +5943,7 @@ usort($cats, 'customStrCmp');
         function initAudioContext() {
             if (audioCtx) return;
             const AudioContext = window.AudioContext || window.webkitAudioContext;
-            audioCtx = new AudioContext();
+            audioCtx = new AudioContext({ latencyHint: 'playback' });
             convolver = audioCtx.createConvolver();
             dryGain = audioCtx.createGain();
             wetGain = audioCtx.createGain();
@@ -5368,6 +6398,36 @@ usort($cats, 'customStrCmp');
             return card?.__virtualMember?.info?.hostCard || card;
         }
 
+        function cardAudioIsCurrent(card) {
+            return visibleCardFor(currentAudio?.closest('.card')) === card;
+        }
+
+        function selectCardAudio(audio, card) {
+            const switchingCard = !cardAudioIsCurrent(card);
+            if (switchingCard) playbackCircuit?.dropPl();
+            document.querySelectorAll('audio').forEach(other => {
+                if (other !== audio || switchingCard) {
+                    other.pause();
+                    other.loop = false;
+                }
+            });
+            currentAudio = audio;
+            setActiveVirtualMember(audio);
+            loadAudio(audio);
+            audio.volume = soundCircuit.volume.value;
+            audio.playbackRate = soundCircuit.playbackRate;
+            return switchingCard;
+        }
+
+        function activateCardAudio(audio, switchingCard, reason) {
+            if (currentAudio !== audio) return;
+            if (switchingCard) requestPlOnWithSound(audio);
+            else if (audio.paused) {
+                updateLoopState();
+                playAudio(audio, reason);
+            }
+        }
+
         function playbackDuration(audio) {
             const info = audio?.__virtualSong;
             if (!info) return audio?.duration || 0;
@@ -5448,6 +6508,12 @@ usort($cats, 'customStrCmp');
                     break;
                 }
                 remaining -= duration;
+            }
+            if (info.members[index].audio === currentAudio && currentAudio.readyState >= 1) {
+                currentAudio.currentTime = Math.max(0, Math.min(remaining, currentAudio.duration));
+                syncKrSectionLoop(currentAudio, playbackTime(currentAudio));
+                if (wasPlaying && currentAudio.paused) playAudio(currentAudio, 'virtual member');
+                return currentAudio;
             }
             return playVirtualMember(info, index, remaining, wasPlaying);
         }
@@ -5856,6 +6922,14 @@ usort($cats, 'customStrCmp');
         }
 
         const SEEK_RADIAL_MAX_SECONDS = 999 * 60 - 1;
+        const INNER_SEEK_INTRO_SECONDS = 78221 / 44100;
+        const INNER_SEEK_CRUISE_SECONDS = (222247 - 78221) / 44100;
+        const INNER_SEEK_OUTRO_SECONDS = (272078 - 222247) / 44100;
+        const INNER_SEEK_MAX_VELOCITY = 270 / (INNER_SEEK_INTRO_SECONDS / 2 + INNER_SEEK_CRUISE_SECONDS + INNER_SEEK_OUTRO_SECONDS / 2);
+        const INNER_SEEK_ACCELERATION = INNER_SEEK_MAX_VELOCITY / INNER_SEEK_INTRO_SECONDS;
+        const OUTER_SEEK_MAX_VELOCITY = INNER_SEEK_MAX_VELOCITY * 2;
+        const OUTER_SEEK_ACCELERATION = OUTER_SEEK_MAX_VELOCITY / INNER_SEEK_INTRO_SECONDS;
+        const OUTER_SEEK_BRAKING = OUTER_SEEK_MAX_VELOCITY / INNER_SEEK_OUTRO_SECONDS;
         const seekRadialDisplayFields = seconds => {
             const elapsed = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.floor(seconds || 0)));
             return {
@@ -5921,7 +6995,8 @@ usort($cats, 'customStrCmp');
                 this.manualHandAngle = null;
                 this.renderedHandAngle = -135;
                 this.renderedSectionAngle = -135;
-                this.handMotion = null;
+                this.handVelocity = 0;
+                this.handLastTime = performance.now();
                 this.sectionMotion = null;
                 this.releaseHandMotion = false;
                 this.requestedHandMotion = false;
@@ -5937,6 +7012,8 @@ usort($cats, 'customStrCmp');
                 this.buildScales();
                 this.bindControl();
                 this.bindSet();
+                bindM2DirectionalCursor(this.sectionKnob, true);
+                bindM2DirectionalCursor(this.timeKnob, true);
                 this.bindKnob(this.sectionKnob, this.onSectionAdjust, 'section');
                 this.bindKnob(this.timeKnob, this.onTimeAdjust, 'time');
                 this.render({
@@ -6044,7 +7121,6 @@ usort($cats, 'customStrCmp');
             applyDragAngle() {
                 if (!this.powered) {
                     this.manualHandAngle = this.dragAngle;
-                    this.renderedHandAngle = this.dragAngle;
                     return;
                 }
                 let start = -135 + this.dragCycle * 360;
@@ -6147,6 +7223,7 @@ usort($cats, 'customStrCmp');
             bindSet() {
                 this.setButton.addEventListener('pointerdown', event => {
                     event.preventDefault();
+                    panelSoundBank.play('fmcbutton');
                     this.setPointerId = event.pointerId;
                     this.setButton.setPointerCapture(this.setPointerId);
                     this.setPressed(true);
@@ -6170,6 +7247,7 @@ usort($cats, 'customStrCmp');
                     if (event.key !== 'Enter' && event.key !== ' ') return;
                     event.preventDefault();
                     if (!event.repeat) {
+                        panelSoundBank.play('fmcbutton');
                         this.setPressed(true);
                         setTimeBusSetClosed(true);
                     }
@@ -6193,14 +7271,18 @@ usort($cats, 'customStrCmp');
                 const rotor = kind === 'section' ? this.sectionRotor : this.timeRotor;
                 this[property] = ((this[property] + steps * increment) % 360 + 360) % 360;
                 rotor.setAttribute('transform', `rotate(${this[property]})`);
+                return steps * increment;
             }
 
             bindKnob(element, adjust, kind) {
                 let pointerId = null;
                 let lastY = 0;
                 const turn = steps => {
-                    this.rotateKnob(kind, steps);
+                    const degrees = this.rotateKnob(kind, steps);
                     adjust(steps);
+                    panelSoundBank.driveRotary(kind === 'section' ? 'RadioKnobLarge' : 'RadioKnobSmall',
+                        kind === 'section' ? 'seekSectionKnob' : 'seekTimeKnob',
+                        degrees, kind === 'section' ? 12 : 8);
                 };
                 element.addEventListener('pointerdown', event => {
                     event.preventDefault();
@@ -6222,10 +7304,12 @@ usort($cats, 'customStrCmp');
                     if (event.pointerId !== pointerId) return;
                     if (element.hasPointerCapture(pointerId)) element.releasePointerCapture(pointerId);
                     pointerId = null;
+                    panelSoundBank.stopRotary(kind === 'section' ? 'seekSectionKnob' : 'seekTimeKnob');
                 };
                 element.addEventListener('pointerup', release);
                 element.addEventListener('pointercancel', () => {
                     pointerId = null;
+                    panelSoundBank.stopRotary(kind === 'section' ? 'seekSectionKnob' : 'seekTimeKnob');
                 });
                 element.addEventListener('wheel', event => {
                     event.preventDefault();
@@ -6238,14 +7322,90 @@ usort($cats, 'customStrCmp');
                 });
             }
 
-            motionValue(motion, target, now) {
-                motion.to = target;
-                const progress = Math.max(0, Math.min(1, (now - motion.start) / motion.duration));
-                const eased = 1 - Math.pow(1 - progress, 3);
-                return {
-                    value: motion.from + (motion.to - motion.from) * eased,
-                    done: progress >= 1
-                };
+            advanceOuterHand(target, now) {
+                const elapsed = Math.max(0, Math.min(0.05, (now - this.handLastTime) / 1000));
+                this.handLastTime = now;
+                if (!elapsed) return;
+                const distance = target - this.renderedHandAngle;
+                if (Math.abs(distance) < 0.02 && Math.abs(this.handVelocity) < 0.1) {
+                    this.renderedHandAngle = target;
+                    this.handVelocity = 0;
+                    return;
+                }
+                const direction = Math.sign(distance) || -Math.sign(this.handVelocity);
+                const projectedVelocity = this.handVelocity * direction;
+                const brakingDistance = Math.max(0, projectedVelocity) ** 2 / (2 * OUTER_SEEK_BRAKING);
+                let nextVelocity;
+                if (projectedVelocity >= 0 && Math.abs(distance) <= brakingDistance) {
+                    nextVelocity = this.handVelocity - direction * OUTER_SEEK_BRAKING * elapsed;
+                    if (nextVelocity * direction < 0) nextVelocity = 0;
+                } else {
+                    nextVelocity = this.handVelocity + direction * OUTER_SEEK_ACCELERATION * elapsed;
+                    if (nextVelocity * direction > OUTER_SEEK_MAX_VELOCITY) nextVelocity = direction * OUTER_SEEK_MAX_VELOCITY;
+                }
+                const nextAngle = this.renderedHandAngle + (this.handVelocity + nextVelocity) * elapsed / 2;
+                if ((direction > 0 && nextAngle >= target) || (direction < 0 && nextAngle <= target)) {
+                    this.renderedHandAngle = target;
+                    this.handVelocity = 0;
+                } else {
+                    this.renderedHandAngle = nextAngle;
+                    this.handVelocity = nextVelocity;
+                }
+            }
+
+            advanceSectionHand(target, now) {
+                if (!this.sectionMotion && Math.abs(target - this.renderedSectionAngle) > 0.001) {
+                    this.sectionMotion = {
+                        target,
+                        velocity: 0,
+                        lastTime: now,
+                        phase: 'accelerate',
+                        brakeAcceleration: 0
+                    };
+                }
+                const motion = this.sectionMotion;
+                if (!motion) {
+                    this.renderedSectionAngle = target;
+                    panelSoundBank.driveInner('idle', 0, INNER_SEEK_MAX_VELOCITY, now);
+                    return;
+                }
+                if (motion.target !== target) {
+                    motion.target = target;
+                    motion.brakeAcceleration = 0;
+                }
+                const elapsed = Math.max(0, Math.min(0.05, (now - motion.lastTime) / 1000));
+                motion.lastTime = now;
+                const distance = target - this.renderedSectionAngle;
+                const direction = Math.sign(distance) || -Math.sign(motion.velocity);
+                const projectedVelocity = motion.velocity * direction;
+                let nextVelocity = motion.velocity;
+                if (projectedVelocity < 0 || Math.abs(distance) > projectedVelocity * INNER_SEEK_OUTRO_SECONDS / 2 && !motion.brakeAcceleration) {
+                    motion.brakeAcceleration = 0;
+                    if (projectedVelocity < INNER_SEEK_MAX_VELOCITY) {
+                        nextVelocity = motion.velocity + direction * INNER_SEEK_ACCELERATION * elapsed;
+                        if (nextVelocity * direction > INNER_SEEK_MAX_VELOCITY) nextVelocity = direction * INNER_SEEK_MAX_VELOCITY;
+                        motion.phase = 'accelerate';
+                    } else {
+                        motion.phase = 'cruise';
+                    }
+                } else {
+                    if (!motion.brakeAcceleration) motion.brakeAcceleration = Math.max(0.001, projectedVelocity * projectedVelocity / (2 * Math.max(0.001, Math.abs(distance))));
+                    nextVelocity = motion.velocity - direction * motion.brakeAcceleration * elapsed;
+                    if (nextVelocity * direction < 0) nextVelocity = 0;
+                    motion.phase = 'brake';
+                }
+                const nextAngle = this.renderedSectionAngle + (motion.velocity + nextVelocity) * elapsed / 2;
+                if ((direction > 0 && nextAngle >= target) || (direction < 0 && nextAngle <= target) ||
+                    (Math.abs(target - nextAngle) < 0.05 && Math.abs(nextVelocity) < 0.1)) {
+                    this.renderedSectionAngle = target;
+                    this.sectionMotion = null;
+                    panelSoundBank.driveInner('idle', 0, INNER_SEEK_MAX_VELOCITY, now);
+                    return;
+                }
+                this.renderedSectionAngle = nextAngle;
+                motion.velocity = nextVelocity;
+                panelSoundBank.driveInner(motion.phase, nextVelocity, INNER_SEEK_MAX_VELOCITY, now,
+                    motion.phase === 'brake' ? Math.abs(nextVelocity) / motion.brakeAcceleration : 0);
             }
 
             easeNextHandChange() {
@@ -6271,7 +7431,8 @@ usort($cats, 'customStrCmp');
                 const sectionChanged = this.hasRenderedModel &&
                     (ownerChanged || activeSection !== this.lastActiveSection);
                 let boundaryDirection = 0;
-                if (this.powered && this.pointerId === null && this.hasRenderedModel && sectionChanged && !ownerChanged) {
+                if (this.powered && this.pointerId === null &&
+                    this.hasRenderedModel && sectionChanged && !ownerChanged) {
                     if (this.lastActivePercent >= 85 && activePercent <= 15) boundaryDirection = 1;
                     else if (this.lastActivePercent <= 15 && activePercent >= 85) boundaryDirection = -1;
                 }
@@ -6279,52 +7440,20 @@ usort($cats, 'customStrCmp');
                 const handBase = -135 + 270 * activePercent / 100;
                 if (poweringUp) this.handCycle = Math.round((this.renderedHandAngle - handBase) / 360);
                 const handTarget = handBase + this.handCycle * 360;
-                if (!this.powered) {
-                    this.handMotion = null;
-                    if (this.manualHandAngle !== null) this.renderedHandAngle = this.manualHandAngle;
-                } else if (this.manualHandAngle !== null) {
-                    this.handMotion = null;
-                    this.renderedHandAngle = this.manualHandAngle;
-                } else {
-                    if ((sectionChanged || this.releaseHandMotion || poweringUp || domainModeChanged || requestedHandMotion) &&
-                        (!this.handMotion || sectionChanged || domainModeChanged || requestedHandMotion)) {
-                        this.handMotion = {
-                            from: this.renderedHandAngle,
-                            to: handTarget,
-                            start: now,
-                            duration: 300
-                        };
-                    }
-                    this.releaseHandMotion = false;
-                    this.requestedHandMotion = false;
-                    if (this.handMotion) {
-                        const motion = this.motionValue(this.handMotion, handTarget, now);
-                        this.renderedHandAngle = motion.value;
-                        if (motion.done) this.handMotion = null;
-                    } else {
-                        this.renderedHandAngle = handTarget;
-                    }
-                }
+                const physicalTarget = this.manualHandAngle ?? handTarget;
+                this.advanceOuterHand(physicalTarget, now);
+                this.releaseHandMotion = false;
+                this.requestedHandMotion = false;
                 const sectionTarget = this.sectionAngle(activeSection);
                 if (!this.powered) {
                     this.sectionMotion = null;
-                } else if (sectionChanged || poweringUp) {
-                    this.sectionMotion = {
-                        from: this.renderedSectionAngle,
-                        to: sectionTarget,
-                        start: now,
-                        duration: 300
-                    };
-                }
-                if (this.powered && this.sectionMotion) {
-                    const motion = this.motionValue(this.sectionMotion, sectionTarget, now);
-                    this.renderedSectionAngle = motion.value;
-                    if (motion.done) this.sectionMotion = null;
-                } else if (this.powered) {
-                    this.renderedSectionAngle = sectionTarget;
+                    panelSoundBank.driveInner('idle', 0, INNER_SEEK_MAX_VELOCITY, now);
+                } else {
+                    this.advanceSectionHand(sectionTarget, now);
                 }
                 this.targetHand.setAttribute('transform', `rotate(${this.renderedHandAngle} 195 190)`);
                 this.sectionHand.setAttribute('transform', `rotate(${this.renderedSectionAngle} 195 190)`);
+                panelSoundBank.driveHand('outerHand', this.renderedHandAngle, now);
                 this.activeReadout.render(activeSection, model.activeSeconds);
                 this.standbyReadout.render(model.targetSection, model.targetSeconds);
                 this.sectionRotor.setAttribute('transform', `rotate(${this.sectionMechanicalAngle})`);
@@ -6370,6 +7499,20 @@ usort($cats, 'customStrCmp');
         publishReadOnlyWindow('__npSectionEligible', sectionDurationEligible);
         let seekRadialStandbySection = 0;
         let seekRadialStandbySeconds = 0;
+        const terminalStandbyValue = () => {
+            const fields = seekRadialDisplayFields(seekRadialStandbySeconds);
+            return `${seekRadialStandbySection}/${fields.minutes}.${String(fields.seconds).padStart(2, '0')}`;
+        };
+        window.__npTerminalLiveValues = () => ({
+            speed: soundCircuit.playbackRate,
+            sectionWindow: Math.round((playbackCircuit?.sectionWindowEffectiveValue || 0) * SECTION_WINDOW_MAX_SECONDS),
+            standby: terminalStandbyValue()
+        });
+        window.__npTerminalSetStandby = (section, seconds) => {
+            seekRadialStandbySection = Math.max(0, Math.min(99, Math.trunc(section)));
+            seekRadialStandbySeconds = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.trunc(seconds)));
+            if (currentAudio) renderSeekRadial(currentAudio);
+        };
         const seekRadialInstrument = new SeekRadialInstrument(
             seekRadialSvg,
             percent => setSeekRadialTarget(percent),
@@ -6378,14 +7521,14 @@ usort($cats, 'customStrCmp');
             steps => adjustSeekRadialStandbySection(steps),
             steps => adjustSeekRadialStandbyTime(steps)
         );
-
         let renderSpeedKnob = () => {},
             renderRevKnob = () => {},
             renderVolKnob = () => {},
             paintKSwitch = () => {},
             paintKrSwitch = () => {},
             mSyncControls = () => {},
-            triggerPl = () => {};
+            triggerPl = () => {},
+            requestPlOnWithSound = () => {};
         kBtn.style.color = 'white';
 
         function updateLoopState() {
@@ -6498,6 +7641,32 @@ usort($cats, 'customStrCmp');
             };
         }
 
+        function queuePhysicalSeek(audio, time, autoplay = null) {
+            if (!audio) return null;
+            const duration = playbackDuration(audio) || audio.duration;
+            if (!timeBusIsPowered()) {
+                return seekPlayback(audio, time, autoplay);
+            }
+            if (!Number.isFinite(duration) || duration <= 0) {
+                if (audio.__virtualSong) {
+                    ensureVirtualMetadata(audio.__virtualSong, audio).then(ready => {
+                        if (ready && seekRadialOwner(currentAudio) === audio.__virtualSong) {
+                            queuePhysicalSeek(currentAudio, time, autoplay);
+                        }
+                    });
+                } else {
+                    audio.addEventListener('loadedmetadata', () => {
+                        if (currentAudio === audio) queuePhysicalSeek(audio, time, autoplay);
+                    }, { once: true });
+                    loadAudio(audio);
+                }
+                return audio;
+            }
+            const boundedTime = Math.max(0, Math.min(time, duration));
+            lastTickTime = -1;
+            return seekPlayback(audio, boundedTime, autoplay);
+        }
+
         function renderSeekRadial(audio = currentAudio, time = playbackTime(audio), duration = playbackDuration(audio)) {
             if (!audio || !Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return null;
             const model = seekRadialModel(audio, time, duration);
@@ -6519,8 +7688,7 @@ usort($cats, 'customStrCmp');
             if (bounded >= 100) {
                 target = Math.max(model.activeDomain.start, model.activeDomain.end - Math.min(.05, span));
             }
-            const targetAudio = seekPlayback(currentAudio, target) || currentAudio;
-            syncKrSectionLoop(targetAudio, target);
+            queuePhysicalSeek(currentAudio, target);
             return true;
         }
 
@@ -6537,8 +7705,9 @@ usort($cats, 'customStrCmp');
                     const adjacent = model.segments[adjacentIndex];
                     const targetTime = direction > 0 ?
                         adjacent[0] : Math.max(adjacent[0], adjacent[1] - .001);
-                    const target = seekPlayback(currentAudio, targetTime) || currentAudio;
-                    syncKrSectionLoop(target, targetTime);
+                    const nextCycle = seekRadialInstrument.handCycle + direction;
+                    queuePhysicalSeek(currentAudio, targetTime);
+                    seekRadialInstrument.handCycle = nextCycle;
                     return true;
                 }
             }
@@ -6565,8 +7734,8 @@ usort($cats, 'customStrCmp');
             if (model.standbyDomainSeconds > 0 && model.targetSeconds >= model.standbyDomainSeconds) {
                 targetTime = Math.max(model.standbyStart, model.standbyEnd - .001);
             }
-            const target = seekPlayback(currentAudio, targetTime) || currentAudio;
-            syncKrSectionLoop(target, targetTime);
+            seekRadialInstrument.easeNextHandChange();
+            queuePhysicalSeek(currentAudio, targetTime);
             return true;
         }
 
@@ -6881,40 +8050,21 @@ usort($cats, 'customStrCmp');
                 const rect = lyr.getBoundingClientRect();
                 const clickY = e.clientY - rect.top;
                 const pct = Math.max(0, Math.min(1, clickY / rect.height));
-
-                const wasPlaying = currentAudio === cardAudio && !cardAudio.paused;
-
-                if (currentAudio !== cardAudio) {
-                    document.querySelectorAll('audio').forEach(audio => {
-                        if (audio !== cardAudio) {
-                            audio.pause();
-                            audio.loop = false;
-                        }
-                    });
-                    currentAudio = cardAudio;
-                    loadAudio(currentAudio);
-                    currentAudio.volume = soundCircuit.volume.value;
-                    currentAudio.playbackRate = soundCircuit.playbackRate;
-                }
-
-                if (wasPlaying) {
-                    const setPosition = () => {
-                        const duration = playbackDuration(currentAudio);
-                        if (duration) seekPlayback(currentAudio, pct * duration);
-                    };
-
-                    if (currentAudio.readyState >= 1) {
-                        setPosition();
-                    } else {
-                        currentAudio.addEventListener('loadedmetadata', function onMetadata() {
-                            setPosition();
-                            currentAudio.removeEventListener('loadedmetadata', onMetadata);
-                        });
+                const switchingCard = selectCardAudio(cardAudio, card);
+                if (switchingCard) activateCardAudio(cardAudio, true, 'card lyrics');
+                const activate = () => {
+                    if (currentAudio !== cardAudio) return;
+                    let selectedAudio = cardAudio;
+                    const duration = playbackDuration(cardAudio);
+                    if (duration) selectedAudio = queuePhysicalSeek(cardAudio, pct * duration) || cardAudio;
+                    if (!switchingCard) {
+                        const playSelected = () => activateCardAudio(selectedAudio, false, 'card lyrics');
+                        if (selectedAudio.readyState >= 1) playSelected();
+                        else selectedAudio.addEventListener('loadedmetadata', playSelected, { once: true });
                     }
-                } else {
-                    updateLoopState();
-                    playAudio(currentAudio, 'card resume');
-                }
+                };
+                if (cardAudio.readyState >= 1) activate();
+                else cardAudio.addEventListener('loadedmetadata', activate, { once: true });
             });
         });
         function updateSpeedVisuals() {
@@ -6936,74 +8086,119 @@ usort($cats, 'customStrCmp');
 
         updateSpeedVisuals();
 
+        let beginLHold = () => false;
+        let endLHold = () => false;
+        let driveReverbWithGears = () => {};
         const lb = document.getElementById('lBtn');
         if (lb) {
 
 
 
 
-            let lHoldTimer = null;
             let lHolding = false;
             let lArmed = false;
             let lSuppressClick = false;
+            let lHoldSource = null;
+            let lPointerId = null;
+            let lStartY = 0;
+            let lPullHeight = 1;
 
-            const lStopAlarm = stopAlarm;
+            const syncLCursor = () => {
+                lb.classList.toggle('lInactive', !lIsOn());
+                lb.classList.toggle('lPopped', soundCircuit.coupling.position === 'OFF');
+            };
+            soundCircuit.coupling.addEventListener('change', syncLCursor);
+            syncLCursor();
+
             const lCleanupHold = () => {
-                if (lHoldTimer) {
-                    clearTimeout(lHoldTimer);
-                    lHoldTimer = null;
-                }
-                lStopAlarm();
+                panelSoundBank.stopHeld('lHold', 'L');
                 lb.classList.remove('lFlashing', 'lArmed');
                 lHolding = false;
                 lArmed = false;
+                lHoldSource = null;
             };
 
-            lb.addEventListener('pointerdown', (e) => {
-                lSuppressClick = false;
-                if (!lIsOn()) return;
-                e.preventDefault();
+            beginLHold = source => {
+                if (!lIsOn() || lHolding) return false;
                 lHolding = true;
+                lHoldSource = source;
                 lArmed = false;
                 lb.style.color = '';
                 lb.classList.add('lFlashing');
-                startAlarm();
-                lHoldTimer = setTimeout(() => {
-                    lHoldTimer = null;
-                    lStopAlarm();
+                panelSoundBank.startHeld('lHold', 'L');
+                return true;
+            };
+
+            lb.addEventListener('pointerdown', e => {
+                if (e.button !== 0) return;
+                if (!beginLHold('L')) return;
+                lSuppressClick = false;
+                lPointerId = e.pointerId;
+                lStartY = e.clientY;
+                lPullHeight = Math.max(1, lb.getBoundingClientRect().height);
+                lb.classList.add('m2CursorGrabbing');
+                lb.setPointerCapture(e.pointerId);
+                e.preventDefault();
+            });
+            lb.addEventListener('pointermove', e => {
+                if (!lHolding || lHoldSource !== 'L' || lPointerId !== e.pointerId) return;
+                const pull = Math.min(lPullHeight, Math.max(0, lStartY - e.clientY));
+                const progress = pull / lPullHeight;
+                lb.style.transform = `scale(${1 + progress * 0.4})`;
+                if (!lArmed && progress >= 0.65) {
+                    lArmed = true;
+                    panelSoundBank.stopHeld('lHold', 'L');
                     lb.classList.remove('lFlashing');
                     lb.classList.add('lArmed');
-                    lArmed = true;
-                }, 2000);
+                }
+                e.preventDefault();
             });
-
-            const lRelease = (fromPointerUp) => {
-                if (!lHolding) return;
-                if (fromPointerUp) lSuppressClick = true;
-                const completed = lArmed;
+            endLHold = (source, fromPointerUp = false) => {
+                if (source === 'L') {
+                    lb.classList.remove('m2CursorGrabbing');
+                    lb.style.transform = '';
+                    lPointerId = null;
+                }
+                if (!lHolding || lHoldSource !== source) return false;
+                if (source === 'L' && fromPointerUp) {
+                    lSuppressClick = true;
+                    setTimeout(() => { lSuppressClick = false; }, 0);
+                }
+                const completed = source === 'L' && fromPointerUp && lArmed;
                 lCleanupHold();
                 if (completed) {
-                    soundCircuit.coupling.setPosition('OFF');
+                    if (soundCircuit.coupling.setPosition('OFF')) {
+                        panelSoundBank.play('lRelease');
+                    }
                     lb.style.color = 'white';
                 } else {
                     lb.style.color = 'yellow';
                 }
+                return completed;
             };
-            lb.addEventListener('pointerup', () => lRelease(true));
-            lb.addEventListener('pointerleave', () => lRelease(false));
-            lb.addEventListener('pointercancel', () => lRelease(false));
+            lb.addEventListener('pointerup', e => {
+                if (lPointerId !== e.pointerId) return;
+                endLHold('L', true);
+                if (lb.hasPointerCapture(e.pointerId)) lb.releasePointerCapture(e.pointerId);
+            });
+            lb.addEventListener('pointercancel', e => {
+                if (lPointerId === e.pointerId) endLHold('L');
+            });
+            lb.addEventListener('lostpointercapture', e => {
+                if (lPointerId === e.pointerId) endLHold('L');
+            });
 
             lb.addEventListener('click', () => {
                 if (lSuppressClick) {
                     lSuppressClick = false;
                     return;
                 }
-                if (lIsOn()) return;
-                soundCircuit.coupling.setPosition('ON');
+                if (soundCircuit.coupling.position !== 'OFF') return;
+                if (!soundCircuit.coupling.setPosition('ON')) return;
                 lb.style.color = 'yellow';
-                soundCircuit.reverb.setValue(Math.max(0, (soundCircuit.speed.value - 0.5) * 2));
-                updateReverbVisuals();
-                playElectricalSound('chimetwice');
+                driveReverbWithGears(Math.max(0, (soundCircuit.speed.value - 0.5) * 2));
+                panelSoundBank.play('lClickIn');
+                panelSoundBank.play('attendantcall', { electrical: true });
             });
         }
 
@@ -7325,6 +8520,7 @@ usort($cats, 'customStrCmp');
                 masterGain.gain.setValueAtTime(powered ? 1 : 0, audioCtx.currentTime);
             }
             if (powered) return;
+            panelSoundBank.stopElectrical();
             playbackCircuit.dropPl();
             playbackCircuit.clearActivity();
             clearKrSectionLoop();
@@ -7439,13 +8635,11 @@ usort($cats, 'customStrCmp');
 
         (function() {
             const $ = id => document.getElementById(id);
-            const lBtnEl = $('lBtn');
             const click = () => playMechanicalSound('click');
             const arm = () => playMechanicalSound('arm');
-            const playSingelPress = () => playMechanicalSound('singelpress');
-            const playChimeTwice = () => playElectricalSound('chimetwice');
-            const startFire = startAlarm;
-            const stopFire = stopAlarm;
+
+            ['mSpd', 'mVol', 'mRev', 'mR3'].forEach(id => bindM2DirectionalCursor($(id), true));
+            ['mISR', 'pageBusKnob'].forEach(id => bindM2DirectionalCursor($(id), false));
 
 
             function makeRotary(el, onTwist, onDown, onUp) {
@@ -7466,7 +8660,7 @@ usort($cats, 'customStrCmp');
                     drag = true;
                     const g = geom(e);
                     last = g.rad < MIN_R ? null : g.a;
-                    el.classList.add('dragging');
+                    if (e.button === 0) el.classList.add('dragging');
                     el.setPointerCapture(e.pointerId);
                     onDown && onDown();
                     e.preventDefault();
@@ -7494,6 +8688,7 @@ usort($cats, 'customStrCmp');
                     last = null;
                     el.classList.remove('dragging');
                     onUp && onUp();
+                    panelSoundBank.stopRotary(el.id);
                     try {
                         el.releasePointerCapture(e.pointerId);
                     } catch (_) {}
@@ -7504,20 +8699,35 @@ usort($cats, 'customStrCmp');
 
 
             const mVol = $('mVol');
+            let volumeUpdateQueued = false;
             const renderVol = () => {
                 if (mVol) mVol.style.transform = 'rotate(' + (Math.cbrt(soundCircuit.volume.value) * 305) + 'deg)';
             };
             const setVol = lin => {
                 lin = Math.max(0, Math.min(1, lin));
-                soundCircuit.volume.setValue(Math.pow(lin, 3));
-                propagateVolume();
-                renderVol();
+                if (!soundCircuit.volume.setValue(Math.pow(lin, 3))) return false;
+                if (!volumeUpdateQueued) {
+                    volumeUpdateQueued = true;
+                    requestAnimationFrame(() => {
+                        volumeUpdateQueued = false;
+                        propagateVolume();
+                        renderVol();
+                    });
+                }
+                return true;
             };
-            makeRotary(mVol, d => setVol(Math.cbrt(soundCircuit.volume.value) + d / 305));
+            const turnVol = delta => {
+                const before = Math.cbrt(soundCircuit.volume.value);
+                if (!setVol(before + delta)) return false;
+                panelSoundBank.driveRotary('MCPVSRotary', 'mVol',
+                    (Math.cbrt(soundCircuit.volume.value) - before) * 305, 12.2);
+                return true;
+            };
+            makeRotary(mVol, d => turnVol(d / 305));
             if (mVol) mVol.addEventListener('wheel', e => {
                 e.preventDefault();
                 e.stopPropagation();
-                setVol(Math.cbrt(soundCircuit.volume.value) + (e.deltaY < 0 ? 0.04 : -0.04));
+                turnVol(e.deltaY < 0 ? 0.04 : -0.04);
             }, {
                 passive: false
             });
@@ -7525,27 +8735,75 @@ usort($cats, 'customStrCmp');
 
 
             const mRev = $('mRev');
+            let reverbUpdateQueued = false;
             const renderRev = () => {
                 if (mRev) mRev.style.transform = 'rotate(' + (soundCircuit.reverb.value * 305) + 'deg)';
             };
             const setRev = v => {
-                soundCircuit.reverb.setValue(v);
-                updateReverbVisuals();
+                if (!soundCircuit.reverb.setValue(v)) return false;
+                renderRev();
+                if (!reverbUpdateQueued) {
+                    reverbUpdateQueued = true;
+                    requestAnimationFrame(() => {
+                        reverbUpdateQueued = false;
+                        updateReverbVisuals();
+                    });
+                }
+                return true;
             };
 
 
+            const turnRev = delta => {
+                if (lIsOn()) return false;
+                const before = soundCircuit.reverb.value;
+                if (!setRev(before + delta)) return false;
+                panelSoundBank.driveRotary('MCPVSRotary', 'mRev',
+                    (soundCircuit.reverb.value - before) * 305, 15.25);
+                return true;
+            };
+            let gearMotion = null;
+            driveReverbWithGears = target => {
+                const from = soundCircuit.reverb.value;
+                const to = Math.max(0, Math.min(1, target));
+                if (Math.abs(to - from) < 0.000001) return;
+                const motion = {
+                    from,
+                    to,
+                    start: performance.now(),
+                    duration: Math.max(250, 2000 * Math.abs(to - from))
+                };
+                gearMotion = motion;
+                const frame = now => {
+                    if (gearMotion !== motion) return;
+                    if (!lIsOn()) {
+                        gearMotion = null;
+                        panelSoundBank.stopRotary('mRevGear');
+                        return;
+                    }
+                    const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
+                    const eased = progress * progress * (3 - 2 * progress);
+                    if (setRev(motion.from + (motion.to - motion.from) * eased)) {
+                        panelSoundBank.driveRotary('MCPVSRotary', 'mRevGear',
+                            (soundCircuit.reverb.value - (motion.previous ?? motion.from)) * 305, 15.25);
+                        motion.previous = soundCircuit.reverb.value;
+                    }
+                    if (progress < 1) requestAnimationFrame(frame);
+                    else {
+                        gearMotion = null;
+                        panelSoundBank.stopRotary('mRevGear');
+                    }
+                };
+                requestAnimationFrame(frame);
+            };
+
             makeRotary(mRev,
-                d => {
-                    if (!lIsOn()) setRev(soundCircuit.reverb.value + d / 305);
-                },
-                () => {
-                    if (lIsOn()) { startFire(); if (lBtnEl) lBtnEl.classList.add('lFlashing'); }
-                },
-                () => { stopFire(); if (lBtnEl) lBtnEl.classList.remove('lFlashing'); });
+                d => turnRev(d / 305),
+                () => beginLHold('R'),
+                () => endLHold('R'));
             if (mRev) mRev.addEventListener('wheel', e => {
                 e.preventDefault();
                 if (lIsOn()) return;
-                setRev(soundCircuit.reverb.value + (e.deltaY < 0 ? 0.05 : -0.05));
+                turnRev(e.deltaY < 0 ? 0.05 : -0.05);
             }, {
                 passive: false
             });
@@ -7553,40 +8811,94 @@ usort($cats, 'customStrCmp');
 
 
             const mSpd = $('mSpd');
+            let speedUpdateQueued = false;
             const renderSpd = () => {
                 if (mSpd) mSpd.style.transform = 'rotate(' + ((0.5 - soundCircuit.speed.value) * 360) + 'deg)';
             };
             const setSpd = p => {
-                soundCircuit.speed.setValue(p);
-                updateSpeedVisuals();
-                propagateSpeed();
+                if (!soundCircuit.speed.setValue(p)) return false;
+                if (!speedUpdateQueued) {
+                    speedUpdateQueued = true;
+                    requestAnimationFrame(() => {
+                        speedUpdateQueued = false;
+                        updateSpeedVisuals();
+                        propagateSpeed();
+                    });
+                }
+                return true;
             };
-            makeRotary(mSpd, d => setSpd(soundCircuit.speed.value - d / 360));
+            window.__npTerminalSetSpeed = value => {
+                const target = Number(value);
+                if (!Number.isFinite(target)) return false;
+                const rateAt = control => {
+                    const y = (0.5 - control) * 100;
+                    const x = Math.abs(y);
+                    const delta = x <= 10 ? 0.01 * x : 0.1 + 0.01 * (x - 10) + Math.pow(x - 10, 2) / 900;
+                    return Math.max(0.05, y >= 0 ? 1 + delta : 1 - delta);
+                };
+                const bounded = Math.max(rateAt(1), Math.min(rateAt(0), target));
+                let lower = 0;
+                let upper = 1;
+                for (let i = 0; i < 32; i++) {
+                    const middle = (lower + upper) / 2;
+                    if (rateAt(middle) > bounded) lower = middle;
+                    else upper = middle;
+                }
+                return setSpd((lower + upper) / 2);
+            };
+            const turnSpd = delta => {
+                const before = soundCircuit.speed.value;
+                if (!setSpd(before + delta)) return false;
+                panelSoundBank.driveRotary('MCPAltRotary', 'mSpd',
+                    (before - soundCircuit.speed.value) * 360, 3.6);
+                return true;
+            };
+            makeRotary(mSpd, d => turnSpd(-d / 360));
             if (mSpd) mSpd.addEventListener('wheel', e => {
                 e.preventDefault();
                 e.stopPropagation();
-                setSpd(soundCircuit.speed.value + (e.deltaY < 0 ? -0.01 : 0.01));
+                turnSpd(e.deltaY < 0 ? -0.01 : 0.01);
             }, {
                 passive: false
             });
             renderSpd();
 
             const mR3 = $('mR3');
+            let sectionWindowUpdateQueued = false;
             const renderR3 = () => {
                 if (mR3) mR3.style.transform = 'rotate(' + ((playbackCircuit.sectionWindow.value * 305) - 152.5) + 'deg)';
             };
             const setR3 = value => {
-                playbackCircuit.sectionWindow.setValue(value);
-                collageAudio = null;
-                collageSegEnd = null;
-                if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
-                renderR3();
+                if (!playbackCircuit.sectionWindow.setValue(value)) return false;
+                if (!sectionWindowUpdateQueued) {
+                    sectionWindowUpdateQueued = true;
+                    requestAnimationFrame(() => {
+                        sectionWindowUpdateQueued = false;
+                        collageAudio = null;
+                        collageSegEnd = null;
+                        if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
+                        renderR3();
+                    });
+                }
+                return true;
             };
-            makeRotary(mR3, delta => setR3(playbackCircuit.sectionWindow.value + delta / 305));
+            window.__npTerminalSetSectionWindow = seconds => {
+                const value = Number(seconds);
+                if (!Number.isFinite(value)) return false;
+                return setR3(Math.max(0, Math.min(SECTION_WINDOW_MAX_SECONDS, value)) / SECTION_WINDOW_MAX_SECONDS);
+            };
+            const turnR3 = delta => {
+                const before = playbackCircuit.sectionWindow.value;
+                if (!setR3(before + delta)) return false;
+                panelSoundBank.driveRotary('MCPAltRotary', 'mR3',
+                    (playbackCircuit.sectionWindow.value - before) * 305, 15.25);
+                return true;
+            };
+            makeRotary(mR3, delta => turnR3(delta / 305));
             if (mR3) mR3.addEventListener('wheel', event => {
                 event.preventDefault();
                 event.stopPropagation();
-                setR3(playbackCircuit.sectionWindow.value + (event.deltaY < 0 ? 0.05 : -0.05));
+                turnR3(event.deltaY < 0 ? 0.05 : -0.05);
             }, {
                 passive: false
             });
@@ -7605,7 +8917,8 @@ usort($cats, 'customStrCmp');
                     updateSpeedVisuals();
                     propagateSpeed();
                     renderSpd();
-                    playChimeTwice();
+                    panelSoundBank.play('mR2');
+                    panelSoundBank.play('attendantcall', { electrical: true });
                 });
                 const up = () => {
                     mR2.src = aimg('r2off.png');
@@ -7623,18 +8936,39 @@ usort($cats, 'customStrCmp');
                 toOff: 'plpresstooff.png'
             };
             let plBusy = false;
+            let plActivationPending = false;
+            let plActivationIntent = 0;
             const playing = () => !!(currentAudio && !currentAudio.paused);
             const paintPl = () => {
-                if (mPl && !plBusy) mPl.src = aimg(playing() ? PL.on : PL.off);
+                if (mPl && !plBusy && !plActivationPending) mPl.src = aimg(playing() ? PL.on : PL.off);
             };
             const pressPl = () => {
                 if (!mPl || plBusy) return;
+                plActivationIntent++;
+                plActivationPending = false;
                 plBusy = true;
                 mPl.src = aimg(playing() ? PL.toOff : PL.toOn);
-                playSingelPress();
+                panelSoundBank.play('mPl');
                 setTimeout(() => {
                     plBusy = false;
                     if (pBtn.onclick) pBtn.onclick();
+                    paintPl();
+                }, 130);
+            };
+            const activatePl = audio => {
+                if (!mPl) return;
+                const card = visibleCardFor(audio.closest('.card'));
+                const intent = ++plActivationIntent;
+                plActivationPending = true;
+                mPl.src = aimg(PL.toOn);
+                panelSoundBank.play('mPl');
+                setTimeout(() => {
+                    if (intent !== plActivationIntent) return;
+                    plActivationPending = false;
+                    if (cardAudioIsCurrent(card)) {
+                        updateLoopState();
+                        playAudio(currentAudio, 'card switch');
+                    }
                     paintPl();
                 }, 130);
             };
@@ -7709,7 +9043,7 @@ usort($cats, 'customStrCmp');
             if (mISR) isrCtl = knobs(mISR, ISR_STEPS, s => {
                 const position = s.combo === 'IR' ? 'I' : s.combo === 'SR' ? 'S' : s.combo === 'R' ? 'R' : 'OFF';
                 setIsrPosition(position);
-            }, click);
+            }, () => panelSoundBank.play('GroundStartRelease'));
 
 
             function switchControl(img, states, onChange, sound, reverseClicks) {
@@ -7718,6 +9052,7 @@ usort($cats, 'customStrCmp');
                 const paint = () => {
                     img.src = aimg(states[i].f);
                     img.style.transform = 'translate(-49.2%, ' + states[i].ty + '%)';
+                    img.dataset.m2SwitchCursor = i === 0 ? 'left' : i === states.length - 1 ? 'right' : 'both';
                 };
                 const setIdx = n => {
                     n = Math.max(0, Math.min(states.length - 1, n));
@@ -7789,7 +9124,7 @@ usort($cats, 'customStrCmp');
                 },
             ], s => {
                 playbackCircuit.m.setPosition(s.name);
-            }, arm, true);
+            }, () => panelSoundBank.play('apuswitchonoff'), true);
 
 
             const mK = $('mK');
@@ -7798,17 +9133,18 @@ usort($cats, 'customStrCmp');
                 const s = playbackCircuit?.k.position === 'ON' ? ST.D : ST.C;
                 mK.src = aimg(s.f);
                 mK.style.transform = 'translate(-49.2%, ' + s.ty + '%)';
+                mK.dataset.m2SwitchCursor = s === ST.D ? 'left' : 'right';
             };
             if (mK) {
                 mK.addEventListener('click', () => {
                     if (setLrcMode(false)) {
-                        arm();
+                        panelSoundBank.play('landingLights');
                     }
                 });
                 mK.addEventListener('contextmenu', e => {
                     e.preventDefault();
                     if (setLrcMode(true)) {
-                        arm();
+                        panelSoundBank.play('landingLights');
                     }
                 });
                 mK.addEventListener('wheel', e => {
@@ -7816,7 +9152,7 @@ usort($cats, 'customStrCmp');
                     e.stopPropagation();
                     const goOn = e.deltaY < 0;
                     if (setLrcMode(goOn)) {
-                        arm();
+                        panelSoundBank.play('landingLights');
                     }
                 }, {
                     passive: false
@@ -7830,19 +9166,20 @@ usort($cats, 'customStrCmp');
                 const s = krIsOn() ? ST.D : ST.C;
                 mKR.src = aimg(s.f);
                 mKR.style.transform = 'translate(-49.2%, ' + s.ty + '%)';
+                mKR.dataset.m2SwitchCursor = s === ST.D ? 'left' : 'right';
             };
             if (mKR) {
                 mKR.addEventListener('click', () => {
-                    if (setKrMode(false)) arm();
+                    if (setKrMode(false)) panelSoundBank.play('landingLights');
                 });
                 mKR.addEventListener('contextmenu', e => {
                     e.preventDefault();
-                    if (setKrMode(true)) arm();
+                    if (setKrMode(true)) panelSoundBank.play('landingLights');
                 });
                 mKR.addEventListener('wheel', e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (setKrMode(e.deltaY < 0)) arm();
+                    if (setKrMode(e.deltaY < 0)) panelSoundBank.play('landingLights');
                 }, {
                     passive: false
                 });
@@ -7864,6 +9201,7 @@ usort($cats, 'customStrCmp');
                 paintPl();
             };
             triggerPl = pressPl;
+            requestPlOnWithSound = activatePl;
         })();
 
         const srchEl = document.getElementById('srch');
@@ -7878,7 +9216,9 @@ usort($cats, 'customStrCmp');
                     const name = w.querySelector('.cName');
                     const lyrics = w.querySelector('.cLyr');
                     const memberNames = w.__virtualSong ? w.__virtualSong.members.map(m => m.title).join(' ') : '';
-                    w.__search = foldSearch((name ? name.textContent : '') + ' ' + memberNames + ' ' + (lyrics ? lyrics.textContent : ''));
+                    const memberSortKeys = w.__virtualSong ? w.__virtualSong.members.map(m => m.wrap?.dataset?.sortKey || '').join(' ') : '';
+                    const sortKey = w.dataset.sortKey || '';
+                    w.__search = foldSearch((name ? name.textContent : '') + ' ' + sortKey + ' ' + memberNames + ' ' + memberSortKeys + ' ' + (lyrics ? lyrics.textContent : ''));
                 }
                 w.style.display = (v === '' || w.__search.includes(v)) ? '' : 'none';
             });
@@ -7897,6 +9237,12 @@ usort($cats, 'customStrCmp');
             document.querySelectorAll('audio').forEach(a => {
                 a.volume = soundCircuit.volume.value;
             });
+            Object.entries(uiAudio).forEach(([name, audio]) => {
+                if (ELECTRICAL_SOUND_NAMES.has(name) || name === 'firealarm') {
+                    audio.volume = soundCircuit.volume.value;
+                }
+            });
+            panelSoundBank.updateVolume();
         };
 
         window.addEventListener('DOMContentLoaded', () => {
@@ -7951,7 +9297,6 @@ usort($cats, 'customStrCmp');
         });
 
         document.addEventListener('click', e => {
-            if (e.target.closest('.cSide')) return;
             if (e.target.classList.contains('delBtn') || e.target.classList.contains('editBtn')) return;
 
             const lrcLine = e.target.closest('.lrcLine');
@@ -7968,30 +9313,34 @@ usort($cats, 'customStrCmp');
                 if (lrcLine.dataset.virtualMember !== undefined) {
                     const info = card.__virtualSong;
                     const index = parseInt(lrcLine.dataset.virtualMember, 10);
-                    if (info && Number.isInteger(index)) {
-                        playVirtualMember(info, index, 0, true);
+                    if (info && Number.isInteger(index) && info.members[index]) {
+                        const switchingCard = !cardAudioIsCurrent(card);
+                        if (switchingCard) playbackCircuit?.dropPl();
+                        const memberAudio = switchingCard ?
+                            playVirtualMember(info, 0, 0, false) : currentAudio;
+                        if (!memberAudio) return;
+                        if (switchingCard) activateCardAudio(memberAudio, true, 'virtual lyric');
+                        const activate = () => {
+                            if (seekRadialOwner(currentAudio) !== info) return;
+                            if (!switchingCard) activateCardAudio(currentAudio, false, 'virtual lyric');
+                            ensureVirtualMetadata(info, currentAudio).then(ready => {
+                                if (!ready || seekRadialOwner(currentAudio) !== info) return;
+                                queuePhysicalSeek(currentAudio, info.members[index].virtualStart);
+                            });
+                        };
+                        if (memberAudio.readyState >= 1) activate();
+                        else memberAudio.addEventListener('loadedmetadata', activate, { once: true });
                     }
                     return;
                 }
                 const time = parseFloat(lrcLine.dataset.t);
-                if (currentAudio !== audio) {
-                    document.querySelectorAll('audio').forEach(a => {
-                        if (a !== audio) {
-                            a.pause();
-                            a.loop = false;
-                        }
-                    });
-                    currentAudio = audio;
-                    loadAudio(currentAudio);
-                    currentAudio.volume = soundCircuit.volume.value;
-                    currentAudio.playbackRate = soundCircuit.playbackRate;
-                }
+                const switchingCard = selectCardAudio(audio, card);
+                if (switchingCard) activateCardAudio(audio, true, 'LRC line');
                 const setT = () => {
                     if (currentAudio !== audio) return;
-                    syncKrSectionLoop(audio, time);
-                    audio.currentTime = time;
+                    queuePhysicalSeek(audio, time);
                     updateLoopState();
-                    playAudio(audio, 'LRC line');
+                    if (!switchingCard) activateCardAudio(audio, false, 'LRC line');
                 };
                 if (audio.readyState >= 1) setT();
                 else {
@@ -8008,27 +9357,16 @@ usort($cats, 'customStrCmp');
                 const rect = cLyr.getBoundingClientRect();
                 const clickY = e.clientY - rect.top;
                 const pct = Math.max(0, Math.min(1, clickY / rect.height));
-                if (currentAudio !== audio) {
-                    document.querySelectorAll('audio').forEach(a => {
-                        if (a !== audio) {
-                            a.pause();
-                            a.loop = false;
-                        }
-                    });
-                    currentAudio = audio;
-                    loadAudio(currentAudio);
-                    currentAudio.volume = soundCircuit.volume.value;
-                    currentAudio.playbackRate = soundCircuit.playbackRate;
-                }
+                const switchingCard = selectCardAudio(audio, card);
+                if (switchingCard) activateCardAudio(audio, true, 'lyrics proportional seek');
                 const setT = () => {
                     if (currentAudio !== audio) return;
                     if (audio.duration) {
                         const time = pct * audio.duration;
-                        syncKrSectionLoop(audio, time);
-                        audio.currentTime = time;
+                        queuePhysicalSeek(audio, time);
                         updateLoopState();
-                        playAudio(audio, 'lyrics proportional seek');
                     }
+                    if (!switchingCard) activateCardAudio(audio, false, 'lyrics proportional seek');
                 };
                 if (audio.readyState >= 1) setT();
                 else {
@@ -8040,17 +9378,9 @@ usort($cats, 'customStrCmp');
                 return;
             }
 
-            currentAudio = audio;
-            loadAudio(currentAudio);
-            currentAudio.volume = soundCircuit.volume.value;
-            currentAudio.playbackRate = soundCircuit.playbackRate;
-            document.querySelectorAll('audio').forEach(a => {
-                if (a !== audio) {
-                    a.pause();
-                    a.loop = false;
-                }
-            });
-            triggerPl();
+            const switchingCard = selectCardAudio(audio, card);
+            if (!switchingCard && e.target.closest('.cMain')) triggerPl();
+            else activateCardAudio(audio, switchingCard, 'card');
         });
 
         function applyDigitSeek(audio, num) {
@@ -8086,15 +9416,14 @@ usort($cats, 'customStrCmp');
                         const targetTime = start + (lineDur * num * 0.1);
                         const wasPlaying = !audio.paused;
                         seekRadialInstrument.easeNextHandChange();
-                        const target = seekPlayback(audio, targetTime, wasPlaying) || audio;
-                        syncKrSectionLoop(target, targetTime);
+                        queuePhysicalSeek(audio, targetTime, wasPlaying);
                         handled = true;
                     }
                 }
             }
             if (!handled) {
                 seekRadialInstrument.easeNextHandChange();
-                seekPlayback(audio, duration * num * 0.1);
+                queuePhysicalSeek(audio, duration * num * 0.1);
             }
             return true;
         }
@@ -8148,12 +9477,12 @@ usort($cats, 'customStrCmp');
             }
             if (key === 'ArrowLeft') {
                 e.preventDefault();
-                seekPlayback(currentAudio, Math.max(0, playbackTime(currentAudio) - 5));
+                queuePhysicalSeek(currentAudio, Math.max(0, playbackTime(currentAudio) - 5));
                 return;
             }
             if (key === 'ArrowRight') {
                 e.preventDefault();
-                seekPlayback(currentAudio, Math.min(playbackDuration(currentAudio), playbackTime(currentAudio) + 5));
+                queuePhysicalSeek(currentAudio, Math.min(playbackDuration(currentAudio), playbackTime(currentAudio) + 5));
                 return;
             }
             if (key === ' ' || key === 'Spacebar') {
@@ -8529,7 +9858,7 @@ usort($cats, 'customStrCmp');
                     currentAudio.volume = soundCircuit.volume.value;
                     currentAudio.playbackRate = soundCircuit.playbackRate;
                 }
-                currentAudio.currentTime = time;
+                queuePhysicalSeek(currentAudio, time);
                 if (currentAudio.paused) {
                     updateLoopState();
                     playAudio(currentAudio, 'playAndSeek');
@@ -10609,11 +11938,13 @@ usort($cats, 'customStrCmp');
                 }
 
                 forward() {
-                    if (this.bus.selector.pulseForward()) playMechanicalSound('click');
+                    panelSoundBank.unlock();
+                    if (this.bus.selector.pulseForward()) panelSoundBank.play('genswitch');
                 }
 
                 backward() {
-                    if (this.bus.selector.pulseBackward()) playMechanicalSound('click');
+                    panelSoundBank.unlock();
+                    if (this.bus.selector.pulseBackward()) panelSoundBank.play('genswitch');
                 }
 
                 render() {
@@ -10884,6 +12215,16 @@ usort($cats, 'customStrCmp');
                         disconnectOverlay();
                     }
                 });
+                const syncAmbientSound = () => {
+                    if (bus.pagePower.closed && (bus.selector.position === 'L' || bus.selector.position === 'OBS')) {
+                        panelSoundBank.startHeld('ambient');
+                    } else if (!bus.pagePower.closed) {
+                        panelSoundBank.stopAll();
+                    }
+                };
+                bus.selector.addEventListener('change', syncAmbientSound);
+                bus.pagePower.addEventListener('change', syncAmbientSound);
+                panelSoundBank.load('177453744').then(syncAmbientSound).catch(() => {});
 
                 const stageTelemetry = stage => freezeTelemetry({
                     name: stage.name,
@@ -11084,6 +12425,317 @@ usort($cats, 'customStrCmp');
                 document.querySelectorAll('audio').forEach(a => { if (isCardAudio(a) && !a.paused) send(a, false); });
             }, 10000);
             window.addEventListener('pagehide', () => { lastKey = ''; push({ clear: true }); });
+        })();
+    </script>
+    <script>
+        (() => {
+            const terminal = document.getElementById('mTerminal');
+            const folioDisplay = terminal.querySelector('.mTerminalHeader span:first-child');
+            const pageDisplay = terminal.querySelector('.mTerminalHeader span:last-child');
+            const scratchpadDisplay = terminal.querySelector('.mTerminalInput span:last-child');
+            const fields = new Map([...terminal.querySelectorAll('.mTerminalMain[data-terminal-field]')].map(field => [
+                field.dataset.terminalField,
+                { main: field, title: field.previousElementSibling }
+            ]));
+            const entryFields = ['1', '2', '3', '4', '6', '7', '8', '9'];
+            const maxTextLength = 15;
+            const pageSize = entryFields.length;
+            const asciiMaker = value => String(value ?? '')
+                .replace(/[\u00A0\u202F]/g, ' ')
+                .replace(/ß/g, 'ss')
+                .replace(/ẞ/g, 'SS')
+                .replace(/[þÞ]/g, 'th')
+                .replace(/[æÆ]/g, 'ae')
+                .replace(/[œŒ]/g, 'oe')
+                .replace(/[øØ]/g, 'o')
+                .replace(/[łŁ]/g, 'l')
+                .replace(/[đĐ]/g, 'd')
+                .normalize('NFD')
+                .replace(/\p{M}/gu, '')
+                .replace(/[^\x20-\x7E]/g, '');
+            const sourceSongCards = [...document.querySelectorAll('.cardWrap')].map((wrap, index) => {
+                const card = wrap.querySelector('.card');
+                return {
+                    id: card?.id || String(index),
+                    title: card?.querySelector('.cName')?.textContent.trim() || '',
+                    category: wrap.dataset.category?.trim() || ''
+                };
+            }).filter(song => song.title !== '');
+            const songCode = index => {
+                let value = index + 1;
+                let code = '';
+                while (value > 0) {
+                    value--;
+                    code = String.fromCharCode(65 + value % 26) + code;
+                    value = Math.floor(value / 26);
+                }
+                return code;
+            };
+            const songsByName = [...sourceSongCards].sort((a, b) =>
+                asciiMaker(a.title).localeCompare(asciiMaker(b.title))).map((song, index) => ({ ...song, code: songCode(index) }));
+            const songCodes = new Map(songsByName.map(song => [song.id, song.code]));
+            const songCards = sourceSongCards.map(song => ({ ...song, code: songCodes.get(song.id) }));
+            const categories = [...new Set(songCards.map(song => song.category).filter(Boolean))];
+            const fieldActions = new Map();
+            let folio = { kind: 'index', page: 1 };
+            let scratchpad = '';
+            let deleteArmed = false;
+            const globalSettings = { speed: '', sectionWindow: '', standby: '' };
+            const limitText = value => String(value ?? '').slice(0, maxTextLength);
+            const actionEntry = (title, value, action, field = '') => ({ title, value, action, field });
+            const liveEntry = (title, value) => ({ title, value, live: true });
+            const pageNumber = (items, page) => Math.max(1, Math.min(Math.ceil(items.length / pageSize) || 1, page || 1));
+            const pageItems = (items, page) => items.slice((page - 1) * pageSize, page * pageSize);
+            const liveValues = () => window.__npTerminalLiveValues();
+            const globalSettingEntry = (title, key) => ({ title, value: globalSettings[key], setting: key });
+            const liveValueFor = key => {
+                const values = liveValues();
+                if (key === 'speed') return values.speed.toFixed(2);
+                if (key === 'sectionWindow') return String(values.sectionWindow);
+                return values.standby;
+            };
+            const parseStandby = value => {
+                const match = /^(\d{1,2})\/(\d{1,3})\.(\d{1,2})$/.exec(value);
+                if (!match) return null;
+                const section = Number(match[1]);
+                const minute = Number(match[2]);
+                const second = Number(match[3]);
+                if (section > 99 || minute < 1 || minute > 999 || second < 1 || second > 60) return null;
+                return { section, seconds: (minute - 1) * 60 + second - 1, text: `${section}/${minute}.${String(second).padStart(2, '0')}` };
+            };
+            const normalizeGlobalSetting = (key, value) => {
+                const text = limitText(value).trim();
+                if (key === 'speed') {
+                    const speed = Number(text);
+                    return /^\d+(?:\.\d{1,2})?$/.test(text) && speed >= .05 && speed <= 3.28 ? speed.toFixed(2) : '';
+                }
+                if (key === 'sectionWindow') {
+                    const seconds = Number(text);
+                    return /^\d{1,3}$/.test(text) && seconds <= 180 ? String(seconds) : '';
+                }
+                return parseStandby(text)?.text || '';
+            };
+            const applyGlobalSettings = () => {
+                if (globalSettings.speed) window.__npTerminalSetSpeed(globalSettings.speed);
+                if (globalSettings.sectionWindow) window.__npTerminalSetSectionWindow(globalSettings.sectionWindow);
+                if (globalSettings.standby) {
+                    const standby = parseStandby(globalSettings.standby);
+                    if (standby) window.__npTerminalSetStandby(standby.section, standby.seconds);
+                }
+            };
+            const globalDatabase = () => new Promise((resolve, reject) => {
+                const request = indexedDB.open('mTerminal', 1);
+                request.onupgradeneeded = () => request.result.createObjectStore('global');
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+            });
+            const loadGlobalSettings = async () => {
+                const database = await globalDatabase();
+                const transaction = database.transaction('global', 'readonly');
+                const request = transaction.objectStore('global').get('settings');
+                const stored = await new Promise((resolve, reject) => {
+                    request.onsuccess = () => resolve(request.result || {});
+                    request.onerror = () => reject(request.error);
+                });
+                database.close();
+                return stored;
+            };
+            const saveGlobalSettings = async () => {
+                const database = await globalDatabase();
+                const transaction = database.transaction('global', 'readwrite');
+                transaction.objectStore('global').put({ ...globalSettings }, 'settings');
+                await new Promise((resolve, reject) => {
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = () => reject(transaction.error);
+                    transaction.onabort = () => reject(transaction.error);
+                });
+                database.close();
+            };
+            const globalFolio = () => ({
+                name: 'GLOBAL',
+                entries: [
+                    globalSettingEntry('SPEED', 'speed'),
+                    globalSettingEntry('SECTION WINDOW', 'sectionWindow'),
+                    globalSettingEntry('STANDBY', 'standby')
+                ]
+            });
+            const indexFolio = () => ({
+                name: 'INDEX',
+                entries: [
+                    actionEntry('', '< GLOBAL', { kind: 'folio', folio: { kind: 'global', page: 1 } }, '1'),
+                    actionEntry('', '< PER SONG', { kind: 'folio', folio: { kind: 'per-song', page: 1 } }, '2')
+                ]
+            });
+            const perSongFolio = () => ({
+                name: 'PER SONG',
+                entries: [
+                    actionEntry('TYPE', '< PER KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1'),
+                    actionEntry('', '< PER 1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1 } }, '2'),
+                    actionEntry('', 'PER NAME >', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1 } }, '6')
+                ]
+            });
+            const categoriesFolio = () => ({
+                name: 'PER KATEGORIE',
+                entries: pageItems(categories, pageNumber(categories, folio.page)).map(category =>
+                    actionEntry('', category, { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1 } }))
+            });
+            const lettersFolio = () => {
+                const letters = [...new Set(songCards.map(song => (asciiMaker(song.title).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean))];
+                return {
+                    name: 'PER 1ST LETTER',
+                    entries: pageItems(letters, pageNumber(letters, folio.page)).map(letter =>
+                        actionEntry('', letter, { kind: 'folio', folio: { kind: 'songs', source: 'letter', letter, page: 1 } }))
+                };
+            };
+            const songsForFolio = () => {
+                if (folio.source === 'category') return songCards.filter(song => song.category === folio.category);
+                if (folio.source === 'letter') return songCards.filter(song =>
+                    (asciiMaker(song.title).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase() === folio.letter);
+                return songsByName;
+            };
+            const songsFolio = () => {
+                const songs = songsForFolio();
+                const page = pageNumber(songs, folio.page);
+                return {
+                    name: folio.source === 'category' ? folio.category : folio.source === 'letter' ? folio.letter : 'PER NAME',
+                    entries: pageItems(songs, page).map(song =>
+                        actionEntry(song.title, song.code, { kind: 'folio', folio: { kind: 'song', songId: song.id, code: song.code, page: 1 } }))
+                };
+            };
+            const songFolio = () => ({
+                name: `${folio.code} SPEED`,
+                entries: [
+                    liveEntry('SPEED', liveValues().speed.toFixed(2)),
+                    liveEntry('SECTION WINDOW', liveValues().sectionWindow),
+                    liveEntry('STANDBY', liveValues().standby)
+                ]
+            });
+            const currentFolio = () => {
+                if (folio.kind === 'global') return globalFolio();
+                if (folio.kind === 'per-song') return perSongFolio();
+                if (folio.kind === 'categories') return categoriesFolio();
+                if (folio.kind === 'letters') return lettersFolio();
+                if (folio.kind === 'songs') return songsFolio();
+                if (folio.kind === 'song') return songFolio();
+                return indexFolio();
+            };
+            const folioTotal = () => {
+                if (folio.kind === 'categories') return Math.ceil(categories.length / pageSize) || 1;
+                if (folio.kind === 'letters') {
+                    return Math.ceil(new Set(songCards.map(song => (asciiMaker(song.title).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean)).size / pageSize) || 1;
+                }
+                if (folio.kind === 'songs') return Math.ceil(songsForFolio().length / pageSize) || 1;
+                return 1;
+            };
+            const renderScratchpad = () => {
+                scratchpadDisplay.textContent = deleteArmed ? 'DELETE' : scratchpad;
+            };
+            const renderFolio = () => {
+                const page = currentFolio();
+                const total = folioTotal();
+                const currentPage = Math.max(1, Math.min(total, folio.page || 1));
+                folioDisplay.textContent = limitText(page.name);
+                pageDisplay.textContent = total === 1 ? '' : `P.${currentPage}/${total}`;
+                const entries = new Map();
+                let nextField = 0;
+                page.entries.forEach(entry => {
+                    const field = entry.field || entryFields[nextField++];
+                    entries.set(field, entry);
+                });
+                entries.set('5', actionEntry('', folio.returnTarget ? '< RE-TURN' : '< INDEX', folio.returnTarget ?
+                    { kind: 'folio', folio: folio.returnTarget } : { kind: 'index' }));
+                entries.set('10', currentPage < total ? actionEntry('', 'PAGE >', {
+                    kind: 'folio', folio: { ...folio, page: currentPage + 1, returnTarget: { ...folio, page: currentPage } }
+                }) : null);
+                fields.forEach((view, field) => {
+                    const entry = entries.get(field);
+                    view.title.textContent = limitText(entry?.title || '');
+                    view.main.textContent = limitText(entry?.value || '');
+                    fieldActions.set(field, entry || null);
+                });
+            };
+            const openAction = action => {
+                if (action.kind === 'index') folio = { kind: 'index', page: 1 };
+                if (action.kind === 'folio') folio = action.folio;
+                renderFolio();
+            };
+            terminal.addEventListener('click', event => {
+                const special = event.target.closest('[data-terminal-special]');
+                if (special && terminal.contains(special)) {
+                    const action = special.dataset.terminalSpecial;
+                    if (action === 'first') {
+                        folio = { ...folio, page: 1 };
+                        delete folio.returnTarget;
+                        renderFolio();
+                    }
+                    if (action === 'last') {
+                        folio = { ...folio, page: folioTotal() };
+                        delete folio.returnTarget;
+                        renderFolio();
+                    }
+                    if (action === 'index') openAction({ kind: 'index' });
+                    if (action === 'save') {
+                        saveGlobalSettings().then(() => {
+                            special.classList.add('is-saving');
+                            setTimeout(() => special.classList.remove('is-saving'), 350);
+                        }).catch(() => {});
+                    }
+                    return;
+                }
+                const key = event.target.closest('.mTerminalKey');
+                if (key && terminal.contains(key)) {
+                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'fmcbutton' }));
+                    const value = key.textContent.trim();
+                    if (value === 'DL') deleteArmed = true;
+                    else if (value === 'BS') scratchpad = scratchpad.slice(0, -1);
+                    else scratchpad = limitText(scratchpad + (value === 'SP' ? ' ' : value));
+                    renderScratchpad();
+                    return;
+                }
+                const selector = event.target.closest('.mTerminalDash[data-terminal-field]');
+                if (!selector || !terminal.contains(selector)) return;
+                document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'MCPFD' }));
+                const entry = fieldActions.get(selector.dataset.terminalField);
+                if (!entry) return;
+                if (entry.action) {
+                    openAction(entry.action);
+                    return;
+                }
+                if (deleteArmed) {
+                    if (entry.setting) {
+                        globalSettings[entry.setting] = '';
+                        renderFolio();
+                    }
+                    deleteArmed = false;
+                    renderScratchpad();
+                    return;
+                }
+                if (entry.setting) {
+                    if (scratchpad) {
+                        const value = normalizeGlobalSetting(entry.setting, scratchpad);
+                        if (!value) return;
+                        globalSettings[entry.setting] = value;
+                        applyGlobalSettings();
+                        scratchpad = '';
+                        renderScratchpad();
+                        renderFolio();
+                    } else {
+                        scratchpad = limitText(entry.value || liveValueFor(entry.setting));
+                        renderScratchpad();
+                    }
+                } else if (!scratchpad && entry.live) {
+                    scratchpad = limitText(entry.value);
+                    renderScratchpad();
+                }
+            });
+            renderFolio();
+            loadGlobalSettings().then(stored => {
+                Object.keys(globalSettings).forEach(key => {
+                    globalSettings[key] = normalizeGlobalSetting(key, stored?.[key] || '');
+                });
+                applyGlobalSettings();
+                renderFolio();
+            }).catch(() => {});
         })();
     </script>
 </body>
