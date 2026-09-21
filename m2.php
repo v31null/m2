@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const M2_BROWSER_CACHE_VERSION = '15';
-const M2_PAGE_CODE_VERSION = '103';
+const M2_PAGE_CODE_VERSION = '104';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -2744,7 +2744,7 @@ usort($cats, 'customStrCmp');
 
         .mTerminalConsole {
             display: grid;
-            grid-template-columns: 38px minmax(380px, 470px) 38px;
+            grid-template-columns: 38px minmax(176px, 342px) 38px;
             align-items: start;
             gap: 14px;
             flex: 0 0 auto;
@@ -2753,8 +2753,9 @@ usort($cats, 'customStrCmp');
         .mTerminalDashColumn {
             display: grid;
             height: 356px;
-            padding-top: 48px;
-            grid-template-rows: repeat(8, 50px);
+            box-sizing: border-box;
+            padding-top: calc(356px / 14);
+            grid-template-rows: repeat(6, calc(356px / 14 * 2));
             align-content: start;
         }
 
@@ -2775,8 +2776,8 @@ usort($cats, 'customStrCmp');
             display: inline-flex;
             height: 24px;
             padding: 0px;
-            align-self: start;
-            margin-top: 18.5px;
+            align-self: end;
+            margin-top: 0;
             font-size: 2.2em;
             line-height: 0.4;
             padding-left: 8px;
@@ -2791,102 +2792,68 @@ usort($cats, 'customStrCmp');
             display: grid;
             min-width: 0;
             height: 356px;
-            grid-template-columns: minmax(0, 1fr);
-            grid-template-rows: 48px minmax(0, 1fr) 58px;
+            padding: 3px;
+            grid-template-columns: repeat(24, minmax(0, 1fr));
+            grid-template-rows: repeat(14, minmax(0, 1fr));
             border: 1px solid #fff;
             background: #000;
             overflow: hidden;
         }
 
-        .mTerminalRow {
-            display: grid;
-            min-width: 0;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-
-        .mTerminalHeader {
-            position: relative;
+        .mTerminalCell {
             display: flex;
             min-width: 0;
+            min-height: 0;
             align-items: center;
             justify-content: center;
-        }
-
-        .mTerminalHeader span,
-        .mTerminalInput span,
-        .mTerminalSide span {
-            display: flex;
-            min-width: 0;
-            align-items: center;
-            padding: 0 9px;
             overflow: hidden;
-            white-space: nowrap;
-        }
-
-        .mTerminalSide:last-child span {
-            width: 100%;
-            padding-left: 0;
-            justify-content: flex-end;
-            text-align: right;
-        }
-
-        .mTerminalSide:first-child span {
-            padding-right: 0;
-        }
-
-        .mTerminalHeader span:first-child {
-            font-size: 1.3em;
-        }
-
-        .mTerminalHeader span:last-child {
-            position: absolute;
-            right: 0;
-            font-size: 14px;
-        }
-
-        .mTerminalRows {
-            display: grid;
-            min-width: 0;
-            height: 400px;
-            grid-template-rows: repeat(8, minmax(0, 1fr));
-        }
-
-        .mTerminalSide {
-            min-width: 0;
-            flex-direction: column;
-            justify-content: space-around;
-        }
-
-        .mTerminalMain {
+            color: #fff;
             font-size: 1.5em;
+            line-height: 1;
+            white-space: pre;
         }
 
-        .mTerminalTitle {
+        .mTerminalCell.is-small {
             font-size: .85em;
-            min-height: 1.4em;
         }
 
-        .mTerminalSeriesCode {
+        .mTerminalCell.is-green {
+            color: #00ff00;
+        }
+
+        .mTerminalCell.is-amber {
             color: yellow;
-            font-weight: inherit;
         }
 
-        .mTerminalInput {
-            display: grid;
-            min-width: 0;
-            grid-template-rows: repeat(2, minmax(0, 1fr));
-            align-items: center;
-            position: relative;
-            background: #000;
+        .mTerminalCell.is-red {
+            color: red;
         }
 
-        .mTerminalInput span:first-child {
-            font-size: .85em;
+        .mTerminalCell.is-gray {
+            color: gray;
         }
 
-        .mTerminalInput span:last-child {
-            font-size: 1.5em;
-            margin-bottom: 0.6em;
+        .mTerminalCell.is-cyan {
+            color: cyan;
+        }
+
+        .mTerminalCell.is-magenta {
+            color: magenta;
+        }
+
+        .mTerminalCell.is-inverted {
+            color: #000;
+            background: #fff;
+        }
+
+        .mTerminalCell.is-flashing {
+            animation: mTerminalFlash 1s steps(1, end) infinite;
+        }
+
+        @keyframes mTerminalFlash {
+            50% {
+                visibility: hidden;
+            }
         }
 
         .mTerminalKeys {
@@ -3207,6 +3174,7 @@ usort($cats, 'customStrCmp');
 
         <div id="lBar">
             <div class="tJump" id="tJump">
+                <div class="tJumpCat" data-href="#mTerminal">T</div>
                 <?php
                 $catLetters = [];
                 foreach ($results as $row) {
@@ -3229,7 +3197,7 @@ usort($cats, 'customStrCmp');
                 }
 
                 foreach ($catRefs as $cat => $pre) {
-                    echo '<div class="tJumpCat" data-href="#' . htmlspecialchars($pre, ENT_QUOTES, 'UTF-8') . '" onclick="location.hash=\'#' . htmlspecialchars($pre, ENT_QUOTES, 'UTF-8') . '\'">' . htmlspecialchars($pre, ENT_QUOTES, 'UTF-8') . '</div>';
+                    echo '<div class="tJumpCat" data-href="#' . htmlspecialchars($pre, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($pre, ENT_QUOTES, 'UTF-8') . '</div>';
                     if (isset($catLetters[$cat])) {
                         echo '<div class="tJumpSub">';
                         foreach ($catLetters[$cat] as $letter => $firstId) {
@@ -3391,29 +3359,21 @@ usort($cats, 'customStrCmp');
     <section id="mTerminal">
         <div class="mTerminalConsole">
             <div class="mTerminalDashColumn">
-                <button type="button" class="mLSK" data-terminal-field="1">—</button>
-                <button type="button" class="mLSK" data-terminal-field="2">—</button>
-                <button type="button" class="mLSK" data-terminal-field="3">—</button>
-                <button type="button" class="mLSK" data-terminal-field="4">—</button>
-                <button type="button" class="mLSK" data-terminal-field="5">—</button>
+                <button type="button" class="mLSK" data-terminal-field="1L">—</button>
+                <button type="button" class="mLSK" data-terminal-field="2L">—</button>
+                <button type="button" class="mLSK" data-terminal-field="3L">—</button>
+                <button type="button" class="mLSK" data-terminal-field="4L">—</button>
+                <button type="button" class="mLSK" data-terminal-field="5L">—</button>
+                <button type="button" class="mLSK" data-terminal-field="6L">—</button>
             </div>
-            <div id="mTerminalScreen">
-                <div class="mTerminalHeader"><span>ABVUWE</span><span>P.1/1</span></div>
-                <div class="mTerminalRows">
-                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 1</span><span class="mTerminalMain" data-terminal-field="1"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 6</span><span class="mTerminalMain" data-terminal-field="6"></span></div></div>
-                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 2</span><span class="mTerminalMain" data-terminal-field="2"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 7</span><span class="mTerminalMain" data-terminal-field="7"></span></div></div>
-                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 3</span><span class="mTerminalMain" data-terminal-field="3"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 8</span><span class="mTerminalMain" data-terminal-field="8"></span></div></div>
-                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 4</span><span class="mTerminalMain" data-terminal-field="4"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 9</span><span class="mTerminalMain" data-terminal-field="9"></span></div></div>
-                    <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 5</span><span class="mTerminalMain" data-terminal-field="5"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 10</span><span class="mTerminalMain" data-terminal-field="10"></span></div></div>
-                </div>
-                <div class="mTerminalInput"><span>-------------------------------------------------------</span><span></span></div>
-            </div>
+            <div id="mTerminalScreen"></div>
             <div class="mTerminalDashColumn">
-                <button type="button" class="mLSK" data-terminal-field="6">—</button>
-                <button type="button" class="mLSK" data-terminal-field="7">—</button>
-                <button type="button" class="mLSK" data-terminal-field="8">—</button>
-                <button type="button" class="mLSK" data-terminal-field="9">—</button>
-                <button type="button" class="mLSK" data-terminal-field="10">—</button>
+                <button type="button" class="mLSK" data-terminal-field="1R">—</button>
+                <button type="button" class="mLSK" data-terminal-field="2R">—</button>
+                <button type="button" class="mLSK" data-terminal-field="3R">—</button>
+                <button type="button" class="mLSK" data-terminal-field="4R">—</button>
+                <button type="button" class="mLSK" data-terminal-field="5R">—</button>
+                <button type="button" class="mLSK" data-terminal-field="6R">—</button>
             </div>
         </div>
         <div class="mTerminalKeys">
@@ -3472,6 +3432,10 @@ usort($cats, 'customStrCmp');
                     <button type="button" class="mTerminalSpecialButton" data-terminal-special="last">LP</button>
                     <button type="button" class="mTerminalSpecialButton" data-terminal-special="index">IN</button>
                     <button type="button" class="mTerminalSave" data-terminal-special="save">SAVE<span class="mTerminalSaveLight"></span></button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="song">SON</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="legs">LEG</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="direct">DCT</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="clear">CLR</button>
                 </div>
             </div>
         </div>
@@ -3565,7 +3529,7 @@ usort($cats, 'customStrCmp');
                 this.closed = next;
                 this.synchronizeState();
                 if (emit) {
-                    panelSoundBank.play('PRSTButtonOut');
+                    panelSoundBank.play('circuitBreaker');
                     this.host.dispatchEvent(new CustomEvent('breakercommand', {
                         bubbles: true,
                         detail: {
@@ -4592,7 +4556,7 @@ usort($cats, 'customStrCmp');
                 const devices = this.board.install([
                     { id: 'PAGE', type: 'maintained-discrete', name: 'PAGE CONTROL DISCRETE', power: 'main', electrical: false },
                     { id: 'PL', type: 'maintained-discrete', name: 'PL PLAY DISCRETE', power: 'main' },
-                    { id: 'ISR', type: 'selector', name: 'ISR', power: 'main', positions: ['OFF', 'R', 'I', 'S'], initial: 'OFF' },
+                    { id: 'ISR', type: 'selector', name: 'ISR', power: 'main', positions: ['OFF', 'R', 'I', 'S', 'E'], initial: 'OFF' },
                     { id: 'K', type: 'selector', name: 'K', power: 'main', positions: ['OFF', 'ON'], initial: 'ON' },
                     { id: 'R3', type: 'analog-control', name: 'R3 SECTION WINDOW', power: 'r3', dcSupply: 'k', value: 0.25, inputResistance: 56000 },
                     { id: 'KR', type: 'selector', name: 'KR', power: 'main', positions: ['OFF', 'ON'], initial: 'OFF' },
@@ -4906,34 +4870,29 @@ usort($cats, 'customStrCmp');
 
 
         const PANEL_SOUND_GROUPS = {
-            ambient: ['177453744'],
-            lHold: ['111819169'],
-            lReleaseMechanical: ['346954404'],
-            lDisconnect: ['131262607'],
-            lClickIn: ['914468481'],
-            attendantcall: ['631327589'],
-            mPl: ['724533677', '735346396'],
-            mR2: ['908114107', '114859927'],
-            MCPFD: ['47948028', '107515464', '327588892', '829893984', '1071964624'],
-            fmcbutton: ['23241251', '32529879', '193750109', '469742299', '648317260', '919666272', '927494565', '947016727'],
-            RadioKnobSmall: ['248188445', '707423860', '889538338', '890116213', '991818329'],
-            RadioKnobLarge: ['188329246', '225809707', '646941696', '965108196', '1063255697'],
-            MCPAltRotary: ['118362385', '231899970', '261572059', '279596147', '382269597', '430349130', '733227784', '786115389'],
-            MCPVSRotary: ['665625102', '676588915', '841433751', '894826028', '1022663785', '1048800092'],
-            apuswitchonoff: ['170719619', '177501697', '820688366', '914468481'],
-            LLGangBarOn: ['171057543', '185280866', '230386663', '310757194', '349497041', '375577561', '397341398', '428440949', '523923703', '672653334', '776937022', '798009520', '901634826', '938498470', '1044353637'],
-            LandingLightSwitch: ['171057543', '310757194', '349497041', '523923703', '776937022', '798009520', '901634826', '938498470'],
-            genswitch: ['270312930', '600825204', '830737197', '906891840'],
-            GroundStartRelease: ['23849211', '96279692', '582713912'],
-            PRSTButtonOut: ['460872579', '533713888', '591444713', '751895121'],
-            GearHorn: ['512845995'],
+            starterAmbient: ['177453744'],
+            starterHold: ['111819169'],
+            starterReleaseMechanical: ['346954404'],
+            starterDisconnect: ['131262607'],
+            starterEngage: ['914468481'],
+            confirmationChime: ['631327589'],
+            playControl: ['724533677', '735346396'],
+            resetControl: ['908114107', '114859927'],
+            terminalLsk: ['47948028', '107515464', '327588892', '829893984', '1071964624'],
+            terminalKey: ['23241251', '32529879', '193750109', '469742299', '648317260', '919666272', '927494565', '947016727'],
+            seekInner: ['248188445', '707423860', '889538338', '890116213', '991818329'],
+            seekOuter: ['188329246', '225809707', '646941696', '965108196', '1063255697'],
+            r3Section: ['118362385', '231899970', '261572059', '279596147', '382269597', '430349130', '733227784', '786115389'],
+            rAndV: ['665625102', '676588915', '841433751', '894826028', '1022663785', '1048800092'],
+            modeSwitch: ['170719619', '177501697', '820688366', '914468481'],
+            lightingSwitch: ['171057543', '185280866', '230386663', '310757194', '349497041', '375577561', '397341398', '428440949', '523923703', '672653334', '776937022', '798009520', '901634826', '938498470', '1044353637'],
+            loadSelector: ['270312930', '600825204', '830737197', '906891840'],
+            isrRelease: ['23849211', '96279692', '582713912'],
+            circuitBreaker: ['460872579', '533713888', '591444713', '751895121'],
+            warningHorn: ['512845995'],
             outerHand: ['417087732'],
             innerHand: ['755522096']
         };
-        PANEL_SOUND_GROUPS.landingLights = [...new Set([
-            ...PANEL_SOUND_GROUPS.LLGangBarOn,
-            ...PANEL_SOUND_GROUPS.LandingLightSwitch
-        ])];
         Object.freeze(PANEL_SOUND_GROUPS);
         const PANEL_SOUND_LOOPS = Object.freeze({
             '177453744': [29245 / 48000, 150025 / 48000],
@@ -5226,7 +5185,7 @@ usort($cats, 'customStrCmp');
                     held.set(group, { slot, owners: new Set([owner]) });
                     const time = getContext().currentTime;
                     slot.gain.gain.setValueAtTime(0, time);
-                    slot.gain.gain.linearRampToValueAtTime(1, time + (group === 'lHold' ? 0.35 : group === 'ambient' ? 1 : 0.04));
+                    slot.gain.gain.linearRampToValueAtTime(1, time + (group === 'starterHold' ? 0.35 : group === 'starterAmbient' ? 1 : 0.04));
                 }
                 return slot;
             };
@@ -5236,7 +5195,7 @@ usort($cats, 'customStrCmp');
                 if (!current) return;
                 current.owners.delete(owner);
                 if (current.owners.size) return;
-                stop(current.slot, group === 'lHold' ? 0.35 : 0.04);
+                stop(current.slot, group === 'starterHold' ? 0.35 : 0.04);
                 held.delete(group);
             };
 
@@ -5454,11 +5413,11 @@ usort($cats, 'customStrCmp');
         })();
         document.addEventListener('m2terminalsound', event => {
             const group = event.detail;
-            if (group !== 'MCPFD' && group !== 'fmcbutton') return;
+            if (group !== 'terminalLsk' && group !== 'terminalKey') return;
             panelSoundBank.unlock();
             panelSoundBank.play(group);
         });
-        PANEL_SOUND_GROUPS.genswitch.forEach(id => panelSoundBank.load(id).catch(() => {}));
+        PANEL_SOUND_GROUPS.loadSelector.forEach(id => panelSoundBank.load(id).catch(() => {}));
 
         let tierOneResourcePromise = null;
         function loadTierOneResources(report = () => {}) {
@@ -6145,6 +6104,7 @@ usort($cats, 'customStrCmp');
 
         function playAudio(audio, reason = 'play') {
             if (!audio) return Promise.resolve(false);
+            if (playbackCircuit && isrAt('E') && !legsExecutor?.active) return Promise.resolve(false);
             if (!soundCircuit.powerContact.closed) {
                 playbackCircuit?.dropPl();
                 if (!audio.paused) audio.pause();
@@ -6423,6 +6383,7 @@ usort($cats, 'customStrCmp');
         }
 
         function selectCardAudio(audio, card) {
+            if (playbackCircuit && isrAt('E') && !legsExecutor?.selecting) return false;
             const switchingCard = !cardAudioIsCurrent(card);
             if (switchingCard) playbackCircuit?.dropPl();
             document.querySelectorAll('audio').forEach(other => {
@@ -7243,7 +7204,7 @@ usort($cats, 'customStrCmp');
             bindSet() {
                 this.setButton.addEventListener('pointerdown', event => {
                     event.preventDefault();
-                    panelSoundBank.play('fmcbutton');
+                    panelSoundBank.play('terminalKey');
                     this.setPointerId = event.pointerId;
                     this.setButton.setPointerCapture(this.setPointerId);
                     this.setPressed(true);
@@ -7267,7 +7228,7 @@ usort($cats, 'customStrCmp');
                     if (event.key !== 'Enter' && event.key !== ' ') return;
                     event.preventDefault();
                     if (!event.repeat) {
-                        panelSoundBank.play('fmcbutton');
+                        panelSoundBank.play('terminalKey');
                         this.setPressed(true);
                         setTimeBusSetClosed(true);
                     }
@@ -7318,7 +7279,7 @@ usort($cats, 'customStrCmp');
                     motion.travelled = travelled;
                     seekRadialStandbySection = Math.round(current);
                     this.sectionMechanicalAngle = ((this.sectionMechanicalAngle + degrees) % 360 + 360) % 360;
-                    panelSoundBank.driveRotary('RadioKnobLarge', 'seekSectionTerminal', degrees, 12);
+                    panelSoundBank.driveRotary('seekOuter', 'seekSectionTerminal', degrees, 12);
                     if (currentAudio) renderSeekRadial(currentAudio);
                     if (progress < 1) requestAnimationFrame(frame);
                     else {
@@ -7355,7 +7316,7 @@ usort($cats, 'customStrCmp');
                     motion.travelled = travelled;
                     seekRadialStandbySeconds = Math.round(current);
                     this.timeMechanicalAngle = ((this.timeMechanicalAngle + degrees) % 360 + 360) % 360;
-                    panelSoundBank.driveRotary('RadioKnobSmall', 'seekTimeTerminal', degrees, 8);
+                    panelSoundBank.driveRotary('seekInner', 'seekTimeTerminal', degrees, 8);
                     if (currentAudio) renderSeekRadial(currentAudio);
                     if (progress < 1) requestAnimationFrame(frame);
                     else {
@@ -7374,7 +7335,7 @@ usort($cats, 'customStrCmp');
                 const turn = steps => {
                     const degrees = this.rotateKnob(kind, steps);
                     adjust(steps);
-                    panelSoundBank.driveRotary(kind === 'section' ? 'RadioKnobLarge' : 'RadioKnobSmall',
+                    panelSoundBank.driveRotary(kind === 'section' ? 'seekOuter' : 'seekInner',
                         kind === 'section' ? 'seekSectionKnob' : 'seekTimeKnob',
                         degrees, kind === 'section' ? 12 : 8);
                 };
@@ -7576,6 +7537,7 @@ usort($cats, 'customStrCmp');
         }
 
         let playbackCircuit = null;
+        let legsExecutor = null;
         let krLoopAudio = null;
         let krLoopStart = null;
         let krLoopEnd = null;
@@ -7598,14 +7560,16 @@ usort($cats, 'customStrCmp');
         publishReadOnlyWindow('__npSectionEligible', sectionDurationEligible);
         let seekRadialStandbySection = 0;
         let seekRadialStandbySeconds = 0;
+        let manualStandbyBaseline = { section: 0, seconds: 0 };
         const terminalStandbyValue = () => {
             const fields = seekRadialDisplayFields(seekRadialStandbySeconds);
-            return `${Math.trunc(seekRadialStandbySection)}/${fields.minutes}.${String(fields.seconds).padStart(2, '0')}`;
+            return `${String(Math.trunc(seekRadialStandbySection)).padStart(2, '0')}/${String(fields.minutes).padStart(3, '0')}.${String(fields.seconds).padStart(2, '0')}`;
         };
         window.__npTerminalLiveValues = () => ({
             speed: soundCircuit.playbackRate,
             sectionWindow: Math.round((playbackCircuit?.sectionWindowEffectiveValue || 0) * SECTION_WINDOW_MAX_SECONDS),
-            standby: terminalStandbyValue()
+            standby: terminalStandbyValue(),
+            volume: window.__npTerminalManualVolume?.() ?? Math.round(Math.cbrt(soundCircuit.volume.value) * 100)
         });
         const seekRadialInstrument = new SeekRadialInstrument(
             seekRadialSvg,
@@ -7615,13 +7579,15 @@ usort($cats, 'customStrCmp');
             steps => adjustSeekRadialStandbySection(steps),
             steps => adjustSeekRadialStandbyTime(steps)
         );
-        window.__npTerminalSetStandby = (section, seconds) => {
+        window.__npTerminalSetStandby = (section, seconds, source = 'terminal') => {
             const sectionTarget = Math.max(0, Math.min(99, Math.trunc(section)));
             const secondsTarget = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.trunc(seconds)));
+            if (source === 'manual') manualStandbyBaseline = { section: sectionTarget, seconds: secondsTarget };
             seekRadialInstrument.driveStandbySection(sectionTarget);
             seekRadialInstrument.driveStandbyTime(secondsTarget);
             return true;
         };
+        window.__npTerminalManualStandby = () => ({ ...manualStandbyBaseline });
         let renderSpeedKnob = () => {},
             renderRevKnob = () => {},
             renderVolKnob = () => {},
@@ -7745,6 +7711,10 @@ usort($cats, 'customStrCmp');
 
         function queuePhysicalSeek(audio, time, autoplay = null) {
             if (!audio) return null;
+            if (isrAt('E')) {
+                if (!legsExecutor?.active) return null;
+                time = legsExecutor.clampSeek(audio, time);
+            }
             const duration = playbackDuration(audio) || audio.duration;
             if (!timeBusIsPowered()) {
                 return seekPlayback(audio, time, autoplay);
@@ -7777,7 +7747,7 @@ usort($cats, 'customStrCmp');
         }
 
         function setSeekRadialTarget(percent) {
-            if (!timeBusIsPowered() || !currentAudio) return false;
+            if (!timeBusIsPowered() || !currentAudio || (isrAt('E') && !legsExecutor?.active)) return false;
             const duration = playbackDuration(currentAudio) || currentAudio.duration;
             const time = playbackTime(currentAudio);
             if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
@@ -7795,7 +7765,7 @@ usort($cats, 'customStrCmp');
         }
 
         function traverseSeekRadialDomain(direction) {
-            if (!timeBusIsPowered() || !currentAudio || (direction !== 1 && direction !== -1)) return false;
+            if (!timeBusIsPowered() || !currentAudio || (isrAt('E') && !legsExecutor?.active) || (direction !== 1 && direction !== -1)) return false;
             const duration = playbackDuration(currentAudio) || currentAudio.duration;
             const time = playbackTime(currentAudio);
             if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
@@ -7826,7 +7796,7 @@ usort($cats, 'customStrCmp');
         }
 
         function commitSeekRadialTarget() {
-            if (!timeBusIsPowered() || !currentAudio) return false;
+            if (!timeBusIsPowered() || !currentAudio || (isrAt('E') && !legsExecutor?.active)) return false;
             const duration = playbackDuration(currentAudio) || currentAudio.duration;
             if (!Number.isFinite(duration) || duration <= 0) return false;
             const time = playbackTime(currentAudio);
@@ -7842,26 +7812,28 @@ usort($cats, 'customStrCmp');
         }
 
         function adjustSeekRadialStandbySection(steps) {
-            if (!timeBusIsPowered() || !currentAudio || !Number.isFinite(steps) || !steps) return false;
+            if (!timeBusIsPowered() || !currentAudio || (isrAt('E') && !legsExecutor?.active) || !Number.isFinite(steps) || !steps) return false;
             const duration = playbackDuration(currentAudio) || currentAudio.duration;
             const time = playbackTime(currentAudio);
             if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
             const next = Math.max(0, Math.min(99, seekRadialStandbySection + Math.trunc(steps)));
             if (next === seekRadialStandbySection) return false;
             seekRadialStandbySection = next;
+            manualStandbyBaseline = { section: seekRadialStandbySection, seconds: seekRadialStandbySeconds };
             setTimeBusInputValue('sectionSensor', seekRadialStandbySection / 99);
             renderSeekRadial(currentAudio, time, duration);
             return true;
         }
 
         function adjustSeekRadialStandbyTime(steps) {
-            if (!timeBusIsPowered() || !currentAudio || !Number.isFinite(steps) || !steps) return false;
+            if (!timeBusIsPowered() || !currentAudio || (isrAt('E') && !legsExecutor?.active) || !Number.isFinite(steps) || !steps) return false;
             const duration = playbackDuration(currentAudio) || currentAudio.duration;
             const time = playbackTime(currentAudio);
             if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
             const next = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, seekRadialStandbySeconds + Math.trunc(steps)));
             if (next === seekRadialStandbySeconds) return false;
             seekRadialStandbySeconds = next;
+            manualStandbyBaseline = { section: seekRadialStandbySection, seconds: seekRadialStandbySeconds };
             setTimeBusInputValue('timeSensor', seekRadialStandbySeconds / SEEK_RADIAL_MAX_SECONDS);
             renderSeekRadial(currentAudio, time, duration);
             return true;
@@ -7955,7 +7927,13 @@ usort($cats, 'customStrCmp');
         }
 
         function setIsrPosition(position) {
+            const previous = playbackCircuit?.isr.effectivePosition;
             if (!playbackCircuit || !playbackCircuit.isr.setPosition(position)) return false;
+            if (previous === 'E' && position !== 'E') legsExecutor?.cancel();
+            if (position === 'E' && !legsExecutor?.active) {
+                playbackCircuit.dropPl();
+                if (currentAudio && !currentAudio.paused) currentAudio.pause();
+            }
             iBtn.style.color = isrAt('I') ? 'yellow' : 'white';
             sBtn.style.color = isrAt('S') ? 'yellow' : 'white';
             loopBtn.style.color = isrAt('OFF') ? 'white' : 'yellow';
@@ -8135,21 +8113,30 @@ usort($cats, 'customStrCmp');
             lyr.classList.toggle('hasPlayHead', !!playHead);
         }
 
+        function setCardLyricsMode(card, showTrans) {
+            const lyrics = card?.querySelector('.cLyr');
+            const button = card?.closest('.cardWrap')?.querySelector('.mLyricsToggle');
+            if (!card || !lyrics || (showTrans && !button)) return false;
+            if (card.__virtualSong) return false;
+            const template = card.querySelector(showTrans ? '.mLyricsTrans' : '.mLyricsOriginal');
+            if (!template) return false;
+            lyrics.replaceChildren(template.content.cloneNode(true));
+            lyrics.scrollTop = 0;
+            button?.setAttribute('aria-pressed', String(showTrans));
+            syncCardLyricsPresentation(lyrics);
+            if (currentAudio?.closest('.card') === card) lastActiveLine = null;
+            return true;
+        }
+
         function toggleCardLyrics(event, button) {
             event.preventDefault();
             event.stopPropagation();
             const card = button.closest('.cardWrap')?.querySelector('.card');
-            const lyrics = card?.querySelector('.cLyr');
-            if (!card || !lyrics) return;
-            const showTrans = button.getAttribute('aria-pressed') !== 'true';
-            const template = card.querySelector(showTrans ? '.mLyricsTrans' : '.mLyricsOriginal');
-            if (!template) return;
-            lyrics.replaceChildren(template.content.cloneNode(true));
-            lyrics.scrollTop = 0;
-            button.setAttribute('aria-pressed', String(showTrans));
-            syncCardLyricsPresentation(lyrics);
-            if (currentAudio?.closest('.card') === card) lastActiveLine = null;
+            setCardLyricsMode(card, button.getAttribute('aria-pressed') !== 'true');
         }
+
+        window.__npTerminalHasTranslation = songId => !!document.getElementById(songId)?.closest('.cardWrap')?.querySelector('.mLyricsToggle');
+        window.__npTerminalSetLyrics = (songId, active) => setCardLyricsMode(document.getElementById(songId), !!active);
 
         document.querySelectorAll('.cLyr').forEach(lyr => {
             syncCardLyricsPresentation(lyr);
@@ -8227,7 +8214,7 @@ usort($cats, 'customStrCmp');
             syncLCursor();
 
             const lCleanupHold = () => {
-                panelSoundBank.stopHeld('lHold', 'L');
+                panelSoundBank.stopHeld('starterHold', 'L');
                 lb.classList.remove('lFlashing', 'lArmed');
                 lHolding = false;
                 lArmed = false;
@@ -8241,7 +8228,7 @@ usort($cats, 'customStrCmp');
                 lArmed = false;
                 lb.style.color = '';
                 lb.classList.add('lFlashing');
-                panelSoundBank.startHeld('lHold', 'L');
+                panelSoundBank.startHeld('starterHold', 'L');
                 return true;
             };
 
@@ -8263,7 +8250,7 @@ usort($cats, 'customStrCmp');
                 lb.style.transform = `scale(${1 + progress * 0.4})`;
                 if (!lArmed && progress >= 0.65) {
                     lArmed = true;
-                    panelSoundBank.stopHeld('lHold', 'L');
+                    panelSoundBank.stopHeld('starterHold', 'L');
                     lb.classList.remove('lFlashing');
                     lb.classList.add('lArmed');
                 }
@@ -8284,8 +8271,8 @@ usort($cats, 'customStrCmp');
                 lCleanupHold();
                 if (completed) {
                     if (soundCircuit.coupling.setPosition('OFF')) {
-                        panelSoundBank.play('lReleaseMechanical');
-                        panelSoundBank.play('lDisconnect');
+                        panelSoundBank.play('starterReleaseMechanical');
+                        panelSoundBank.play('starterDisconnect');
                     }
                     lb.style.color = 'white';
                 } else {
@@ -8314,8 +8301,8 @@ usort($cats, 'customStrCmp');
                 if (!soundCircuit.coupling.setPosition('ON')) return;
                 lb.style.color = 'yellow';
                 driveReverbWithGears(Math.max(0, (soundCircuit.speed.value - 0.5) * 2));
-                panelSoundBank.play('lClickIn');
-                panelSoundBank.play('attendantcall', { electrical: true });
+                panelSoundBank.play('starterEngage');
+                panelSoundBank.play('confirmationChime', { electrical: true });
             });
         }
 
@@ -8417,6 +8404,7 @@ usort($cats, 'customStrCmp');
 
         document.addEventListener('timeupdate', (e) => {
             if (e.target.tagName !== 'AUDIO' || e.target !== currentAudio) return;
+            if (legsExecutor?.tick(e.target, playbackTime(e.target))) return;
             processKrSectionBoundary(e.target, playbackTime(e.target));
         }, true);
 
@@ -8582,10 +8570,310 @@ usort($cats, 'customStrCmp');
             visibleWhole: transferToRandom,
             visibleSection: transferToRandom
         }, playbackAvionicsPower);
+        class LegsExecutor extends EventTarget {
+            constructor() {
+                super();
+                this.active = false;
+                this.selecting = false;
+                this.plan = [];
+                this.commands = [];
+                this.commandIndex = 0;
+                this.iteration = 0;
+                this.generation = 0;
+                this.transitioning = false;
+                this.current = null;
+            }
+
+            compile(plan) {
+                const commands = [];
+                let playable = null;
+                plan.forEach((leg, sourceIndex) => {
+                    if (leg.type === 'hold') {
+                        if (playable) commands.push({ sourceIndex, leg: { ...playable }, repeats: Number(leg.times) || 0, hold: true });
+                        return;
+                    }
+                    playable = { ...leg };
+                    commands.push({ sourceIndex, leg: { ...leg }, repeats: 1, hold: false });
+                });
+                return commands;
+            }
+
+            cardForCode(code) {
+                return [...document.querySelectorAll('.card')].find(card => (card.dataset.songUrl || '').toUpperCase() === code);
+            }
+
+            async readyAudio(card, generation) {
+                let audio = audioForCard(card);
+                if (!audio) return null;
+                if (card.__virtualSong) {
+                    const ready = await ensureVirtualMetadata(card.__virtualSong, audio);
+                    if (!ready || generation !== null && generation !== this.generation) return null;
+                    audio = audioForCard(card);
+                } else if (!(audio.readyState >= HTMLMediaElement.HAVE_METADATA && Number.isFinite(audio.duration))) {
+                    loadAudio(audio);
+                    await new Promise(resolve => {
+                        audio.addEventListener('loadedmetadata', resolve, { once: true });
+                        audio.addEventListener('error', resolve, { once: true });
+                    });
+                    if (generation !== null && generation !== this.generation) return null;
+                }
+                return audio;
+            }
+
+            bounds(audio, leg) {
+                const duration = playbackDuration(audio) || audio.duration;
+                if (!(duration > 0)) return null;
+                if (audio.__virtualSong) {
+                    const member = audio.__virtualSong.members[audio.__virtualIndex];
+                    const memberStart = Number(member?.virtualStart);
+                    const memberDuration = Number(member?.audio?.duration);
+                    if (!Number.isFinite(memberStart) || !(memberDuration > 0)) return null;
+                    const start = memberStart + Math.max(0, Number(leg.seconds) || 0);
+                    const end = memberStart + memberDuration;
+                    if (start >= end) return null;
+                    return { start, end, duration };
+                }
+                const card = visibleCardFor(audio.closest('.card'));
+                const lines = card ? [...card.querySelectorAll('.lrcLine:not([data-l])')] : [];
+                const threshold = Number(leg.sectionWindow);
+                const segments = lines.map((line, index) => {
+                    const start = Number(line.dataset.t);
+                    const next = lines[index + 1];
+                    const end = next && Number.isFinite(Number(next.dataset.t)) ? Number(next.dataset.t) : duration;
+                    return [start, end];
+                }).filter(segment => Number.isFinite(segment[0]) && Number.isFinite(segment[1]) &&
+                    segment[1] > segment[0] && (!Number.isFinite(threshold) || segment[1] - segment[0] > threshold));
+                let start = Math.max(0, Number(leg.seconds) || 0);
+                let end = duration;
+                if (Number(leg.section) > 0) {
+                    const segment = segments[Number(leg.section) - 1];
+                    if (!segment) return null;
+                    start = segment[0] + Math.max(0, Number(leg.seconds) || 0);
+                    if (leg.advance === 'Y') end = segment[1];
+                }
+                if (start >= end) return null;
+                return { start, end, duration };
+            }
+
+            async activate(plan) {
+                const snapshot = JSON.parse(JSON.stringify(plan));
+                const commands = this.compile(snapshot);
+                if (!commands.length) return false;
+                for (const command of commands) {
+                    const card = this.cardForCode(command.leg.songCode);
+                    if (!card) return false;
+                    const audio = await this.readyAudio(card, null);
+                    if (!audio || !this.bounds(audio, command.leg)) return false;
+                }
+                const previousAudio = this.current?.audio;
+                this.cancel();
+                playbackCircuit.dropPl();
+                if (previousAudio && !previousAudio.paused) previousAudio.pause();
+                this.plan = snapshot;
+                this.commands = commands;
+                this.commandIndex = 0;
+                this.iteration = 0;
+                this.active = true;
+                const generation = ++this.generation;
+                this.dispatchState();
+                const positioned = await window.__npTerminalSetIsr?.('E');
+                if (!positioned || !this.active || generation !== this.generation) {
+                    this.cancel();
+                    return false;
+                }
+                return this.runCurrent(generation);
+            }
+
+            update(plan) {
+                if (!this.active) return false;
+                const commands = this.compile(JSON.parse(JSON.stringify(plan)));
+                if (!commands.length || this.commandIndex >= commands.length) return false;
+                this.plan = JSON.parse(JSON.stringify(plan));
+                this.commands = commands;
+                this.dispatchState();
+                return true;
+            }
+
+            async runCurrent(generation = this.generation) {
+                if (!this.active || generation !== this.generation) return false;
+                const command = this.commands[this.commandIndex];
+                if (!command || command.repeats < 1) return this.advance();
+                const card = this.cardForCode(command.leg.songCode);
+                if (!card) return this.fail();
+                this.transitioning = true;
+                const audio = await this.readyAudio(card, generation);
+                if (!audio || !this.active || generation !== this.generation) return false;
+                const bounds = this.bounds(audio, command.leg);
+                if (!bounds) return this.fail();
+                this.current = { ...bounds, audio, command };
+                this.selecting = true;
+                selectCardAudio(audio, card);
+                this.selecting = false;
+                const target = queuePhysicalSeek(audio, bounds.start, true) || audio;
+                this.current.audio = target;
+                this.transitioning = false;
+                await playAudio(target, 'legs');
+                this.dispatchState();
+                return true;
+            }
+
+            clampSeek(audio, time) {
+                if (!this.active || !this.current) return time;
+                const owner = seekRadialOwner(audio);
+                const currentOwner = seekRadialOwner(this.current.audio);
+                if (owner !== currentOwner) return this.current.start;
+                return Math.max(this.current.start, Math.min(Number(time) || 0, Math.max(this.current.start, this.current.end - .001)));
+            }
+
+            tick(audio, time) {
+                if (!this.active || this.transitioning || !this.current || seekRadialOwner(audio) !== seekRadialOwner(this.current.audio)) return false;
+                this.current.audio = audio;
+                if (time < this.current.end - .05 * Math.max(.1, Number(audio.playbackRate) || 1)) {
+                    this.dispatchProgress();
+                    return false;
+                }
+                this.advance();
+                return true;
+            }
+
+            ended(audio) {
+                if (!this.active || this.transitioning || !this.current || seekRadialOwner(audio) !== seekRadialOwner(this.current.audio)) return false;
+                this.current.audio = audio;
+                if (audio.__virtualSong && playbackTime(audio) < this.current.end - .001) {
+                    this.dispatchProgress();
+                    return false;
+                }
+                this.advance();
+                return true;
+            }
+
+            advance() {
+                if (!this.active || this.transitioning) return false;
+                const command = this.commands[this.commandIndex];
+                if (!command) return this.finish();
+                if (this.iteration + 1 < command.repeats) this.iteration++;
+                else {
+                    this.commandIndex++;
+                    this.iteration = 0;
+                }
+                if (this.commandIndex >= this.commands.length) return this.finish();
+                const generation = this.generation;
+                this.transitioning = true;
+                queueMicrotask(() => this.runCurrent(generation));
+                this.dispatchState();
+                return true;
+            }
+
+            commandDuration(command) {
+                const card = this.cardForCode(command.leg.songCode);
+                const audio = card ? audioForCard(card) : null;
+                if (!audio) return null;
+                const bounds = this.bounds(audio, command.leg);
+                return bounds ? (bounds.end - bounds.start) / Math.max(.05, Number(command.leg.rate) || soundCircuit.playbackRate) : null;
+            }
+
+            progress() {
+                if (!this.active || !this.current) return { active: false };
+                const rate = Math.max(.05, Number(this.current.audio?.playbackRate) || soundCircuit.playbackRate);
+                const currentTime = playbackTime(this.current.audio);
+                const currentRemaining = Math.max(0, this.current.end - currentTime) / rate;
+                const duration = playbackDuration(this.current.audio) || this.current.audio.duration;
+                const model = Number.isFinite(duration) && duration > 0 ? seekRadialModel(this.current.audio, currentTime, duration) : null;
+                const next = this.commands[this.commandIndex + (this.iteration + 1 < this.commands[this.commandIndex].repeats ? 0 : 1)] || null;
+                let total = currentRemaining;
+                let known = true;
+                for (let index = this.commandIndex; index < this.commands.length; index++) {
+                    const command = this.commands[index];
+                    const duration = this.commandDuration(command);
+                    if (duration === null) {
+                        known = false;
+                        break;
+                    }
+                    const completed = index === this.commandIndex ? this.iteration + 1 : 0;
+                    const remainingRepeats = Math.max(0, command.repeats - completed);
+                    total += duration * remainingRepeats;
+                }
+                return {
+                    active: true,
+                    currentLeg: this.current.command.sourceIndex + 1,
+                    currentSection: Number(this.current.command.leg.section) || 0,
+                    currentRemaining,
+                    nextLeg: next ? next.sourceIndex + 1 : null,
+                    nextEta: currentRemaining,
+                    totalRemaining: known ? total : null,
+                    percent: model ? Math.max(0, Math.min(100, Math.round(model.activePercent))) : null
+                };
+            }
+
+            dispatchProgress() {
+                const progress = this.progress();
+                const second = Math.floor(progress.currentRemaining || 0);
+                if (second === this.lastProgressSecond) return;
+                this.lastProgressSecond = second;
+                document.dispatchEvent(new CustomEvent('m2legsprogress', { detail: progress }));
+            }
+
+            dispatchState() {
+                this.lastProgressSecond = -1;
+                document.dispatchEvent(new CustomEvent('m2legsstate', { detail: this.progress() }));
+            }
+
+            finish() {
+                const audio = this.current?.audio;
+                this.active = false;
+                this.current = null;
+                this.transitioning = false;
+                this.generation++;
+                playbackCircuit.dropPl();
+                if (audio && !audio.paused) audio.pause();
+                this.dispatchState();
+                return true;
+            }
+
+            fail() {
+                this.cancel();
+                return false;
+            }
+
+            cancel() {
+                if (!this.active && !this.current) return false;
+                this.active = false;
+                this.current = null;
+                this.transitioning = false;
+                this.selecting = false;
+                this.generation++;
+                this.dispatchState();
+                return true;
+            }
+        }
+        legsExecutor = new LegsExecutor();
+        window.__npTerminalActivateLegs = plan => legsExecutor.activate(plan);
+        window.__npTerminalUpdateActiveLegs = plan => legsExecutor.update(plan);
+        window.__npTerminalLegsProgress = () => legsExecutor.progress();
+        window.__npTerminalLegsActive = () => legsExecutor.active;
+        window.__npTerminalIsrAt = position => isrAt(position);
+        window.__npTerminalProgSnapshot = () => {
+            const audio = currentAudio;
+            if (!audio) return null;
+            const duration = playbackDuration(audio) || audio.duration;
+            const time = playbackTime(audio);
+            if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return null;
+            const model = seekRadialModel(audio, time, duration);
+            const rate = Math.max(.05, Number(audio.playbackRate) || 1);
+            const sectionEnd = kIsOn() && model.activeDomain?.section ? model.activeDomain.end : duration;
+            return {
+                songId: visibleCardFor(audio.closest('.card'))?.id || '',
+                currentRemaining: Math.max(0, sectionEnd - time) / rate,
+                currentSection: Math.min(99, Math.max(0, model.activeSection || 0)),
+                totalRemaining: kIsOn() && !krFeedEnergized() ? Math.max(0, duration - time) / rate : Math.max(0, sectionEnd - time) / rate,
+                percent: Math.max(0, Math.min(100, Math.round(model.activePercent)))
+            };
+        };
         let playbackPowerRecovery = null;
         const applyPlaybackCircuitPower = () => {
             const powered = playbackAvionicsPower.closed;
             if (!powered) {
+                legsExecutor.cancel();
                 const audio = currentAudio;
                 const media = audio ? activeMediaForCard(audio.closest('.card')) : null;
                 const video = media?.matches('video[data-sync="true"]') ? media : null;
@@ -8637,6 +8925,7 @@ usort($cats, 'customStrCmp');
                 masterGain.gain.setValueAtTime(powered ? 1 : 0, audioCtx.currentTime);
             }
             if (powered) return;
+            legsExecutor.cancel();
             panelSoundBank.stopElectrical();
             playbackCircuit.dropPl();
             playbackCircuit.clearActivity();
@@ -8659,6 +8948,7 @@ usort($cats, 'customStrCmp');
 
         document.addEventListener('ended', (e) => {
             if (e.target.tagName !== 'AUDIO') return;
+            if (legsExecutor.ended(e.target)) return;
             if (window.__npKrLooping(e.target) && krLoopStart !== null && krLoopEnd !== null) {
                 const signal = playbackCircuit.pulseBoundary({
                     kind: 'section', audio: e.target, start: krLoopStart, end: krLoopEnd, event: e
@@ -8696,6 +8986,7 @@ usort($cats, 'customStrCmp');
                 updateLoopState();
                 playAudio(currentAudio, 'play button');
             } else {
+                if (isrAt('E')) legsExecutor.cancel();
                 playbackCircuit.dropPl();
                 currentAudio.pause();
             }
@@ -8707,6 +8998,7 @@ usort($cats, 'customStrCmp');
             playMechanicalSound(turningOn ? 'arm' : 'click');
         };
         nextBtn.onclick = () => {
+            if (isrAt('E')) return;
             const cards = [...document.querySelectorAll('.card:not([style*="display: none"])')]
                 .filter(c => c.closest('.cardWrap')?.style.display !== 'none');
             const idx = cards.indexOf(visibleCardFor(currentAudio?.closest('.card')));
@@ -8727,6 +9019,7 @@ usort($cats, 'customStrCmp');
         };
 
         prevBtn.onclick = () => {
+            if (isrAt('E')) return;
             const cards = [...document.querySelectorAll('.card:not([style*="display: none"])')]
                 .filter(c => c.closest('.cardWrap')?.style.display !== 'none');
             const idx = cards.indexOf(visibleCardFor(currentAudio?.closest('.card')));
@@ -8817,12 +9110,14 @@ usort($cats, 'customStrCmp');
 
             const mVol = $('mVol');
             let volumeUpdateQueued = false;
+            let manualVolumeBaseline = Math.cbrt(soundCircuit.volume.value);
             const renderVol = () => {
                 if (mVol) mVol.style.transform = 'rotate(' + (Math.cbrt(soundCircuit.volume.value) * 305) + 'deg)';
             };
-            const setVol = lin => {
+            const setVol = (lin, source = 'manual') => {
                 lin = Math.max(0, Math.min(1, lin));
                 if (!soundCircuit.volume.setValue(Math.pow(lin, 3))) return false;
+                if (source === 'manual') manualVolumeBaseline = lin;
                 if (!volumeUpdateQueued) {
                     volumeUpdateQueued = true;
                     requestAnimationFrame(() => {
@@ -8833,10 +9128,45 @@ usort($cats, 'customStrCmp');
                 }
                 return true;
             };
+            let volumeGearMotion = null;
+            window.__npTerminalSetVolume = (value, source = 'terminal') => {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) return false;
+                const to = Math.max(0, Math.min(100, numeric)) / 100;
+                if (volumeGearMotion?.to === to) return true;
+                const from = Math.cbrt(soundCircuit.volume.value);
+                if (Math.abs(to - from) < 0.000001) return true;
+                const motion = {
+                    from,
+                    to,
+                    previous: from,
+                    start: performance.now(),
+                    duration: Math.max(250, 2000 * Math.abs(to - from))
+                };
+                volumeGearMotion = motion;
+                const frame = now => {
+                    if (volumeGearMotion !== motion) return;
+                    const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
+                    const eased = progress * progress * (3 - 2 * progress);
+                    const next = motion.from + (motion.to - motion.from) * eased;
+                    if (setVol(next, source)) {
+                        panelSoundBank.driveRotary('rAndV', 'mVolTerminal', (next - motion.previous) * 305, 12.2);
+                        motion.previous = next;
+                    }
+                    if (progress < 1) requestAnimationFrame(frame);
+                    else {
+                        volumeGearMotion = null;
+                        panelSoundBank.stopRotary('mVolTerminal');
+                    }
+                };
+                requestAnimationFrame(frame);
+                return true;
+            };
+            window.__npTerminalManualVolume = () => Math.round(manualVolumeBaseline * 100);
             const turnVol = delta => {
                 const before = Math.cbrt(soundCircuit.volume.value);
                 if (!setVol(before + delta)) return false;
-                panelSoundBank.driveRotary('MCPVSRotary', 'mVol',
+                panelSoundBank.driveRotary('rAndV', 'mVol',
                     (Math.cbrt(soundCircuit.volume.value) - before) * 305, 12.2);
                 return true;
             };
@@ -8874,7 +9204,7 @@ usort($cats, 'customStrCmp');
                 if (lIsOn()) return false;
                 const before = soundCircuit.reverb.value;
                 if (!setRev(before + delta)) return false;
-                panelSoundBank.driveRotary('MCPVSRotary', 'mRev',
+                panelSoundBank.driveRotary('rAndV', 'mRev',
                     (soundCircuit.reverb.value - before) * 305, 15.25);
                 return true;
             };
@@ -8900,7 +9230,7 @@ usort($cats, 'customStrCmp');
                     const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
                     const eased = progress * progress * (3 - 2 * progress);
                     if (setRev(motion.from + (motion.to - motion.from) * eased)) {
-                        panelSoundBank.driveRotary('MCPVSRotary', 'mRevGear',
+                        panelSoundBank.driveRotary('rAndV', 'mRevGear',
                             (soundCircuit.reverb.value - (motion.previous ?? motion.from)) * 305, 15.25);
                         motion.previous = soundCircuit.reverb.value;
                     }
@@ -8929,11 +9259,19 @@ usort($cats, 'customStrCmp');
 
             const mSpd = $('mSpd');
             let speedUpdateQueued = false;
+            const speedRateAt = control => {
+                const y = (0.5 - control) * 100;
+                const x = Math.abs(y);
+                const delta = x <= 10 ? 0.01 * x : 0.1 + 0.01 * (x - 10) + Math.pow(x - 10, 2) / 900;
+                return Math.max(0.05, y >= 0 ? 1 + delta : 1 - delta);
+            };
+            let manualSpeedBaseline = speedRateAt(soundCircuit.speed.value);
             const renderSpd = () => {
                 if (mSpd) mSpd.style.transform = 'rotate(' + ((0.5 - soundCircuit.speed.value) * 360) + 'deg)';
             };
-            const setSpd = p => {
+            const setSpd = (p, source = 'manual') => {
                 if (!soundCircuit.speed.setValue(p)) return false;
+                if (source === 'manual') manualSpeedBaseline = speedRateAt(p);
                 if (!speedUpdateQueued) {
                     speedUpdateQueued = true;
                     requestAnimationFrame(() => {
@@ -8945,21 +9283,15 @@ usort($cats, 'customStrCmp');
                 return true;
             };
             let speedGearMotion = null;
-            window.__npTerminalSetSpeed = value => {
+            window.__npTerminalSetSpeed = (value, source = 'terminal') => {
                 const target = Number(value);
                 if (!Number.isFinite(target)) return false;
-                const rateAt = control => {
-                    const y = (0.5 - control) * 100;
-                    const x = Math.abs(y);
-                    const delta = x <= 10 ? 0.01 * x : 0.1 + 0.01 * (x - 10) + Math.pow(x - 10, 2) / 900;
-                    return Math.max(0.05, y >= 0 ? 1 + delta : 1 - delta);
-                };
-                const bounded = Math.max(rateAt(1), Math.min(rateAt(0), target));
+                const bounded = Math.max(speedRateAt(1), Math.min(speedRateAt(0), target));
                 let lower = 0;
                 let upper = 1;
                 for (let i = 0; i < 32; i++) {
                     const middle = (lower + upper) / 2;
-                    if (rateAt(middle) > bounded) lower = middle;
+                    if (speedRateAt(middle) > bounded) lower = middle;
                     else upper = middle;
                 }
                 const to = (lower + upper) / 2;
@@ -8979,8 +9311,8 @@ usort($cats, 'customStrCmp');
                     const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
                     const eased = progress * progress * (3 - 2 * progress);
                     const next = motion.from + (motion.to - motion.from) * eased;
-                    if (setSpd(next)) {
-                        panelSoundBank.driveRotary('MCPAltRotary', 'mSpdTerminal',
+                    if (setSpd(next, source)) {
+                        panelSoundBank.driveRotary('r3Section', 'mSpdTerminal',
                             (motion.previous - soundCircuit.speed.value) * 360, 3.6);
                         motion.previous = soundCircuit.speed.value;
                     }
@@ -8993,10 +9325,11 @@ usort($cats, 'customStrCmp');
                 requestAnimationFrame(frame);
                 return true;
             };
+            window.__npTerminalManualSpeed = () => manualSpeedBaseline;
             const turnSpd = delta => {
                 const before = soundCircuit.speed.value;
                 if (!setSpd(before + delta)) return false;
-                panelSoundBank.driveRotary('MCPAltRotary', 'mSpd',
+                panelSoundBank.driveRotary('r3Section', 'mSpd',
                     (before - soundCircuit.speed.value) * 360, 3.6);
                 return true;
             };
@@ -9012,11 +9345,13 @@ usort($cats, 'customStrCmp');
 
             const mR3 = $('mR3');
             let sectionWindowUpdateQueued = false;
+            let manualSectionWindowBaseline = Math.round(playbackCircuit.sectionWindow.value * SECTION_WINDOW_MAX_SECONDS);
             const renderR3 = () => {
                 if (mR3) mR3.style.transform = 'rotate(' + ((playbackCircuit.sectionWindow.value * 305) - 152.5) + 'deg)';
             };
-            const setR3 = value => {
+            const setR3 = (value, source = 'manual') => {
                 if (!playbackCircuit.sectionWindow.setValue(value)) return false;
+                if (source === 'manual') manualSectionWindowBaseline = Math.round(value * SECTION_WINDOW_MAX_SECONDS);
                 if (!sectionWindowUpdateQueued) {
                     sectionWindowUpdateQueued = true;
                     requestAnimationFrame(() => {
@@ -9030,7 +9365,7 @@ usort($cats, 'customStrCmp');
                 return true;
             };
             let sectionWindowGearMotion = null;
-            window.__npTerminalSetSectionWindow = seconds => {
+            window.__npTerminalSetSectionWindow = (seconds, source = 'terminal') => {
                 const value = Number(seconds);
                 if (!Number.isFinite(value)) return false;
                 const to = Math.max(0, Math.min(SECTION_WINDOW_MAX_SECONDS, value)) / SECTION_WINDOW_MAX_SECONDS;
@@ -9050,8 +9385,8 @@ usort($cats, 'customStrCmp');
                     const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
                     const eased = progress * progress * (3 - 2 * progress);
                     const next = motion.from + (motion.to - motion.from) * eased;
-                    if (setR3(next)) {
-                        panelSoundBank.driveRotary('MCPAltRotary', 'mR3Terminal',
+                    if (setR3(next, source)) {
+                        panelSoundBank.driveRotary('r3Section', 'mR3Terminal',
                             (playbackCircuit.sectionWindow.value - motion.previous) * 305, 15.25);
                         motion.previous = playbackCircuit.sectionWindow.value;
                     }
@@ -9064,10 +9399,11 @@ usort($cats, 'customStrCmp');
                 requestAnimationFrame(frame);
                 return true;
             };
+            window.__npTerminalManualSectionWindow = () => manualSectionWindowBaseline;
             const turnR3 = delta => {
                 const before = playbackCircuit.sectionWindow.value;
                 if (!setR3(before + delta)) return false;
-                panelSoundBank.driveRotary('MCPAltRotary', 'mR3',
+                panelSoundBank.driveRotary('r3Section', 'mR3',
                     (playbackCircuit.sectionWindow.value - before) * 305, 15.25);
                 return true;
             };
@@ -9094,8 +9430,9 @@ usort($cats, 'customStrCmp');
                     updateSpeedVisuals();
                     propagateSpeed();
                     renderSpd();
-                    panelSoundBank.play('mR2');
-                    panelSoundBank.play('attendantcall', { electrical: true });
+                    window.__npTerminalResetGlobal?.();
+                    panelSoundBank.play('resetControl');
+                    panelSoundBank.play('confirmationChime', { electrical: true });
                 });
                 const up = () => {
                     mR2.src = aimg('r2off.png');
@@ -9125,7 +9462,7 @@ usort($cats, 'customStrCmp');
                 plActivationPending = false;
                 plBusy = true;
                 mPl.src = aimg(playing() ? PL.toOff : PL.toOn);
-                panelSoundBank.play('mPl');
+                panelSoundBank.play('playControl');
                 setTimeout(() => {
                     plBusy = false;
                     if (pBtn.onclick) pBtn.onclick();
@@ -9138,7 +9475,7 @@ usort($cats, 'customStrCmp');
                 const intent = ++plActivationIntent;
                 plActivationPending = true;
                 mPl.src = aimg(PL.toOn);
-                panelSoundBank.play('mPl');
+                panelSoundBank.play('playControl');
                 setTimeout(() => {
                     if (intent !== plActivationIntent) return;
                     plActivationPending = false;
@@ -9172,7 +9509,9 @@ usort($cats, 'customStrCmp');
                         (sound || click)();
                         paint();
                         onStep(steps[i], i);
+                        return true;
                     }
+                    return false;
                 };
                 el.addEventListener('click', () => step(-1));
                 el.addEventListener('contextmenu', e => {
@@ -9193,7 +9532,23 @@ usort($cats, 'customStrCmp');
                             i = n;
                             paint();
                         }
-                    }
+                    },
+                    drive: combo => new Promise(resolve => {
+                        const target = steps.findIndex(s => s.combo === combo);
+                        if (target < 0 || target === i) {
+                            resolve(target >= 0);
+                            return;
+                        }
+                        const direction = target > i ? 1 : -1;
+                        const advance = () => {
+                            if (i === target || !step(direction)) {
+                                resolve(i === target);
+                                return;
+                            }
+                            window.setTimeout(advance, 120);
+                        };
+                        advance();
+                    })
                 };
             }
             const OFF_ANGLE = 117.7;
@@ -9213,14 +9568,19 @@ usort($cats, 'customStrCmp');
                     deg: 270 - OFF_ANGLE,
                     combo: 'SR'
                 },
+                {
+                    deg: 315 - OFF_ANGLE,
+                    combo: 'ER'
+                },
             ];
-            const curCombo = () => isrAt('I') ? 'IR' : isrAt('S') ? 'SR' : isrAt('R') ? 'R' : '';
+            const curCombo = () => isrAt('I') ? 'IR' : isrAt('S') ? 'SR' : isrAt('E') ? 'ER' : isrAt('R') ? 'R' : '';
             const mISR = $('mISR');
             let isrCtl = null;
             if (mISR) isrCtl = knobs(mISR, ISR_STEPS, s => {
-                const position = s.combo === 'IR' ? 'I' : s.combo === 'SR' ? 'S' : s.combo === 'R' ? 'R' : 'OFF';
+                const position = s.combo === 'IR' ? 'I' : s.combo === 'SR' ? 'S' : s.combo === 'ER' ? 'E' : s.combo === 'R' ? 'R' : 'OFF';
                 setIsrPosition(position);
-            }, () => panelSoundBank.play('GroundStartRelease'));
+            }, () => panelSoundBank.play('isrRelease'));
+            window.__npTerminalSetIsr = position => isrCtl?.drive(position === 'I' ? 'IR' : position === 'S' ? 'SR' : position === 'E' ? 'ER' : position === 'R' ? 'R' : '') || Promise.resolve(false);
 
 
             function switchControl(img, states, onChange, sound, reverseClicks) {
@@ -9301,7 +9661,7 @@ usort($cats, 'customStrCmp');
                 },
             ], s => {
                 playbackCircuit.m.setPosition(s.name);
-            }, () => panelSoundBank.play('apuswitchonoff'), true);
+            }, () => panelSoundBank.play('modeSwitch'), true);
 
 
             const mK = $('mK');
@@ -9315,13 +9675,13 @@ usort($cats, 'customStrCmp');
             if (mK) {
                 mK.addEventListener('click', () => {
                     if (setLrcMode(false)) {
-                        panelSoundBank.play('landingLights');
+                        panelSoundBank.play('modeSwitch');
                     }
                 });
                 mK.addEventListener('contextmenu', e => {
                     e.preventDefault();
                     if (setLrcMode(true)) {
-                        panelSoundBank.play('landingLights');
+                        panelSoundBank.play('modeSwitch');
                     }
                 });
                 mK.addEventListener('wheel', e => {
@@ -9329,7 +9689,7 @@ usort($cats, 'customStrCmp');
                     e.stopPropagation();
                     const goOn = e.deltaY < 0;
                     if (setLrcMode(goOn)) {
-                        panelSoundBank.play('landingLights');
+                        panelSoundBank.play('modeSwitch');
                     }
                 }, {
                     passive: false
@@ -9347,16 +9707,16 @@ usort($cats, 'customStrCmp');
             };
             if (mKR) {
                 mKR.addEventListener('click', () => {
-                    if (setKrMode(false)) panelSoundBank.play('landingLights');
+                    if (setKrMode(false)) panelSoundBank.play('modeSwitch');
                 });
                 mKR.addEventListener('contextmenu', e => {
                     e.preventDefault();
-                    if (setKrMode(true)) panelSoundBank.play('landingLights');
+                    if (setKrMode(true)) panelSoundBank.play('modeSwitch');
                 });
                 mKR.addEventListener('wheel', e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (setKrMode(e.deltaY < 0)) panelSoundBank.play('landingLights');
+                    if (setKrMode(e.deltaY < 0)) panelSoundBank.play('modeSwitch');
                 }, {
                     passive: false
                 });
@@ -9905,6 +10265,17 @@ usort($cats, 'customStrCmp');
 
         const tJumpLinks = [...document.querySelectorAll('.tJumpCat')];
         const catLabels = [...document.querySelectorAll('.catLabel')];
+        document.querySelectorAll('.tJumpCat, .tJumpSub a').forEach(control => {
+            control.addEventListener('click', event => {
+                const hash = control.dataset.href || control.getAttribute('href');
+                if (!hash?.startsWith('#')) return;
+                const target = document.getElementById(hash.slice(1));
+                if (!target) return;
+                event.preventDefault();
+                if (location.hash !== hash) location.hash = hash;
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
 
         const updateActiveCategory = () => {
             const triggerY = window.innerHeight * 0.4;
@@ -11016,7 +11387,7 @@ usort($cats, 'customStrCmp');
                 #cycleTimer = null;
                 #timers = new Set();
                 #running = false;
-                #panelWord = '00000000';
+            #panelWord = '000000000';
                 #warning = false;
                 #cycleNumber = 0;
 
@@ -11031,7 +11402,7 @@ usort($cats, 'customStrCmp');
                     this.cycleDuration = 60000 / this.flashRate;
                     this.safeCurrentLimit = 1.6;
                     this.pattern = Object.freeze({
-                        bitOrder: Object.freeze(['PL', 'ISR1', 'ISR0', 'K', 'KR', 'M1', 'M0', 'L']),
+                        bitOrder: Object.freeze(['PL', 'ISR2', 'ISR1', 'ISR0', 'K', 'KR', 'M1', 'M0', 'L']),
                         shortPulse: 24,
                         longPulse: 58,
                         slot: 100,
@@ -11082,11 +11453,11 @@ usort($cats, 'customStrCmp');
                 }
 
                 #encodePanelWord(state) {
-                    const isr = { OFF: 0, R: 1, I: 2, S: 3 }[state.isr] ?? 0;
+                    const isr = { OFF: 0, R: 1, I: 2, S: 3, E: 4 }[state.isr] ?? 0;
                     const m = { C: 0, U: 1, D: 2 }[state.m] ?? 0;
                     return [
                         state.pl ? '1' : '0',
-                        isr.toString(2).padStart(2, '0'),
+                        isr.toString(2).padStart(3, '0'),
                         state.k === 'ON' ? '1' : '0',
                         state.kr === 'ON' ? '1' : '0',
                         m.toString(2).padStart(2, '0'),
@@ -12116,12 +12487,12 @@ usort($cats, 'customStrCmp');
 
                 forward() {
                     panelSoundBank.unlock();
-                    if (this.bus.selector.pulseForward()) panelSoundBank.play('genswitch');
+                    if (this.bus.selector.pulseForward()) panelSoundBank.play('loadSelector');
                 }
 
                 backward() {
                     panelSoundBank.unlock();
-                    if (this.bus.selector.pulseBackward()) panelSoundBank.play('genswitch');
+                    if (this.bus.selector.pulseBackward()) panelSoundBank.play('loadSelector');
                 }
 
                 render() {
@@ -12394,7 +12765,7 @@ usort($cats, 'customStrCmp');
                 });
                 const syncAmbientSound = () => {
                     if (bus.pagePower.closed && (bus.selector.position === 'L' || bus.selector.position === 'OBS')) {
-                        panelSoundBank.startHeld('ambient');
+                        panelSoundBank.startHeld('starterAmbient');
                     } else if (!bus.pagePower.closed) {
                         panelSoundBank.stopAll();
                     }
@@ -12607,16 +12978,68 @@ usort($cats, 'customStrCmp');
     <script>
         (() => {
             const terminal = document.getElementById('mTerminal');
-            const folioDisplay = terminal.querySelector('.mTerminalHeader span:first-child');
-            const pageDisplay = terminal.querySelector('.mTerminalHeader span:last-child');
-            const scratchpadDisplay = terminal.querySelector('.mTerminalInput span:last-child');
-            const fields = new Map([...terminal.querySelectorAll('.mTerminalMain[data-terminal-field]')].map(field => [
-                field.dataset.terminalField,
-                { main: field, title: field.previousElementSibling }
-            ]));
-            const entryFields = ['1', '2', '3', '4', '6', '7', '8', '9'];
+            const terminalScreen = document.getElementById('mTerminalScreen');
+            const terminalColumns = 24;
+            const terminalRows = 14;
+            const terminalCells = Array.from({ length: terminalColumns * terminalRows }, (_, index) => {
+                const cell = document.createElement('span');
+                cell.className = 'mTerminalCell';
+                cell.dataset.terminalRow = String(Math.floor(index / terminalColumns) + 1);
+                cell.dataset.terminalColumn = String(index % terminalColumns + 1);
+                terminalScreen.append(cell);
+                return cell;
+            });
+            const blankTerminalCell = () => ({ color: 'white', size: 'large', font: 'standard', inverted: false, flashing: false });
+            const terminalCharacterBuffer = Array(terminalColumns * terminalRows).fill(' ');
+            const terminalAttributeBuffer = Array.from({ length: terminalColumns * terminalRows }, blankTerminalCell);
+            const terminalCellIndex = (row, column) => row * terminalColumns + column;
+            const clearTerminalRow = row => {
+                for (let column = 0; column < terminalColumns; column++) {
+                    const index = terminalCellIndex(row, column);
+                    terminalCharacterBuffer[index] = ' ';
+                    terminalAttributeBuffer[index] = blankTerminalCell();
+                }
+            };
+            const clearTerminalScreen = () => {
+                for (let row = 0; row < terminalRows; row++) clearTerminalRow(row);
+            };
+            const writeTerminalText = (row, column, value, attributes = {}) => {
+                [...String(value ?? '')].forEach((character, offset) => {
+                    const targetColumn = column + offset;
+                    if (row < 0 || row >= terminalRows || targetColumn < 0 || targetColumn >= terminalColumns) return;
+                    const index = terminalCellIndex(row, targetColumn);
+                    terminalCharacterBuffer[index] = character;
+                    terminalAttributeBuffer[index] = { ...blankTerminalCell(), ...attributes };
+                });
+            };
+            const renderTerminalRows = rows => {
+                rows.forEach(row => {
+                    for (let column = 0; column < terminalColumns; column++) {
+                        const index = terminalCellIndex(row, column);
+                        const cell = terminalCells[index];
+                        const attributes = terminalAttributeBuffer[index];
+                        cell.textContent = terminalCharacterBuffer[index];
+                        cell.className = [
+                            'mTerminalCell',
+                            attributes.size === 'small' ? 'is-small' : '',
+                            attributes.color !== 'white' ? `is-${attributes.color}` : '',
+                            attributes.inverted ? 'is-inverted' : '',
+                            attributes.flashing ? 'is-flashing' : ''
+                        ].filter(Boolean).join(' ');
+                    }
+                });
+            };
+            const renderTerminalScreen = () => renderTerminalRows(Array.from({ length: terminalRows }, (_, row) => row));
+            const writeTerminalAligned = (row, value, alignment, attributes = {}) => {
+                const text = [...String(value ?? '')].slice(0, terminalColumns).join('');
+                const column = alignment === 'right' ? terminalColumns - text.length : alignment === 'center' ? Math.floor((terminalColumns - text.length) / 2) : 0;
+                writeTerminalText(row, column, text, attributes);
+                return column;
+            };
+            const terminalFields = ['1L', '2L', '3L', '4L', '5L', '6L', '1R', '2R', '3R', '4R', '5R', '6R'];
+            const entryFields = ['1L', '2L', '3L', '4L', '5L', '1R', '2R', '3R', '4R', '5R'];
             const maxTextLength = 15;
-            const maxTitleLength = 28;
+            const maxTitleLength = 24;
             const pageSize = entryFields.length;
             const terminalAlphabetGroups = <?= json_encode($fixþebrokenorderingofdefaultphpineedtomakeþisanklaßlatertobefairwellfornowweshallkeepusingþischangenotnameofþisvartwillbeanfunktionwiþtimejslaterwewillimportsotakeþisasantodoplease, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
             const terminalCharacterRanks = new Map();
@@ -12679,7 +13102,8 @@ usort($cats, 'customStrCmp');
                     category: wrap.dataset.category?.trim() || '',
                     url: card?.dataset.songUrl?.trim() || '',
                     seriesTitle: virtualMember?.info?.seriesTitle || '',
-                    memberTitle: virtualMember?.displayTitle || ''
+                    memberTitle: virtualMember?.displayTitle || '',
+                    hasTranslation: !!wrap.querySelector('.mLyricsToggle')
                 };
             }).filter(song => song.title !== '');
             const songsByUrl = [...sourceSongCards].sort((a, b) => {
@@ -12703,6 +13127,11 @@ usort($cats, 'customStrCmp');
             const persistedGlobalSettings = { ...globalSettings };
             const songSettings = {};
             const persistedSongSettings = {};
+            let legsDraft = [];
+            let persistedLegsPlan = [];
+            let legsDraftPages = 1;
+            let persistedLegsPages = 1;
+            let legsProgress = { active: false };
             const limitTerminalText = (value, maximum) => {
                 const text = asciiMaker(value).toUpperCase();
                 if (text.length <= maximum) return text;
@@ -12712,7 +13141,10 @@ usort($cats, 'customStrCmp');
                 return wordBoundary > 0 ? clipped.slice(0, wordBoundary) : clipped;
             };
             const limitText = value => limitTerminalText(value, maxTextLength);
-            const limitTitleText = value => limitTerminalText(value, maxTitleLength);
+            const limitTitleText = value => limitTerminalText(
+                asciiMaker(value).toUpperCase().replace(/[^A-Z0-9 ]/gu, ''),
+                maxTitleLength
+            );
             const terminalCategoryName = value => asciiMaker(value)
                 .replace(/\s*[;,]\s*/gu, ' ')
                 .replace(/\s+/gu, ' ')
@@ -12739,28 +13171,43 @@ usort($cats, 'customStrCmp');
                     /\p{L}/u.test(character) && !/[\p{Script=Latin}\p{Script=Cyrillic}]/u.test(character));
                 return { text: hasUnsupportedLetters && song.sortTitle ? song.sortTitle : title, accent: '' };
             };
-            const actionEntry = (title, value, action, field = '', titleAccent = '') => ({ title, value, action, field, titleAccent });
+            const actionEntry = (title, value, action, field = '', titleAccent = '', titleLimit = maxTitleLength, titleLiteral = false) => ({ title, value, action, field, titleAccent, titleLimit, titleLiteral });
+            const dashedTitleEntry = (label, value, action, field) => ({
+                ...actionEntry('', value, action, field),
+                titleRuns: [
+                    { column: 0, text: label, size: 'small' },
+                    { column: label.length, text: '-'.repeat(maxTitleLength - label.length), size: 'large' }
+                ]
+            });
             const pageNumber = (items, page) => Math.max(1, Math.min(Math.ceil(items.length / pageSize) || 1, page || 1));
             const pageItems = (items, page) => items.slice((page - 1) * pageSize, page * pageSize);
             const liveValues = () => window.__npTerminalLiveValues();
             const settingEntry = (title, key, values, scope, songId = '') => ({ title, value: values[key], setting: key, scope, songId });
             const globalSettingEntry = (title, key) => settingEntry(title, key, globalSettings, 'global');
-            const songSettingValues = songId => songSettings[songId] || { speed: '', sectionWindow: '', standby: '' };
-            const persistedSongSettingValues = songId => persistedSongSettings[songId] || { speed: '', sectionWindow: '', standby: '' };
+            const emptySongSettings = () => ({ speed: '', sectionWindow: '', standby: '', volume: '', lyrMode: '' });
+            const songSettingValues = songId => songSettings[songId] || emptySongSettings();
+            const persistedSongSettingValues = songId => persistedSongSettings[songId] || emptySongSettings();
             const liveValueFor = key => {
                 const values = liveValues();
                 if (key === 'speed') return values.speed.toFixed(2);
                 if (key === 'sectionWindow') return String(values.sectionWindow);
+                if (key === 'volume') return String(values.volume);
                 return values.standby;
             };
-            const parseStandby = value => {
-                const match = /^(\d{1,2})\/(\d{1,3})\.(\d{1,2})$/.exec(value);
+            const parseTerminalTime = (value, allowDirect = false) => {
+                const source = asciiMaker(value).toUpperCase().trim();
+                if (allowDirect && source === 'DCT') return { section: 0, seconds: 0, text: '00/001.01' };
+                const match = /^(\d{0,2})\/(\d{1,3})\.(\d{1,2})$/.exec(source);
                 if (!match) return null;
-                const section = Number(match[1]);
+                const section = Number(match[1] || 0);
                 const minute = Number(match[2]);
-                const second = Number(match[3]);
+                const second = match[3].length === 1 ? Number(match[3]) * 10 : Number(match[3]);
                 if (section > 99 || minute < 1 || minute > 999 || second < 1 || second > 60) return null;
-                return { section, seconds: (minute - 1) * 60 + second - 1, text: `${section}/${minute}.${String(second).padStart(2, '0')}` };
+                return {
+                    section,
+                    seconds: (minute - 1) * 60 + second - 1,
+                    text: `${String(section).padStart(2, '0')}/${String(minute).padStart(3, '0')}.${String(second).padStart(2, '0')}`
+                };
             };
             const normalizeGlobalSetting = (key, value) => {
                 const text = limitText(value).trim();
@@ -12774,31 +13221,57 @@ usort($cats, 'customStrCmp');
                     const seconds = Number(text);
                     return /^\d{1,3}$/.test(text) && seconds <= 180 ? String(seconds) : '';
                 }
-                return parseStandby(text)?.text || '';
+                if (key === 'volume') {
+                    return /^\d{1,3}$/.test(text) && Number(text) <= 100 ? String(Number(text)) : '';
+                }
+                if (key === 'lyrMode') return text === 'AKTIVATE' || text === 'DEAKTIV' ? text : '';
+                return parseTerminalTime(text)?.text || '';
             };
-            const applySettings = values => {
-                if (values.speed) window.__npTerminalSetSpeed(values.speed);
-                if (values.sectionWindow) window.__npTerminalSetSectionWindow(values.sectionWindow);
+            const formatTerminalTime = (section, seconds) => {
+                const safeSeconds = Math.max(0, Math.trunc(seconds));
+                return `${String(Math.max(0, Math.min(99, Math.trunc(section)))).padStart(2, '0')}/${String(Math.floor(safeSeconds / 60) + 1).padStart(3, '0')}.${String(safeSeconds % 60 + 1).padStart(2, '0')}`;
+            };
+            const manualSettings = () => {
+                const standby = window.__npTerminalManualStandby?.() || { section: 0, seconds: 0 };
+                return {
+                    speed: Number(window.__npTerminalManualSpeed?.() || liveValues().speed).toFixed(2),
+                    sectionWindow: String(window.__npTerminalManualSectionWindow?.() ?? liveValues().sectionWindow),
+                    standby: formatTerminalTime(standby.section, standby.seconds),
+                    volume: String(window.__npTerminalManualVolume?.() ?? liveValues().volume)
+                };
+            };
+            const applySettings = (values, songId = '', source = 'terminal') => {
+                if (values.speed) window.__npTerminalSetSpeed(values.speed, source);
+                if (values.sectionWindow) window.__npTerminalSetSectionWindow(values.sectionWindow, source);
                 if (values.standby) {
-                    const standby = parseStandby(values.standby);
-                    if (standby) window.__npTerminalSetStandby(standby.section, standby.seconds);
+                    const standby = parseTerminalTime(values.standby);
+                    if (standby) window.__npTerminalSetStandby(standby.section, standby.seconds, source);
+                }
+                window.__npTerminalSetVolume(values.volume || window.__npTerminalManualVolume?.() || 0, source);
+                if (songId && Object.prototype.hasOwnProperty.call(values, 'lyrMode')) {
+                    window.__npTerminalSetLyrics(songId, values.lyrMode === 'AKTIVATE');
                 }
             };
             const effectiveSongSettings = songId => {
                 const personal = persistedSongSettingValues(songId);
+                const manual = manualSettings();
                 return {
-                    speed: personal.speed || persistedGlobalSettings.speed,
-                    sectionWindow: personal.sectionWindow || persistedGlobalSettings.sectionWindow,
-                    standby: personal.standby || persistedGlobalSettings.standby
+                    speed: personal.speed || manual.speed,
+                    sectionWindow: personal.sectionWindow || manual.sectionWindow,
+                    standby: personal.standby || manual.standby,
+                    volume: personal.volume || manual.volume,
+                    lyrMode: personal.lyrMode || 'DEAKTIV'
                 };
             };
-            const activeSongId = () => [...document.querySelectorAll('.card audio')]
-                .find(audio => !audio.paused)?.dataset.songId || [...document.querySelectorAll('.card audio')]
-                .find(audio => !audio.paused)?.closest('.card')?.id || '';
+            const activeSongId = () => {
+                const audio = [...document.querySelectorAll('.card audio')].find(candidate => !candidate.paused);
+                return audio?.dataset.songId || visibleCardFor(audio?.closest('.card'))?.id || document.querySelector('.card.playing')?.id || '';
+            };
             const applyCurrentSettings = () => {
                 const songId = activeSongId();
-                applySettings(songId ? effectiveSongSettings(songId) : persistedGlobalSettings);
+                applySettings(songId ? effectiveSongSettings(songId) : persistedGlobalSettings, songId);
             };
+            window.__npTerminalResetGlobal = () => applySettings(persistedGlobalSettings, '', 'manual');
             const globalDatabase = () => new Promise((resolve, reject) => {
                 const request = indexedDB.open('mTerminal', 1);
                 request.onupgradeneeded = () => request.result.createObjectStore('global');
@@ -12814,9 +13287,9 @@ usort($cats, 'customStrCmp');
                     request.onsuccess = () => resolve(request.result || {});
                     request.onerror = () => reject(request.error);
                 });
-                const [global, songs] = await Promise.all([read('settings'), read('song-settings')]);
+                const [global, songs, legs] = await Promise.all([read('settings'), read('song-settings'), read('legs-plan')]);
                 database.close();
-                return { global, songs };
+                return { global, songs, legs };
             };
             const saveTerminalSettings = async () => {
                 const database = await globalDatabase();
@@ -12824,6 +13297,7 @@ usort($cats, 'customStrCmp');
                 const store = transaction.objectStore('global');
                 store.put({ ...globalSettings }, 'settings');
                 store.put(JSON.parse(JSON.stringify(songSettings)), 'song-settings');
+                store.put({ legs: JSON.parse(JSON.stringify(legsDraft)), pages: legsDraftPages }, 'legs-plan');
                 await new Promise((resolve, reject) => {
                     transaction.oncomplete = resolve;
                     transaction.onerror = () => reject(transaction.error);
@@ -12842,32 +13316,40 @@ usort($cats, 'customStrCmp');
             const indexFolio = () => ({
                 name: 'INDEX',
                 entries: [
-                    actionEntry('', '< GLOBAL', { kind: 'folio', folio: { kind: 'global', page: 1 } }, '1'),
-                    actionEntry('', '< PER SONG', { kind: 'folio', folio: { kind: 'per-song', page: 1 } }, '2')
+                    actionEntry('', '<GLOBAL', { kind: 'folio', folio: { kind: 'global', page: 1 } }, '1L'),
+                    actionEntry('', '<PER SONG', { kind: 'folio', folio: { kind: 'per-song', page: 1 } }, '2L'),
+                    actionEntry('', '<LEGS', { kind: 'folio', folio: { kind: 'legs', page: 1 } }, '3L'),
+                    actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '1R')
                 ]
             });
             const perSongFolio = () => ({
                 name: 'PER SONG',
                 entries: [
-                    actionEntry('TYPE' + '-'.repeat(maxTitleLength - 4), '< KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1'),
-                    actionEntry('', '< 1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1 } }, '2'),
-                    actionEntry('CODE' + '-'.repeat(maxTitleLength - 4), selectedCode || '----', { kind: 'code' }, '3'),
-                    actionEntry('-'.repeat(maxTitleLength), 'NAME >', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1 } }, '6'),
-                    actionEntry('-'.repeat(maxTitleLength), '', null, '8'),
-                    
-                    ...(selectedCode ? [actionEntry('', 'SETTINGS >', { kind: 'folio', folio: { kind: 'song', songId: songsByUrl.find(song => song.code === selectedCode)?.id || '', code: selectedCode, page: 1 } }, '10')] : [])
+                    dashedTitleEntry('TYPE', '< KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1L'),
+                    actionEntry('', 'NAME>', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1 } }, '1R'),
+                    actionEntry('', '<1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1 } }, '2L'),
+                    dashedTitleEntry('CODE', selectedCode || '----', { kind: 'code' }, '3L'),
+                    ...(selectedCode ? [actionEntry('', 'SETTINGS>', { kind: 'folio', folio: { kind: 'song', songId: songsByUrl.find(song => song.code === selectedCode)?.id || '', code: selectedCode, page: 1 } }, '6R')] : [])
+                ]
+            });
+            const legsSongSearchFolio = () => ({
+                name: 'PER SONG',
+                entries: [
+                    dashedTitleEntry('TYPE', '< KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1, legIndex: folio.legIndex } }, '1L'),
+                    actionEntry('', 'NAME>', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1, legIndex: folio.legIndex } }, '1R'),
+                    actionEntry('', '<1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1, legIndex: folio.legIndex } }, '2L')
                 ]
             });
             const categoriesFolio = () => ({
                 name: 'PER KATEGORIE',
                 entries: pageItems(categories, pageNumber(categories, folio.page)).map(category =>
-                    actionEntry('', terminalCategoryName(category), { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1 } }))
+                    actionEntry('', terminalCategoryName(category), { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1, legIndex: folio.legIndex } }))
             });
             const lettersFolio = () => {
                 return {
                     name: 'PER 1ST LETTER',
                     entries: pageItems(songLetters, pageNumber(songLetters, folio.page)).map(letter =>
-                        actionEntry('', letter, { kind: 'folio', folio: { kind: 'songs', source: 'letter', letter, page: 1 } }))
+                        actionEntry('', letter, { kind: 'folio', folio: { kind: 'songs', source: 'letter', letter, page: 1, legIndex: folio.legIndex } }))
                 };
             };
             const songsForFolio = () => {
@@ -12883,39 +13365,189 @@ usort($cats, 'customStrCmp');
                     name: folio.source === 'category' ? terminalCategoryName(folio.category) : folio.source === 'letter' ? folio.letter : 'PER NAME',
                     entries: pageItems(songs, page).map(song => {
                         const title = terminalSongTitle(song);
-                        return actionEntry(title.text, song.code, { kind: 'folio', folio: { kind: 'song', songId: song.id, code: song.code, page: 1 } }, '', title.accent);
+                        return actionEntry(title.text, song.code, { kind: 'copy-code', code: song.code, legIndex: folio.legIndex }, '', title.accent);
                     })
                 };
             };
             const songFolio = () => {
                 const values = songSettingValues(folio.songId);
+                const song = songsByUrl.find(candidate => candidate.id === folio.songId);
+                const translationAvailable = !!song?.hasTranslation;
+                const translationActive = translationAvailable && values.lyrMode === 'AKTIVATE';
+                const lyricMode = {
+                    title: 'LYR MODE',
+                    value: '',
+                    field: '4L',
+                    lyrMode: true,
+                    songId: folio.songId,
+                    valueRuns: [
+                        { column: 0, text: 'DEAKTIV', color: translationActive ? 'white' : 'green', size: translationActive ? 'small' : 'large' },
+                        { column: 7, text: '<>', color: 'white', size: 'small' },
+                        { column: 9, text: 'AKTIVATE', color: translationActive ? 'green' : translationAvailable ? 'white' : 'gray', size: translationActive ? 'large' : 'small' }
+                    ]
+                };
                 return {
                     name: `${folio.code} SETTINGS`,
                     entries: [
-                        settingEntry('SPEED', 'speed', values, 'song', folio.songId),
-                        settingEntry('SECTION WINDOW', 'sectionWindow', values, 'song', folio.songId),
-                        settingEntry('STANDBY', 'standby', values, 'song', folio.songId)
+                        { ...settingEntry('SPEED', 'speed', values, 'song', folio.songId), field: '1L' },
+                        { ...settingEntry('VOLUME', 'volume', values, 'song', folio.songId), field: '1R' },
+                        { ...settingEntry('SECTION WINDOW', 'sectionWindow', values, 'song', folio.songId), field: '2L' },
+                        { ...settingEntry('STANDBY', 'standby', values, 'song', folio.songId), field: '3L' },
+                        lyricMode
                     ]
                 };
             };
+            const legHasData = leg => !!leg && (leg.type === 'hold' ? true : !!(leg.songCode || leg.advance || leg.time));
+            const legComplete = (leg, index) => {
+                if (!legHasData(leg)) return false;
+                if (leg.type === 'hold') return index > 0 && /^\d+$/.test(String(leg.times)) && Number(leg.times) > 0;
+                return songsByUrl.some(song => song.code === leg.songCode) && (leg.advance === 'Y' || leg.advance === 'N') && !!parseTerminalTime(leg.time, true);
+            };
+            const trimmedLegs = () => {
+                const copy = JSON.parse(JSON.stringify(legsDraft));
+                while (copy.length && !legHasData(copy[copy.length - 1])) copy.pop();
+                return copy;
+            };
+            const validateLegs = () => {
+                const plan = trimmedLegs();
+                if (!plan.length) return null;
+                let playable = false;
+                for (let index = 0; index < plan.length; index++) {
+                    const leg = plan[index];
+                    if (!legHasData(leg) || !legComplete(leg, index)) return null;
+                    if (leg.type === 'hold') {
+                        if (!playable) return null;
+                    } else playable = true;
+                }
+                return plan;
+            };
+            const executableLegs = plan => plan.map(leg => {
+                if (leg.type === 'hold') return { ...leg };
+                const song = songsByUrl.find(candidate => candidate.code === leg.songCode);
+                const settings = song ? effectiveSongSettings(song.id) : {};
+                const rate = Number(settings.speed) || liveValues().speed;
+                const sectionWindow = settings.sectionWindow !== '' ? Number(settings.sectionWindow) : liveValues().sectionWindow;
+                return { ...leg, rate, sectionWindow };
+            });
+            const legEntry = (index, side) => {
+                const leg = legsDraft[index] || { type: 'song', songCode: '', advance: '', time: '' };
+                const row = index % 4 + 1;
+                if (side === 'L') return {
+                    title: `SONG ${index + 1}`,
+                    value: leg.type === 'hold' ? 'HOLD' : leg.songCode || '----',
+                    field: `${row}L`,
+                    legSong: true,
+                    legIndex: index
+                };
+                if (leg.type === 'hold') return {
+                    title: '',
+                    value: '',
+                    field: `${row}R`,
+                    legRight: true,
+                    legIndex: index,
+                    titleRuns: [{ column: 19, text: 'TIMES', color: 'white', size: 'large' }],
+                    valueRuns: [{ column: Math.max(12, 24 - String(leg.times || '----').length), text: String(leg.times || '----'), color: 'white', size: 'large' }]
+                };
+                return {
+                    title: '',
+                    value: '',
+                    field: `${row}R`,
+                    legRight: true,
+                    legIndex: index,
+                    titleRuns: [
+                        { column: 12, text: 'A', color: 'white', size: 'small' },
+                        { column: 17, text: 'TIME', color: 'white', size: 'small' }
+                    ],
+                    valueRuns: [
+                        { column: 12, text: leg.advance || ' ', color: leg.advance === 'Y' ? 'green' : leg.advance === 'N' ? 'red' : 'white', size: 'large' },
+                        { column: 15, text: leg.time || '--/---.--', color: 'white', size: 'large' }
+                    ]
+                };
+            };
+            const legsFolio = () => {
+                const page = Math.max(1, Math.min(legsDraftPages, folio.page || 1));
+                const start = (page - 1) * 4;
+                const entries = [];
+                for (let offset = 0; offset < 4; offset++) {
+                    entries.push(legEntry(start + offset, 'L'), legEntry(start + offset, 'R'));
+                }
+                const pageComplete = Array.from({ length: 4 }, (_, offset) => legComplete(legsDraft[start + offset], start + offset)).every(Boolean);
+                if (page === legsDraftPages) {
+                    if (pageComplete) entries.push(actionEntry('', 'PAGE>', { kind: 'legs-page', page: page + 1 }, '6R'));
+                    else if (!window.__npTerminalLegsActive?.() && validateLegs()) entries.push(actionEntry('', 'AKTIVATE>', { kind: 'activate-legs' }, '6R'));
+                }
+                return { name: window.__npTerminalLegsActive?.() ? 'AKTV LEGS' : 'LEGS', entries };
+            };
+            const progressValue = value => value === null || value === undefined ? '□' : String(value);
+            const progressTime = seconds => {
+                if (!Number.isFinite(seconds)) return '□';
+                const whole = Math.max(0, Math.ceil(seconds));
+                return `${Math.floor(whole / 60)}.${String(whole % 60).padStart(2, '0')}`;
+            };
+            const passiveProg = () => {
+                const snapshot = window.__npTerminalProgSnapshot?.();
+                if (!snapshot) {
+                    return {
+                        currentLeg: '□□□□',
+                        currentRemaining: null,
+                        currentSection: '□□',
+                        nextLeg: '----',
+                        nextEta: '----',
+                        totalRemaining: null,
+                        percent: null
+                    };
+                }
+                const song = songsByUrl.find(candidate => candidate.id === snapshot.songId);
+                return {
+                    currentLeg: song?.code || '□□□□',
+                    currentRemaining: snapshot.currentRemaining,
+                    currentSection: snapshot.currentSection,
+                    nextLeg: '----',
+                    nextEta: '----',
+                    totalRemaining: snapshot.totalRemaining,
+                    percent: snapshot.percent
+                };
+            };
+            const progFolio = () => ({
+                name: 'PROG',
+                entries: (() => {
+                    const progress = window.__npTerminalIsrAt?.('E') ? legsProgress : passiveProg();
+                    const nextEta = progress.nextEta === '----' ? '----' : progressTime(progress.nextEta);
+                    return [
+                        actionEntry('CURR LEG', progressValue(progress.currentLeg), null, '1L'),
+                        actionEntry('TIME REMAINING', progressTime(progress.currentRemaining), null, '2L'),
+                        actionEntry('PC', progress.percent === null || progress.percent === undefined ? '□' : String(progress.percent), null, '1R'),
+                        actionEntry('CURRENT SECTION', progressValue(progress.currentSection), null, '3L'),
+                        actionEntry('NEXT LEG', progressValue(progress.nextLeg), null, '4L'),
+                        actionEntry('ETA', nextEta, null, '5L'),
+                        actionEntry('TOTAL TIME', progressTime(progress.totalRemaining), null, '5R')
+                    ];
+                })()
+            });
             const folioRegistry = {
                 index: indexFolio,
                 global: globalFolio,
                 'per-song': perSongFolio,
+                'legs-song-search': legsSongSearchFolio,
                 categories: categoriesFolio,
                 letters: lettersFolio,
                 songs: songsFolio,
-                song: songFolio
+                song: songFolio,
+                legs: legsFolio,
+                prog: progFolio
             };
             const currentFolio = () => (folioRegistry[folio.kind] || folioRegistry.index)();
             const folioTotal = () => {
                 if (folio.kind === 'categories') return Math.ceil(categories.length / pageSize) || 1;
                 if (folio.kind === 'letters') return Math.ceil(songLetters.length / pageSize) || 1;
                 if (folio.kind === 'songs') return Math.ceil(songsForFolio().length / pageSize) || 1;
+                if (folio.kind === 'legs') return legsDraftPages;
                 return 1;
             };
             const renderScratchpad = () => {
-                scratchpadDisplay.textContent = scratchpadMessage || (deleteArmed ? 'DELETE' : scratchpad);
+                clearTerminalRow(13);
+                writeTerminalAligned(13, scratchpadMessage || (deleteArmed ? 'DELETE' : scratchpad), 'left');
+                renderTerminalRows([13]);
             };
             const showScratchpadMessage = message => {
                 clearTimeout(scratchpadMessageTimer);
@@ -12931,49 +13563,104 @@ usort($cats, 'customStrCmp');
             };
             const refreshSaveState = () => {
                 settingsDirty = Object.keys(globalSettings).some(key => globalSettings[key] !== persistedGlobalSettings[key]) ||
-                    JSON.stringify(songSettings) !== JSON.stringify(persistedSongSettings);
+                    JSON.stringify(songSettings) !== JSON.stringify(persistedSongSettings) ||
+                    JSON.stringify(legsDraft) !== JSON.stringify(persistedLegsPlan) ||
+                    legsDraftPages !== persistedLegsPages;
                 renderSaveState();
             };
             const renderFolio = () => {
                 const page = currentFolio();
                 const total = folioTotal();
                 const currentPage = Math.max(1, Math.min(total, folio.page || 1));
-                folioDisplay.textContent = limitText(page.name);
-                pageDisplay.textContent = total === 1 ? '' : `P.${currentPage}/${total}`;
                 const entries = new Map();
                 let nextField = 0;
                 page.entries.forEach(entry => {
                     const field = entry.field || entryFields[nextField++];
                     entries.set(field, entry);
                 });
-                entries.set('5', folio.kind === 'index' ? null : folio.returnTarget ?
-                    actionEntry('', folio.returnLabel || '< RE-TURN', { kind: 'back', folio: folio.returnTarget }) : null);
+                entries.set('6L', folio.kind === 'index' ? null : currentPage > 1 ?
+                    actionEntry('', '<PAGE', { kind: 'page', folio: { ...folio, page: currentPage - 1 } }) : folio.returnTarget ?
+                    actionEntry('', folio.returnLabel || '<RE-TURN', { kind: 'back', folio: folio.returnTarget }) : null);
                 if (currentPage < total) {
-                    entries.set('10', actionEntry('', 'PAGE >', {
+                    entries.set('6R', actionEntry('', 'PAGE >', {
                         kind: 'page', folio: { ...folio, page: currentPage + 1 }
                     }));
                 }
-                fields.forEach((view, field) => {
-                    const entry = entries.get(field);
-                    const title = limitTitleText(entry?.title || '');
-                    view.title.replaceChildren();
-                    if (entry?.titleAccent && title.startsWith(entry.titleAccent)) {
-                        const accent = document.createElement('b');
-                        accent.className = 'mTerminalSeriesCode';
-                        accent.textContent = entry.titleAccent;
-                        view.title.append(accent, document.createTextNode(title.slice(entry.titleAccent.length)));
-                    } else {
-                        view.title.textContent = title;
+                terminalFields.forEach(field => fieldActions.set(field, entries.get(field) || null));
+                clearTerminalScreen();
+                writeTerminalAligned(0, limitText(page.name), 'center');
+                if (total > 1) writeTerminalAligned(0, `${currentPage}/${total}`, 'right', { size: 'small' });
+                const entryTitle = entry => entry?.titleLiteral ?
+                    limitTerminalText(entry.title, entry.titleLimit || maxTitleLength) :
+                    limitTitleText(entry?.title || '');
+                const entryValue = entry => {
+                    if (/^□+$/u.test(entry?.value || '')) return entry.value;
+                    if (entry?.setting && !entry.value) return entry.setting === 'standby' ? '--/---.--' : '----';
+                    return limitText(entry?.value || '');
+                };
+                const writeRuns = (row, runs) => {
+                    if (!runs?.length) return false;
+                    runs.forEach(run => writeTerminalText(row, run.column, run.text, {
+                        color: run.color || 'white',
+                        size: run.size || 'large',
+                        inverted: !!run.inverted,
+                        flashing: !!run.flashing
+                    }));
+                    return true;
+                };
+                const writePair = (row, leftEntry, rightEntry, part, size) => {
+                    const runName = part === 'title' ? 'titleRuns' : 'valueRuns';
+                    const leftRuns = writeRuns(row, leftEntry?.[runName]);
+                    const rightRuns = writeRuns(row, rightEntry?.[runName]);
+                    const leftText = part === 'title' ? entryTitle(leftEntry) : entryValue(leftEntry);
+                    const rightText = part === 'title' ? entryTitle(rightEntry) : entryValue(rightEntry);
+                    const maximum = (leftText || leftRuns) && (rightText || rightRuns) ? terminalColumns / 2 : terminalColumns;
+                    const left = leftRuns ? '' : /^□+$/u.test(leftText) ? leftText : limitTerminalText(leftText, maximum);
+                    const right = rightRuns ? '' : /^□+$/u.test(rightText) ? rightText : limitTerminalText(rightText, maximum);
+                    if (left) writeTerminalText(row, 0, left, { size });
+                    if (right) writeTerminalText(row, terminalColumns - right.length, right, { size });
+                    if (left && part === 'title' && leftEntry?.titleAccent && left.startsWith(leftEntry.titleAccent)) {
+                        writeTerminalText(row, 0, leftEntry.titleAccent, { size, color: 'amber' });
                     }
-                    view.main.textContent = limitText(entry?.setting && !entry.value ? '----' : entry?.value || '');
-                    fieldActions.set(field, entry || null);
-                });
+                    if (right && part === 'title' && rightEntry?.titleAccent && right.startsWith(rightEntry.titleAccent)) {
+                        writeTerminalText(row, terminalColumns - right.length, rightEntry.titleAccent, { size, color: 'amber' });
+                    }
+                };
+                for (let selector = 1; selector <= 5; selector++) {
+                    const leftEntry = entries.get(`${selector}L`);
+                    const rightEntry = entries.get(`${selector}R`);
+                    writePair(selector * 2 - 1, leftEntry, rightEntry, 'title', 'small');
+                    writePair(selector * 2, leftEntry, rightEntry, 'value', 'large');
+                }
+                writeTerminalText(11, 0, '-'.repeat(terminalColumns), { size: 'large' });
+                writePair(12, entries.get('6L'), entries.get('6R'), 'value', 'large');
+                renderTerminalScreen();
+                renderScratchpad();
             };
             const dispatchAction = action => {
                 if (action.kind === 'index') folio = { kind: 'index', page: 1 };
-                if (action.kind === 'folio') folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '< RE-TURN' };
-                if (action.kind === 'page') folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '< PAGE' };
+                if (action.kind === 'folio') {
+                    if (action.folio.kind === 'song') selectedCode = '';
+                    folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '< RE-TURN' };
+                }
+                if (action.kind === 'page') folio = { ...action.folio };
                 if (action.kind === 'back') folio = action.folio;
+                if (action.kind === 'legs-page') {
+                    legsDraftPages = Math.max(legsDraftPages, action.page);
+                    folio = { ...folio, page: action.page };
+                    refreshSaveState();
+                }
+                if (action.kind === 'activate-legs') {
+                    const plan = validateLegs();
+                    if (!plan) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    window.__npTerminalActivateLegs(executableLegs(plan)).then(active => {
+                        if (!active) showScratchpadMessage('IN VALID');
+                        renderFolio();
+                    });
+                }
                 renderFolio();
             };
             const dispatchSpecial = action => {
@@ -12989,12 +13676,34 @@ usort($cats, 'customStrCmp');
                     }
                 }
                 if (action === 'index') dispatchAction({ kind: 'index' });
+                if (action === 'song') dispatchAction({ kind: 'folio', folio: { kind: 'per-song', page: 1 } });
+                if (action === 'legs') dispatchAction({ kind: 'folio', folio: { kind: 'legs', page: 1 } });
+                if (action === 'direct') {
+                    scratchpad = limitText(scratchpad + 'DCT');
+                    deleteArmed = false;
+                    renderScratchpad();
+                }
+                if (action === 'clear') {
+                    clearTimeout(scratchpadMessageTimer);
+                    scratchpadMessage = '';
+                    scratchpad = '';
+                    deleteArmed = false;
+                    renderScratchpad();
+                }
                 if (action === 'save') {
+                    if (legsDraft.some(legHasData) && !validateLegs()) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
                     saveTerminalSettings().then(() => {
                         Object.assign(persistedGlobalSettings, globalSettings);
                         Object.keys(persistedSongSettings).forEach(songId => delete persistedSongSettings[songId]);
                         Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
-                        applyCurrentSettings();
+                        persistedLegsPlan = JSON.parse(JSON.stringify(legsDraft));
+                        persistedLegsPages = legsDraftPages;
+                        if (folio.kind === 'song' && folio.songId === activeSongId()) {
+                            applySettings(effectiveSongSettings(folio.songId), folio.songId);
+                        }
                         refreshSaveState();
                     }).catch(() => {});
                 }
@@ -13015,6 +13724,58 @@ usort($cats, 'customStrCmp');
                 }
                 globalSettings[entry.setting] = value;
             };
+            const updateLeg = (index, value) => {
+                while (legsDraft.length <= index) legsDraft.push({ type: 'song', songCode: '', advance: '', time: '' });
+                legsDraft[index] = value;
+                while (legsDraft.length && !legHasData(legsDraft[legsDraft.length - 1])) legsDraft.pop();
+                const validPlan = validateLegs();
+                if (validPlan && window.__npTerminalLegsActive?.()) window.__npTerminalUpdateActiveLegs(executableLegs(validPlan));
+                refreshSaveState();
+                renderFolio();
+            };
+            const writeLegSong = entry => {
+                const text = scratchpad.toUpperCase().trim();
+                if (text === 'HOLD') {
+                    if (entry.legIndex < 1 || !legHasData(legsDraft[entry.legIndex - 1])) return false;
+                    updateLeg(entry.legIndex, { type: 'hold', times: '' });
+                    return true;
+                }
+                const song = songsByUrl.find(candidate => candidate.code === text);
+                if (!song) return false;
+                const existing = legsDraft[entry.legIndex];
+                updateLeg(entry.legIndex, {
+                    type: 'song',
+                    songCode: song.code,
+                    advance: existing?.type === 'song' ? existing.advance || '' : '',
+                    time: existing?.type === 'song' ? existing.time || '' : ''
+                });
+                return true;
+            };
+            const writeLegRight = entry => {
+                const leg = legsDraft[entry.legIndex] || { type: 'song', songCode: '', advance: '', time: '' };
+                const text = scratchpad.toUpperCase().trim();
+                if (leg.type === 'hold') {
+                    if (!/^\d+$/.test(text) || Number(text) < 1) return false;
+                    updateLeg(entry.legIndex, { type: 'hold', times: String(Number(text)) });
+                    return true;
+                }
+                let advance = leg.advance || '';
+                let time = leg.time || '';
+                const combined = /^([YN])\s+(.+)$/.exec(text);
+                if (combined) {
+                    const parsed = parseTerminalTime(combined[2], true);
+                    if (!parsed) return false;
+                    advance = combined[1];
+                    time = parsed.text;
+                } else if (text === 'Y' || text === 'N') advance = text;
+                else {
+                    const parsed = parseTerminalTime(text, true);
+                    if (!parsed) return false;
+                    time = parsed.text;
+                }
+                updateLeg(entry.legIndex, { type: 'song', songCode: leg.songCode || '', advance, time });
+                return true;
+            };
             const dispatchSelector = field => {
                 if (scratchpadMessage) return;
                 const entry = fieldActions.get(field);
@@ -13027,10 +13788,18 @@ usort($cats, 'customStrCmp');
                         renderFolio();
                         return;
                     }
+                    if (!scratchpad) {
+                        const song = selectedCode ? songsByUrl.find(candidate => candidate.code === selectedCode) :
+                            songsByUrl.find(candidate => candidate.id === activeSongId());
+                        if (!song) return;
+                        scratchpad = song.code;
+                        renderScratchpad();
+                        return;
+                    }
                     const code = scratchpad.toUpperCase();
                     const song = songsByUrl.find(candidate => candidate.code === code);
                     if (!song) {
-                        showScratchpadMessage('IN VALID CODE');
+                        showScratchpadMessage('IN VALID');
                         return;
                     }
                     selectedCode = song.code;
@@ -13039,8 +13808,79 @@ usort($cats, 'customStrCmp');
                     renderFolio();
                     return;
                 }
+                if (entry.action?.kind === 'copy-code') {
+                    if (scratchpad || deleteArmed) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    scratchpad = entry.action.code;
+                    if (Number.isInteger(entry.action.legIndex)) {
+                        folio = { kind: 'legs', page: Math.floor(entry.action.legIndex / 4) + 1 };
+                        renderFolio();
+                    }
+                    renderScratchpad();
+                    return;
+                }
                 if (entry.action) {
                     dispatchAction(entry.action);
+                    return;
+                }
+                if (entry.lyrMode) {
+                    if (deleteArmed) {
+                        setEntrySetting({ setting: 'lyrMode', scope: 'song', songId: entry.songId }, '');
+                        deleteArmed = false;
+                        refreshSaveState();
+                        renderScratchpad();
+                        renderFolio();
+                        return;
+                    }
+                    if (scratchpad) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    const available = window.__npTerminalHasTranslation(entry.songId);
+                    const values = songSettingValues(entry.songId);
+                    const active = values.lyrMode === 'AKTIVATE';
+                    if (!available && !active) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    setEntrySetting({ setting: 'lyrMode', scope: 'song', songId: entry.songId }, active ? 'DEAKTIV' : 'AKTIVATE');
+                    deleteArmed = false;
+                    refreshSaveState();
+                    renderScratchpad();
+                    renderFolio();
+                    return;
+                }
+                if (entry.legSong || entry.legRight) {
+                    if (deleteArmed) {
+                        updateLeg(entry.legIndex, entry.legSong ? { type: 'song', songCode: '', advance: '', time: '' } :
+                            legsDraft[entry.legIndex]?.type === 'hold' ? { type: 'hold', times: '' } :
+                            { ...(legsDraft[entry.legIndex] || { type: 'song', songCode: '' }), advance: '', time: '' });
+                        deleteArmed = false;
+                        renderScratchpad();
+                        return;
+                    }
+                    if (!scratchpad) {
+                        const leg = legsDraft[entry.legIndex];
+                        if (!legHasData(leg)) {
+                            if (entry.legSong) {
+                                dispatchAction({ kind: 'folio', folio: { kind: 'legs-song-search', page: 1, legIndex: entry.legIndex } });
+                            }
+                            return;
+                        }
+                        scratchpad = entry.legSong ? leg.type === 'hold' ? 'HOLD' : leg.songCode :
+                            leg.type === 'hold' ? String(leg.times || '') : `${leg.advance || ''}${leg.advance && leg.time ? ' ' : ''}${leg.time || ''}`;
+                        renderScratchpad();
+                        return;
+                    }
+                    const written = entry.legSong ? writeLegSong(entry) : writeLegRight(entry);
+                    if (!written) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    scratchpad = '';
+                    renderScratchpad();
                     return;
                 }
                 if (deleteArmed) {
@@ -13056,7 +13896,10 @@ usort($cats, 'customStrCmp');
                 if (entry.setting) {
                     if (scratchpad) {
                         const value = normalizeGlobalSetting(entry.setting, scratchpad);
-                        if (!value) return;
+                        if (!value) {
+                            showScratchpadMessage('IN VALID');
+                            return;
+                        }
                         setEntrySetting(entry, value);
                         refreshSaveState();
                         scratchpad = '';
@@ -13071,25 +13914,36 @@ usort($cats, 'customStrCmp');
             terminal.addEventListener('click', event => {
                 const special = event.target.closest('[data-terminal-special]');
                 if (special && terminal.contains(special)) {
-                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'fmcbutton' }));
+                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalKey' }));
                     dispatchSpecial(special.dataset.terminalSpecial);
                     return;
                 }
                 const key = event.target.closest('.mTerminalKey');
                 if (key && terminal.contains(key)) {
-                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'fmcbutton' }));
+                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalKey' }));
                     dispatchKey(key.textContent.trim());
                     return;
                 }
                 const selector = event.target.closest('.mLSK[data-terminal-field]');
                 if (!selector || !terminal.contains(selector)) return;
-                document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'MCPFD' }));
+                document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalLsk' }));
                 dispatchSelector(selector.dataset.terminalField);
             });
             document.addEventListener('m2songchange', event => {
-                const songId = event.detail?.dataset.songId || event.detail?.closest('.card')?.id;
-                if (songId) applySettings(effectiveSongSettings(songId));
+                const songId = event.detail?.dataset.songId || visibleCardFor(event.detail?.closest('.card'))?.id;
+                if (songId) applySettings(effectiveSongSettings(songId), songId);
             });
+            document.addEventListener('m2legsprogress', event => {
+                legsProgress = event.detail || { active: false };
+                if (folio.kind === 'prog') renderFolio();
+            });
+            document.addEventListener('m2legsstate', event => {
+                legsProgress = event.detail || { active: false };
+                if (folio.kind === 'prog' || folio.kind === 'legs') renderFolio();
+            });
+            window.setInterval(() => {
+                if (folio.kind === 'prog' && !window.__npTerminalIsrAt?.('E')) renderFolio();
+            }, 1000);
             renderFolio();
             loadTerminalSettings().then(stored => {
                 Object.keys(globalSettings).forEach(key => {
@@ -13099,12 +13953,19 @@ usort($cats, 'customStrCmp');
                     const normalized = {
                         speed: normalizeGlobalSetting('speed', values?.speed || ''),
                         sectionWindow: normalizeGlobalSetting('sectionWindow', values?.sectionWindow || ''),
-                        standby: normalizeGlobalSetting('standby', values?.standby || '')
+                        standby: normalizeGlobalSetting('standby', values?.standby || ''),
+                        volume: normalizeGlobalSetting('volume', values?.volume || ''),
+                        lyrMode: normalizeGlobalSetting('lyrMode', values?.lyrMode || '')
                     };
                     if (Object.values(normalized).some(Boolean)) songSettings[songId] = normalized;
                 });
+                legsDraft = Array.isArray(stored.legs?.legs) ? stored.legs.legs : [];
+                legsDraftPages = Math.max(1, Number(stored.legs?.pages) || Math.ceil(legsDraft.length / 4) || 1);
                 Object.assign(persistedGlobalSettings, globalSettings);
                 Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
+                persistedLegsPlan = JSON.parse(JSON.stringify(legsDraft));
+                persistedLegsPages = legsDraftPages;
+                applySettings(persistedGlobalSettings, '', 'manual');
                 applyCurrentSettings();
                 refreshSaveState();
                 renderFolio();
