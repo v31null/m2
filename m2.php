@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-const M2_BROWSER_CACHE_VERSION = '46';
-const M2_PAGE_CODE_VERSION = '97';
+const M2_BROWSER_CACHE_VERSION = '15';
+const M2_PAGE_CODE_VERSION = '103';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -2758,7 +2758,7 @@ usort($cats, 'customStrCmp');
             align-content: start;
         }
 
-        .mTerminalDash,
+        .mLSK,
         .mTerminalKey {
             min-width: 0;
             border: 1px solid #fff;
@@ -2770,7 +2770,7 @@ usort($cats, 'customStrCmp');
             line-height: 0;
         }
 
-        .mTerminalDash {
+        .mLSK {
             width: 38px;
             display: inline-flex;
             height: 24px;
@@ -2780,6 +2780,11 @@ usort($cats, 'customStrCmp');
             font-size: 2.2em;
             line-height: 0.4;
             padding-left: 8px;
+            transition: transform .08s ease;
+        }
+
+        .mLSK:active {
+            transform: translateY(1px);
         }
 
         #mTerminalScreen {
@@ -2820,8 +2825,13 @@ usort($cats, 'customStrCmp');
 
         .mTerminalSide:last-child span {
             width: 100%;
+            padding-left: 0;
             justify-content: flex-end;
             text-align: right;
+        }
+
+        .mTerminalSide:first-child span {
+            padding-right: 0;
         }
 
         .mTerminalHeader span:first-child {
@@ -2854,6 +2864,11 @@ usort($cats, 'customStrCmp');
         .mTerminalTitle {
             font-size: .85em;
             min-height: 1.4em;
+        }
+
+        .mTerminalSeriesCode {
+            color: yellow;
+            font-weight: inherit;
         }
 
         .mTerminalInput {
@@ -2899,7 +2914,7 @@ usort($cats, 'customStrCmp');
             height: 176px;
             box-sizing: border-box;
             grid-template-columns: repeat(5, 46px);
-            column-gap: 4px;
+            column-gap: 5.6px;
             row-gap: 10px;
             align-content: start;
             margin-top: 16px;
@@ -2926,12 +2941,17 @@ usort($cats, 'customStrCmp');
         }
 
         .mTerminalSpecialButton:active {
-            transform: translateY(2px);
+            transform: translateY(1px);
         }
 
         .mTerminalSave {
             position: relative;
             grid-column: span 2;
+            transition: transform .08s ease;
+        }
+
+        .mTerminalSave:active {
+            transform: translateY(1px);
         }
 
         .mTerminalSaveLight {
@@ -2963,17 +2983,15 @@ usort($cats, 'customStrCmp');
     height: 2.2em;
 }
         .mTerminalKey:active {
-            transform: translateY(2px);
+            transform: translateY(1px);
         }
 
         .mTerminalNumeralSection .mTerminalKey {
             border-radius: 50%;
         }
 
-        .mTerminalKeyWord {
-    font-size: .8em;
-    line-height: 3.4;
-    padding-left: 15px;
+        .mTerminalKeyWord { 
+    padding-left: 12px;
         }
 
         @media (max-width: 900px) {
@@ -3143,7 +3161,7 @@ usort($cats, 'customStrCmp');
             $cLeftHTML .= '</div>';
         ?><div class="cardWrap" data-category="<?= htmlspecialchars($rowCat, ENT_QUOTES, 'UTF-8') ?>"<?php if (!empty($row['sort_key_raw'])): ?> data-sort-key="<?= htmlspecialchars((string)$row['sort_key_raw'], ENT_QUOTES, 'UTF-8') ?>"<?php endif; ?>>
                 <?= $cLeftHTML ?>
-                <div class="card" id="<?= $id ?>" data-title="<?= htmlspecialchars((string)$row['title'], ENT_QUOTES, 'UTF-8') ?>" data-art="<?= htmlspecialchars($artPath, ENT_QUOTES, 'UTF-8') ?>">
+                <div class="card" id="<?= $id ?>" data-song-url="<?= htmlspecialchars($url, ENT_QUOTES, 'UTF-8') ?>" data-title="<?= htmlspecialchars((string)$row['title'], ENT_QUOTES, 'UTF-8') ?>" data-art="<?= htmlspecialchars($artPath, ENT_QUOTES, 'UTF-8') ?>">
                     <button class="mob-copy-btn" onclick="event.stopPropagation();copyLinkId('<?= $id ?>')">§</button>
                     <a href="serv/com.php?no=№ <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" class="mob-com-btn" onclick="openCom(event, this)">C</a>
                     <div class="cMain">
@@ -3373,11 +3391,11 @@ usort($cats, 'customStrCmp');
     <section id="mTerminal">
         <div class="mTerminalConsole">
             <div class="mTerminalDashColumn">
-                <button type="button" class="mTerminalDash" data-terminal-field="1">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="2">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="3">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="4">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="5">—</button>
+                <button type="button" class="mLSK" data-terminal-field="1">—</button>
+                <button type="button" class="mLSK" data-terminal-field="2">—</button>
+                <button type="button" class="mLSK" data-terminal-field="3">—</button>
+                <button type="button" class="mLSK" data-terminal-field="4">—</button>
+                <button type="button" class="mLSK" data-terminal-field="5">—</button>
             </div>
             <div id="mTerminalScreen">
                 <div class="mTerminalHeader"><span>ABVUWE</span><span>P.1/1</span></div>
@@ -3388,14 +3406,14 @@ usort($cats, 'customStrCmp');
                     <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 4</span><span class="mTerminalMain" data-terminal-field="4"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 9</span><span class="mTerminalMain" data-terminal-field="9"></span></div></div>
                     <div class="mTerminalRow"><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 5</span><span class="mTerminalMain" data-terminal-field="5"></span></div><div class="mTerminalSide"><span class="mTerminalTitle">TITEL 10</span><span class="mTerminalMain" data-terminal-field="10"></span></div></div>
                 </div>
-                <div class="mTerminalInput"><span>------------------------------------------------------------</span><span></span></div>
+                <div class="mTerminalInput"><span>-------------------------------------------------------</span><span></span></div>
             </div>
             <div class="mTerminalDashColumn">
-                <button type="button" class="mTerminalDash" data-terminal-field="6">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="7">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="8">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="9">—</button>
-                <button type="button" class="mTerminalDash" data-terminal-field="10">—</button>
+                <button type="button" class="mLSK" data-terminal-field="6">—</button>
+                <button type="button" class="mLSK" data-terminal-field="7">—</button>
+                <button type="button" class="mLSK" data-terminal-field="8">—</button>
+                <button type="button" class="mLSK" data-terminal-field="9">—</button>
+                <button type="button" class="mLSK" data-terminal-field="10">—</button>
             </div>
         </div>
         <div class="mTerminalKeys">
@@ -4890,7 +4908,8 @@ usort($cats, 'customStrCmp');
         const PANEL_SOUND_GROUPS = {
             ambient: ['177453744'],
             lHold: ['111819169'],
-            lRelease: ['346954404'],
+            lReleaseMechanical: ['346954404'],
+            lDisconnect: ['131262607'],
             lClickIn: ['914468481'],
             attendantcall: ['631327589'],
             mPl: ['724533677', '735346396'],
@@ -6131,6 +6150,7 @@ usort($cats, 'customStrCmp');
                 if (!audio.paused) audio.pause();
                 return Promise.resolve(false);
             }
+            document.dispatchEvent(new CustomEvent('m2songchange', { detail: audio }));
             playbackCircuit?.energizePl();
             try {
                 const result = audio.play();
@@ -7187,7 +7207,7 @@ usort($cats, 'customStrCmp');
                     this.pointerId = null;
                     this.pointerAngle = null;
                     this.dragAngle = null;
-                    this.manualHandAngle = null;
+                    if (this.powered) this.manualHandAngle = null;
                     this.releaseHandMotion = this.powered;
                 };
                 this.control.addEventListener('pointerup', release);
@@ -7274,6 +7294,80 @@ usort($cats, 'customStrCmp');
                 return steps * increment;
             }
 
+            driveStandbySection(target) {
+                if (this.sectionGearMotion?.target === target) return;
+                const from = seekRadialStandbySection;
+                if (Math.abs(target - from) < 0.000001) return;
+                const travel = Math.sign(target - from) * Math.min(305, Math.abs(target - from) * 12);
+                const motion = {
+                    from,
+                    target,
+                    travel,
+                    travelled: 0,
+                    start: performance.now(),
+                    duration: Math.max(250, 2000 * Math.abs(travel) / 305)
+                };
+                this.sectionGearMotion = motion;
+                const frame = now => {
+                    if (this.sectionGearMotion !== motion) return;
+                    const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
+                    const eased = progress * progress * (3 - 2 * progress);
+                    const current = motion.from + (motion.target - motion.from) * eased;
+                    const travelled = motion.travel * eased;
+                    const degrees = travelled - motion.travelled;
+                    motion.travelled = travelled;
+                    seekRadialStandbySection = Math.round(current);
+                    this.sectionMechanicalAngle = ((this.sectionMechanicalAngle + degrees) % 360 + 360) % 360;
+                    panelSoundBank.driveRotary('RadioKnobLarge', 'seekSectionTerminal', degrees, 12);
+                    if (currentAudio) renderSeekRadial(currentAudio);
+                    if (progress < 1) requestAnimationFrame(frame);
+                    else {
+                        seekRadialStandbySection = target;
+                        this.sectionGearMotion = null;
+                        panelSoundBank.stopRotary('seekSectionTerminal');
+                        if (currentAudio) renderSeekRadial(currentAudio);
+                    }
+                };
+                requestAnimationFrame(frame);
+            }
+
+            driveStandbyTime(target) {
+                if (this.timeGearMotion?.target === target) return;
+                const from = seekRadialStandbySeconds;
+                if (Math.abs(target - from) < 0.000001) return;
+                const travel = Math.sign(target - from) * Math.min(305, Math.abs(target - from) * 8);
+                const motion = {
+                    from,
+                    target,
+                    travel,
+                    travelled: 0,
+                    start: performance.now(),
+                    duration: Math.max(250, 2000 * Math.abs(travel) / 305)
+                };
+                this.timeGearMotion = motion;
+                const frame = now => {
+                    if (this.timeGearMotion !== motion) return;
+                    const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
+                    const eased = progress * progress * (3 - 2 * progress);
+                    const current = motion.from + (motion.target - motion.from) * eased;
+                    const travelled = motion.travel * eased;
+                    const degrees = travelled - motion.travelled;
+                    motion.travelled = travelled;
+                    seekRadialStandbySeconds = Math.round(current);
+                    this.timeMechanicalAngle = ((this.timeMechanicalAngle + degrees) % 360 + 360) % 360;
+                    panelSoundBank.driveRotary('RadioKnobSmall', 'seekTimeTerminal', degrees, 8);
+                    if (currentAudio) renderSeekRadial(currentAudio);
+                    if (progress < 1) requestAnimationFrame(frame);
+                    else {
+                        seekRadialStandbySeconds = target;
+                        this.timeGearMotion = null;
+                        panelSoundBank.stopRotary('seekTimeTerminal');
+                        if (currentAudio) renderSeekRadial(currentAudio);
+                    }
+                };
+                requestAnimationFrame(frame);
+            }
+
             bindKnob(element, adjust, kind) {
                 let pointerId = null;
                 let lastY = 0;
@@ -7323,7 +7417,7 @@ usort($cats, 'customStrCmp');
             }
 
             advanceOuterHand(target, now) {
-                const elapsed = Math.max(0, Math.min(0.05, (now - this.handLastTime) / 1000));
+                const elapsed = Math.max(0, Math.min(document.hidden ? 1 : 0.05, (now - this.handLastTime) / 1000));
                 this.handLastTime = now;
                 if (!elapsed) return;
                 const distance = target - this.renderedHandAngle;
@@ -7373,7 +7467,7 @@ usort($cats, 'customStrCmp');
                     motion.target = target;
                     motion.brakeAcceleration = 0;
                 }
-                const elapsed = Math.max(0, Math.min(0.05, (now - motion.lastTime) / 1000));
+                const elapsed = Math.max(0, Math.min(document.hidden ? 1 : 0.05, (now - motion.lastTime) / 1000));
                 motion.lastTime = now;
                 const distance = target - this.renderedSectionAngle;
                 const direction = Math.sign(distance) || -Math.sign(motion.velocity);
@@ -7440,6 +7534,11 @@ usort($cats, 'customStrCmp');
                 const handBase = -135 + 270 * activePercent / 100;
                 if (poweringUp) this.handCycle = Math.round((this.renderedHandAngle - handBase) / 360);
                 const handTarget = handBase + this.handCycle * 360;
+                if (this.pointerId === null && this.manualHandAngle !== null &&
+                    (this.powered || model.playing === true)) {
+                    this.manualHandAngle = null;
+                    this.handVelocity = 0;
+                }
                 const physicalTarget = this.manualHandAngle ?? handTarget;
                 this.advanceOuterHand(physicalTarget, now);
                 this.releaseHandMotion = false;
@@ -7501,18 +7600,13 @@ usort($cats, 'customStrCmp');
         let seekRadialStandbySeconds = 0;
         const terminalStandbyValue = () => {
             const fields = seekRadialDisplayFields(seekRadialStandbySeconds);
-            return `${seekRadialStandbySection}/${fields.minutes}.${String(fields.seconds).padStart(2, '0')}`;
+            return `${Math.trunc(seekRadialStandbySection)}/${fields.minutes}.${String(fields.seconds).padStart(2, '0')}`;
         };
         window.__npTerminalLiveValues = () => ({
             speed: soundCircuit.playbackRate,
             sectionWindow: Math.round((playbackCircuit?.sectionWindowEffectiveValue || 0) * SECTION_WINDOW_MAX_SECONDS),
             standby: terminalStandbyValue()
         });
-        window.__npTerminalSetStandby = (section, seconds) => {
-            seekRadialStandbySection = Math.max(0, Math.min(99, Math.trunc(section)));
-            seekRadialStandbySeconds = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.trunc(seconds)));
-            if (currentAudio) renderSeekRadial(currentAudio);
-        };
         const seekRadialInstrument = new SeekRadialInstrument(
             seekRadialSvg,
             percent => setSeekRadialTarget(percent),
@@ -7521,6 +7615,13 @@ usort($cats, 'customStrCmp');
             steps => adjustSeekRadialStandbySection(steps),
             steps => adjustSeekRadialStandbyTime(steps)
         );
+        window.__npTerminalSetStandby = (section, seconds) => {
+            const sectionTarget = Math.max(0, Math.min(99, Math.trunc(section)));
+            const secondsTarget = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, Math.trunc(seconds)));
+            seekRadialInstrument.driveStandbySection(sectionTarget);
+            seekRadialInstrument.driveStandbyTime(secondsTarget);
+            return true;
+        };
         let renderSpeedKnob = () => {},
             renderRevKnob = () => {},
             renderVolKnob = () => {},
@@ -7637,7 +7738,8 @@ usort($cats, 'customStrCmp');
                 standbyEnd,
                 standbyDomainSeconds,
                 owner,
-                powered: timeBusIsPowered()
+                powered: timeBusIsPowered(),
+                playing: !audio.paused
             };
         }
 
@@ -7898,6 +8000,20 @@ usort($cats, 'customStrCmp');
 
         let lastTickTime = -1;
 
+        const scheduleSeekUpdate = () => {
+            if (document.hidden) setTimeout(updateSeek, 16);
+            else requestAnimationFrame(updateSeek);
+        };
+
+        const resumePanelMotion = () => {
+            panelSoundBank.unlock();
+            if (!document.hidden && currentAudio) {
+                renderSeekRadial(currentAudio, playbackTime(currentAudio), playbackDuration(currentAudio));
+            }
+        };
+        document.addEventListener('visibilitychange', resumePanelMotion);
+        window.addEventListener('focus', resumePanelMotion);
+
         function updateSeek() {
             if (currentAudio && currentAudio.duration) {
                 const uiDuration = playbackDuration(currentAudio) || currentAudio.duration;
@@ -7915,7 +8031,7 @@ usort($cats, 'customStrCmp');
                 const playedThrough = prevTick >= 0 && uiTime >= prevTick &&
                     (uiTime - prevTick) < 1.0;
                 if (processKrSectionBoundary(currentAudio, uiTime)) {
-                    requestAnimationFrame(updateSeek);
+                    scheduleSeekUpdate();
                     return;
                 }
                 if (krFeedEnergized() &&
@@ -7937,7 +8053,7 @@ usort($cats, 'customStrCmp');
                             collageAudio = null;
                             collageSegEnd = null;
                             if (signal.handled) {
-                                requestAnimationFrame(updateSeek);
+                                scheduleSeekUpdate();
                                 return;
                             }
                         }
@@ -8009,7 +8125,7 @@ usort($cats, 'customStrCmp');
                     }
                 }
             }
-            requestAnimationFrame(updateSeek);
+            scheduleSeekUpdate();
         }
         updateSeek();
 
@@ -8168,7 +8284,8 @@ usort($cats, 'customStrCmp');
                 lCleanupHold();
                 if (completed) {
                     if (soundCircuit.coupling.setPosition('OFF')) {
-                        panelSoundBank.play('lRelease');
+                        panelSoundBank.play('lReleaseMechanical');
+                        panelSoundBank.play('lDisconnect');
                     }
                     lb.style.color = 'white';
                 } else {
@@ -8827,6 +8944,7 @@ usort($cats, 'customStrCmp');
                 }
                 return true;
             };
+            let speedGearMotion = null;
             window.__npTerminalSetSpeed = value => {
                 const target = Number(value);
                 if (!Number.isFinite(target)) return false;
@@ -8844,7 +8962,36 @@ usort($cats, 'customStrCmp');
                     if (rateAt(middle) > bounded) lower = middle;
                     else upper = middle;
                 }
-                return setSpd((lower + upper) / 2);
+                const to = (lower + upper) / 2;
+                if (speedGearMotion?.to === to) return true;
+                const from = soundCircuit.speed.value;
+                if (Math.abs(to - from) < 0.000001) return true;
+                const motion = {
+                    from,
+                    to,
+                    previous: from,
+                    start: performance.now(),
+                    duration: Math.max(250, 2000 * Math.abs(to - from))
+                };
+                speedGearMotion = motion;
+                const frame = now => {
+                    if (speedGearMotion !== motion) return;
+                    const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
+                    const eased = progress * progress * (3 - 2 * progress);
+                    const next = motion.from + (motion.to - motion.from) * eased;
+                    if (setSpd(next)) {
+                        panelSoundBank.driveRotary('MCPAltRotary', 'mSpdTerminal',
+                            (motion.previous - soundCircuit.speed.value) * 360, 3.6);
+                        motion.previous = soundCircuit.speed.value;
+                    }
+                    if (progress < 1) requestAnimationFrame(frame);
+                    else {
+                        speedGearMotion = null;
+                        panelSoundBank.stopRotary('mSpdTerminal');
+                    }
+                };
+                requestAnimationFrame(frame);
+                return true;
             };
             const turnSpd = delta => {
                 const before = soundCircuit.speed.value;
@@ -8882,10 +9029,40 @@ usort($cats, 'customStrCmp');
                 }
                 return true;
             };
+            let sectionWindowGearMotion = null;
             window.__npTerminalSetSectionWindow = seconds => {
                 const value = Number(seconds);
                 if (!Number.isFinite(value)) return false;
-                return setR3(Math.max(0, Math.min(SECTION_WINDOW_MAX_SECONDS, value)) / SECTION_WINDOW_MAX_SECONDS);
+                const to = Math.max(0, Math.min(SECTION_WINDOW_MAX_SECONDS, value)) / SECTION_WINDOW_MAX_SECONDS;
+                if (sectionWindowGearMotion?.to === to) return true;
+                const from = playbackCircuit.sectionWindow.value;
+                if (Math.abs(to - from) < 0.000001) return true;
+                const motion = {
+                    from,
+                    to,
+                    previous: from,
+                    start: performance.now(),
+                    duration: Math.max(250, 2000 * Math.abs(to - from))
+                };
+                sectionWindowGearMotion = motion;
+                const frame = now => {
+                    if (sectionWindowGearMotion !== motion) return;
+                    const progress = Math.min(1, Math.max(0, (now - motion.start) / motion.duration));
+                    const eased = progress * progress * (3 - 2 * progress);
+                    const next = motion.from + (motion.to - motion.from) * eased;
+                    if (setR3(next)) {
+                        panelSoundBank.driveRotary('MCPAltRotary', 'mR3Terminal',
+                            (playbackCircuit.sectionWindow.value - motion.previous) * 305, 15.25);
+                        motion.previous = playbackCircuit.sectionWindow.value;
+                    }
+                    if (progress < 1) requestAnimationFrame(frame);
+                    else {
+                        sectionWindowGearMotion = null;
+                        panelSoundBank.stopRotary('mR3Terminal');
+                    }
+                };
+                requestAnimationFrame(frame);
+                return true;
             };
             const turnR3 = delta => {
                 const before = playbackCircuit.sectionWindow.value;
@@ -12439,55 +12616,137 @@ usort($cats, 'customStrCmp');
             ]));
             const entryFields = ['1', '2', '3', '4', '6', '7', '8', '9'];
             const maxTextLength = 15;
+            const maxTitleLength = 28;
             const pageSize = entryFields.length;
-            const asciiMaker = value => String(value ?? '')
-                .replace(/[\u00A0\u202F]/g, ' ')
+            const terminalAlphabetGroups = <?= json_encode($fixþebrokenorderingofdefaultphpineedtomakeþisanklaßlatertobefairwellfornowweshallkeepusingþischangenotnameofþisvartwillbeanfunktionwiþtimejslaterwewillimportsotakeþisasantodoplease, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+            const terminalCharacterRanks = new Map();
+            const terminalAsciiCharacters = new Map();
+            terminalAlphabetGroups.forEach((group, rank) => {
+                const directLatin = group.match(/[0-9a-z]/i)?.[0];
+                const foldedLatin = group[0]?.normalize('NFD').replace(/\p{M}/gu, '').match(/[0-9a-z]/i)?.[0];
+                const terminalCharacter = (directLatin || foldedLatin || '').toLowerCase();
+                [...group.toLowerCase()].forEach(character => {
+                    terminalCharacterRanks.set(character, rank);
+                    if (terminalCharacter) terminalAsciiCharacters.set(character, terminalCharacter);
+                });
+            });
+            const asciiMaker = value => [...String(value ?? '').replace(/[\u00A0\u202F]/g, ' ').replace(/(\p{L})\u0308/gu, '$1$1')]
+                .map(character => {
+                    if (/^[\x20-\x7E]$/.test(character)) return character;
+                    if (character === 'þ' || character === 'ð') return 'th';
+                    if (character === 'Þ' || character === 'Ð') return 'TH';
+                    const replacement = terminalAsciiCharacters.get(character.toLowerCase());
+                    if (!replacement) return character;
+                    return character === character.toUpperCase() && character !== character.toLowerCase() ? replacement.toUpperCase() : replacement;
+                })
+                .join('')
                 .replace(/ß/g, 'ss')
-                .replace(/ẞ/g, 'SS')
-                .replace(/[þÞ]/g, 'th')
-                .replace(/[æÆ]/g, 'ae')
-                .replace(/[œŒ]/g, 'oe')
-                .replace(/[øØ]/g, 'o')
-                .replace(/[łŁ]/g, 'l')
-                .replace(/[đĐ]/g, 'd')
-                .normalize('NFD')
+                .normalize('NFKD')
                 .replace(/\p{M}/gu, '')
                 .replace(/[^\x20-\x7E]/g, '');
+            const orderingText = (value, ignoreLeadingMarks = false) => {
+                let text = String(value ?? '').replace(/[\u00A0\u202F]/g, ' ');
+                if (ignoreLeadingMarks) text = text.replace(/^[\p{P}\p{Z}\s]+/u, '');
+                text = text.normalize('NFD').replace(/(.)\u0308/gu, '$1$1').normalize('NFC');
+                return text.replace(/№\s*(\d+)/gu, (_, number) => '№' + String(Number(number)).padStart(5, '0')).toLowerCase();
+            };
+            const compareTerminalText = (left, right, ignoreLeadingMarks = false) => {
+                const first = [...orderingText(left, ignoreLeadingMarks)];
+                const second = [...orderingText(right, ignoreLeadingMarks)];
+                const length = Math.min(first.length, second.length);
+                for (let index = 0; index < length; index++) {
+                    if (first[index] === second[index]) continue;
+                    const firstRank = terminalCharacterRanks.get(first[index]);
+                    const secondRank = terminalCharacterRanks.get(second[index]);
+                    if (firstRank !== undefined && secondRank !== undefined) {
+                        if (firstRank !== secondRank) return firstRank - secondRank;
+                        continue;
+                    }
+                    if (firstRank !== undefined && secondRank === undefined) return -1;
+                    if (firstRank === undefined && secondRank !== undefined) return 1;
+                    if (first[index] < second[index]) return -1;
+                    if (first[index] > second[index]) return 1;
+                }
+                return first.length - second.length;
+            };
             const sourceSongCards = [...document.querySelectorAll('.cardWrap')].map((wrap, index) => {
                 const card = wrap.querySelector('.card');
+                const virtualMember = card?.__virtualMember;
                 return {
                     id: card?.id || String(index),
                     title: card?.querySelector('.cName')?.textContent.trim() || '',
-                    category: wrap.dataset.category?.trim() || ''
+                    sortTitle: wrap.dataset.sortKey?.trim() || card?.querySelector('.cName')?.textContent.trim() || '',
+                    category: wrap.dataset.category?.trim() || '',
+                    url: card?.dataset.songUrl?.trim() || '',
+                    seriesTitle: virtualMember?.info?.seriesTitle || '',
+                    memberTitle: virtualMember?.displayTitle || ''
                 };
             }).filter(song => song.title !== '');
-            const songCode = index => {
-                let value = index + 1;
-                let code = '';
-                while (value > 0) {
-                    value--;
-                    code = String.fromCharCode(65 + value % 26) + code;
-                    value = Math.floor(value / 26);
-                }
-                return code;
-            };
-            const songsByName = [...sourceSongCards].sort((a, b) =>
-                asciiMaker(a.title).localeCompare(asciiMaker(b.title))).map((song, index) => ({ ...song, code: songCode(index) }));
-            const songCodes = new Map(songsByName.map(song => [song.id, song.code]));
-            const songCards = sourceSongCards.map(song => ({ ...song, code: songCodes.get(song.id) }));
-            const categories = [...new Set(songCards.map(song => song.category).filter(Boolean))];
+            const songsByUrl = [...sourceSongCards].sort((a, b) => {
+                const left = a.url.toUpperCase();
+                const right = b.url.toUpperCase();
+                return left.length - right.length || (left < right ? -1 : left > right ? 1 : 0);
+            }).map(song => ({ ...song, code: song.url.toUpperCase() }));
+            const songCards = songsByUrl;
+            const categories = [...new Set(songCards.map(song => song.category).filter(Boolean))].sort(compareTerminalText);
+            const songLetters = [...new Set(songCards.map(song =>
+                (asciiMaker(song.sortTitle).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean))].sort(compareTerminalText);
             const fieldActions = new Map();
             let folio = { kind: 'index', page: 1 };
             let scratchpad = '';
+            let selectedCode = '';
+            let scratchpadMessage = '';
+            let scratchpadMessageTimer = 0;
             let deleteArmed = false;
+            let settingsDirty = false;
             const globalSettings = { speed: '', sectionWindow: '', standby: '' };
-            const limitText = value => String(value ?? '').slice(0, maxTextLength);
-            const actionEntry = (title, value, action, field = '') => ({ title, value, action, field });
-            const liveEntry = (title, value) => ({ title, value, live: true });
+            const persistedGlobalSettings = { ...globalSettings };
+            const songSettings = {};
+            const persistedSongSettings = {};
+            const limitTerminalText = (value, maximum) => {
+                const text = asciiMaker(value).toUpperCase();
+                if (text.length <= maximum) return text;
+                const clipped = text.slice(0, maximum);
+                if (/\s/u.test(text[maximum])) return clipped.trimEnd();
+                const wordBoundary = clipped.lastIndexOf(' ');
+                return wordBoundary > 0 ? clipped.slice(0, wordBoundary) : clipped;
+            };
+            const limitText = value => limitTerminalText(value, maxTextLength);
+            const limitTitleText = value => limitTerminalText(value, maxTitleLength);
+            const terminalCategoryName = value => asciiMaker(value)
+                .replace(/\s*[;,]\s*/gu, ' ')
+                .replace(/\s+/gu, ' ')
+                .trim()
+                .toUpperCase();
+            const terminalSongTitle = song => {
+                if (song.seriesTitle && song.memberTitle) {
+                    const seriesCode = (asciiMaker(song.seriesTitle).toUpperCase().match(/[A-Z0-9]+/g) || [])
+                        .map(word => word[0])
+                        .join('');
+                    const memberTitle = asciiMaker(song.memberTitle)
+                        .replace(/[\u2010-\u2015\u2212-]+/gu, ' ')
+                        .replace(/\s+/gu, ' ')
+                        .trim()
+                        .toUpperCase();
+                    const available = Math.max(0, maxTextLength - seriesCode.length - (seriesCode && memberTitle ? 1 : 0));
+                    return {
+                        text: `${seriesCode}${seriesCode && memberTitle ? ' ' : ''}${memberTitle.slice(0, available)}`,
+                        accent: seriesCode
+                    };
+                }
+                const title = String(song.title || '');
+                const hasUnsupportedLetters = [...title].some(character =>
+                    /\p{L}/u.test(character) && !/[\p{Script=Latin}\p{Script=Cyrillic}]/u.test(character));
+                return { text: hasUnsupportedLetters && song.sortTitle ? song.sortTitle : title, accent: '' };
+            };
+            const actionEntry = (title, value, action, field = '', titleAccent = '') => ({ title, value, action, field, titleAccent });
             const pageNumber = (items, page) => Math.max(1, Math.min(Math.ceil(items.length / pageSize) || 1, page || 1));
             const pageItems = (items, page) => items.slice((page - 1) * pageSize, page * pageSize);
             const liveValues = () => window.__npTerminalLiveValues();
-            const globalSettingEntry = (title, key) => ({ title, value: globalSettings[key], setting: key });
+            const settingEntry = (title, key, values, scope, songId = '') => ({ title, value: values[key], setting: key, scope, songId });
+            const globalSettingEntry = (title, key) => settingEntry(title, key, globalSettings, 'global');
+            const songSettingValues = songId => songSettings[songId] || { speed: '', sectionWindow: '', standby: '' };
+            const persistedSongSettingValues = songId => persistedSongSettings[songId] || { speed: '', sectionWindow: '', standby: '' };
             const liveValueFor = key => {
                 const values = liveValues();
                 if (key === 'speed') return values.speed.toFixed(2);
@@ -12506,8 +12765,10 @@ usort($cats, 'customStrCmp');
             const normalizeGlobalSetting = (key, value) => {
                 const text = limitText(value).trim();
                 if (key === 'speed') {
-                    const speed = Number(text);
-                    return /^\d+(?:\.\d{1,2})?$/.test(text) && speed >= .05 && speed <= 3.28 ? speed.toFixed(2) : '';
+                    const match = /^(\d*)(?:\.(\d*))?$/.exec(text);
+                    if (!match || (!match[1] && !match[2])) return '';
+                    const speed = Number((match[1] || '0') + '.' + (match[2] || '').padEnd(2, '0').slice(0, 2));
+                    return speed >= .05 && speed <= 3.28 ? speed.toFixed(2) : '';
                 }
                 if (key === 'sectionWindow') {
                     const seconds = Number(text);
@@ -12515,13 +12776,28 @@ usort($cats, 'customStrCmp');
                 }
                 return parseStandby(text)?.text || '';
             };
-            const applyGlobalSettings = () => {
-                if (globalSettings.speed) window.__npTerminalSetSpeed(globalSettings.speed);
-                if (globalSettings.sectionWindow) window.__npTerminalSetSectionWindow(globalSettings.sectionWindow);
-                if (globalSettings.standby) {
-                    const standby = parseStandby(globalSettings.standby);
+            const applySettings = values => {
+                if (values.speed) window.__npTerminalSetSpeed(values.speed);
+                if (values.sectionWindow) window.__npTerminalSetSectionWindow(values.sectionWindow);
+                if (values.standby) {
+                    const standby = parseStandby(values.standby);
                     if (standby) window.__npTerminalSetStandby(standby.section, standby.seconds);
                 }
+            };
+            const effectiveSongSettings = songId => {
+                const personal = persistedSongSettingValues(songId);
+                return {
+                    speed: personal.speed || persistedGlobalSettings.speed,
+                    sectionWindow: personal.sectionWindow || persistedGlobalSettings.sectionWindow,
+                    standby: personal.standby || persistedGlobalSettings.standby
+                };
+            };
+            const activeSongId = () => [...document.querySelectorAll('.card audio')]
+                .find(audio => !audio.paused)?.dataset.songId || [...document.querySelectorAll('.card audio')]
+                .find(audio => !audio.paused)?.closest('.card')?.id || '';
+            const applyCurrentSettings = () => {
+                const songId = activeSongId();
+                applySettings(songId ? effectiveSongSettings(songId) : persistedGlobalSettings);
             };
             const globalDatabase = () => new Promise((resolve, reject) => {
                 const request = indexedDB.open('mTerminal', 1);
@@ -12529,21 +12805,25 @@ usort($cats, 'customStrCmp');
                 request.onerror = () => reject(request.error);
                 request.onsuccess = () => resolve(request.result);
             });
-            const loadGlobalSettings = async () => {
+            const loadTerminalSettings = async () => {
                 const database = await globalDatabase();
                 const transaction = database.transaction('global', 'readonly');
-                const request = transaction.objectStore('global').get('settings');
-                const stored = await new Promise((resolve, reject) => {
+                const store = transaction.objectStore('global');
+                const read = key => new Promise((resolve, reject) => {
+                    const request = store.get(key);
                     request.onsuccess = () => resolve(request.result || {});
                     request.onerror = () => reject(request.error);
                 });
+                const [global, songs] = await Promise.all([read('settings'), read('song-settings')]);
                 database.close();
-                return stored;
+                return { global, songs };
             };
-            const saveGlobalSettings = async () => {
+            const saveTerminalSettings = async () => {
                 const database = await globalDatabase();
                 const transaction = database.transaction('global', 'readwrite');
-                transaction.objectStore('global').put({ ...globalSettings }, 'settings');
+                const store = transaction.objectStore('global');
+                store.put({ ...globalSettings }, 'settings');
+                store.put(JSON.parse(JSON.stringify(songSettings)), 'song-settings');
                 await new Promise((resolve, reject) => {
                     transaction.oncomplete = resolve;
                     transaction.onerror = () => reject(transaction.error);
@@ -12569,66 +12849,90 @@ usort($cats, 'customStrCmp');
             const perSongFolio = () => ({
                 name: 'PER SONG',
                 entries: [
-                    actionEntry('TYPE', '< PER KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1'),
-                    actionEntry('', '< PER 1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1 } }, '2'),
-                    actionEntry('', 'PER NAME >', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1 } }, '6')
+                    actionEntry('TYPE' + '-'.repeat(maxTitleLength - 4), '< KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1'),
+                    actionEntry('', '< 1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1 } }, '2'),
+                    actionEntry('CODE' + '-'.repeat(maxTitleLength - 4), selectedCode || '----', { kind: 'code' }, '3'),
+                    actionEntry('-'.repeat(maxTitleLength), 'NAME >', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1 } }, '6'),
+                    actionEntry('-'.repeat(maxTitleLength), '', null, '8'),
+                    
+                    ...(selectedCode ? [actionEntry('', 'SETTINGS >', { kind: 'folio', folio: { kind: 'song', songId: songsByUrl.find(song => song.code === selectedCode)?.id || '', code: selectedCode, page: 1 } }, '10')] : [])
                 ]
             });
             const categoriesFolio = () => ({
                 name: 'PER KATEGORIE',
                 entries: pageItems(categories, pageNumber(categories, folio.page)).map(category =>
-                    actionEntry('', category, { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1 } }))
+                    actionEntry('', terminalCategoryName(category), { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1 } }))
             });
             const lettersFolio = () => {
-                const letters = [...new Set(songCards.map(song => (asciiMaker(song.title).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean))];
                 return {
                     name: 'PER 1ST LETTER',
-                    entries: pageItems(letters, pageNumber(letters, folio.page)).map(letter =>
+                    entries: pageItems(songLetters, pageNumber(songLetters, folio.page)).map(letter =>
                         actionEntry('', letter, { kind: 'folio', folio: { kind: 'songs', source: 'letter', letter, page: 1 } }))
                 };
             };
             const songsForFolio = () => {
                 if (folio.source === 'category') return songCards.filter(song => song.category === folio.category);
                 if (folio.source === 'letter') return songCards.filter(song =>
-                    (asciiMaker(song.title).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase() === folio.letter);
-                return songsByName;
+                    (asciiMaker(song.sortTitle).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase() === folio.letter);
+                return songsByUrl;
             };
             const songsFolio = () => {
                 const songs = songsForFolio();
                 const page = pageNumber(songs, folio.page);
                 return {
-                    name: folio.source === 'category' ? folio.category : folio.source === 'letter' ? folio.letter : 'PER NAME',
-                    entries: pageItems(songs, page).map(song =>
-                        actionEntry(song.title, song.code, { kind: 'folio', folio: { kind: 'song', songId: song.id, code: song.code, page: 1 } }))
+                    name: folio.source === 'category' ? terminalCategoryName(folio.category) : folio.source === 'letter' ? folio.letter : 'PER NAME',
+                    entries: pageItems(songs, page).map(song => {
+                        const title = terminalSongTitle(song);
+                        return actionEntry(title.text, song.code, { kind: 'folio', folio: { kind: 'song', songId: song.id, code: song.code, page: 1 } }, '', title.accent);
+                    })
                 };
             };
-            const songFolio = () => ({
-                name: `${folio.code} SPEED`,
-                entries: [
-                    liveEntry('SPEED', liveValues().speed.toFixed(2)),
-                    liveEntry('SECTION WINDOW', liveValues().sectionWindow),
-                    liveEntry('STANDBY', liveValues().standby)
-                ]
-            });
-            const currentFolio = () => {
-                if (folio.kind === 'global') return globalFolio();
-                if (folio.kind === 'per-song') return perSongFolio();
-                if (folio.kind === 'categories') return categoriesFolio();
-                if (folio.kind === 'letters') return lettersFolio();
-                if (folio.kind === 'songs') return songsFolio();
-                if (folio.kind === 'song') return songFolio();
-                return indexFolio();
+            const songFolio = () => {
+                const values = songSettingValues(folio.songId);
+                return {
+                    name: `${folio.code} SETTINGS`,
+                    entries: [
+                        settingEntry('SPEED', 'speed', values, 'song', folio.songId),
+                        settingEntry('SECTION WINDOW', 'sectionWindow', values, 'song', folio.songId),
+                        settingEntry('STANDBY', 'standby', values, 'song', folio.songId)
+                    ]
+                };
             };
+            const folioRegistry = {
+                index: indexFolio,
+                global: globalFolio,
+                'per-song': perSongFolio,
+                categories: categoriesFolio,
+                letters: lettersFolio,
+                songs: songsFolio,
+                song: songFolio
+            };
+            const currentFolio = () => (folioRegistry[folio.kind] || folioRegistry.index)();
             const folioTotal = () => {
                 if (folio.kind === 'categories') return Math.ceil(categories.length / pageSize) || 1;
-                if (folio.kind === 'letters') {
-                    return Math.ceil(new Set(songCards.map(song => (asciiMaker(song.title).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean)).size / pageSize) || 1;
-                }
+                if (folio.kind === 'letters') return Math.ceil(songLetters.length / pageSize) || 1;
                 if (folio.kind === 'songs') return Math.ceil(songsForFolio().length / pageSize) || 1;
                 return 1;
             };
             const renderScratchpad = () => {
-                scratchpadDisplay.textContent = deleteArmed ? 'DELETE' : scratchpad;
+                scratchpadDisplay.textContent = scratchpadMessage || (deleteArmed ? 'DELETE' : scratchpad);
+            };
+            const showScratchpadMessage = message => {
+                clearTimeout(scratchpadMessageTimer);
+                scratchpadMessage = message;
+                renderScratchpad();
+                scratchpadMessageTimer = window.setTimeout(() => {
+                    scratchpadMessage = '';
+                    renderScratchpad();
+                }, 2000);
+            };
+            const renderSaveState = () => {
+                terminal.querySelector('[data-terminal-special="save"]')?.classList.toggle('is-saving', settingsDirty);
+            };
+            const refreshSaveState = () => {
+                settingsDirty = Object.keys(globalSettings).some(key => globalSettings[key] !== persistedGlobalSettings[key]) ||
+                    JSON.stringify(songSettings) !== JSON.stringify(persistedSongSettings);
+                renderSaveState();
             };
             const renderFolio = () => {
                 const page = currentFolio();
@@ -12642,68 +12946,107 @@ usort($cats, 'customStrCmp');
                     const field = entry.field || entryFields[nextField++];
                     entries.set(field, entry);
                 });
-                entries.set('5', actionEntry('', folio.returnTarget ? '< RE-TURN' : '< INDEX', folio.returnTarget ?
-                    { kind: 'folio', folio: folio.returnTarget } : { kind: 'index' }));
-                entries.set('10', currentPage < total ? actionEntry('', 'PAGE >', {
-                    kind: 'folio', folio: { ...folio, page: currentPage + 1, returnTarget: { ...folio, page: currentPage } }
-                }) : null);
+                entries.set('5', folio.kind === 'index' ? null : folio.returnTarget ?
+                    actionEntry('', folio.returnLabel || '< RE-TURN', { kind: 'back', folio: folio.returnTarget }) : null);
+                if (currentPage < total) {
+                    entries.set('10', actionEntry('', 'PAGE >', {
+                        kind: 'page', folio: { ...folio, page: currentPage + 1 }
+                    }));
+                }
                 fields.forEach((view, field) => {
                     const entry = entries.get(field);
-                    view.title.textContent = limitText(entry?.title || '');
-                    view.main.textContent = limitText(entry?.value || '');
+                    const title = limitTitleText(entry?.title || '');
+                    view.title.replaceChildren();
+                    if (entry?.titleAccent && title.startsWith(entry.titleAccent)) {
+                        const accent = document.createElement('b');
+                        accent.className = 'mTerminalSeriesCode';
+                        accent.textContent = entry.titleAccent;
+                        view.title.append(accent, document.createTextNode(title.slice(entry.titleAccent.length)));
+                    } else {
+                        view.title.textContent = title;
+                    }
+                    view.main.textContent = limitText(entry?.setting && !entry.value ? '----' : entry?.value || '');
                     fieldActions.set(field, entry || null);
                 });
             };
-            const openAction = action => {
+            const dispatchAction = action => {
                 if (action.kind === 'index') folio = { kind: 'index', page: 1 };
-                if (action.kind === 'folio') folio = action.folio;
+                if (action.kind === 'folio') folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '< RE-TURN' };
+                if (action.kind === 'page') folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '< PAGE' };
+                if (action.kind === 'back') folio = action.folio;
                 renderFolio();
             };
-            terminal.addEventListener('click', event => {
-                const special = event.target.closest('[data-terminal-special]');
-                if (special && terminal.contains(special)) {
-                    const action = special.dataset.terminalSpecial;
-                    if (action === 'first') {
-                        folio = { ...folio, page: 1 };
-                        delete folio.returnTarget;
+            const dispatchSpecial = action => {
+                if (action === 'first' && (folio.page || 1) !== 1) {
+                    folio = { ...folio, page: 1 };
+                    renderFolio();
+                }
+                if (action === 'last') {
+                    const lastPage = folioTotal();
+                    if ((folio.page || 1) !== lastPage) {
+                        folio = { ...folio, page: lastPage };
                         renderFolio();
                     }
-                    if (action === 'last') {
-                        folio = { ...folio, page: folioTotal() };
-                        delete folio.returnTarget;
-                        renderFolio();
-                    }
-                    if (action === 'index') openAction({ kind: 'index' });
-                    if (action === 'save') {
-                        saveGlobalSettings().then(() => {
-                            special.classList.add('is-saving');
-                            setTimeout(() => special.classList.remove('is-saving'), 350);
-                        }).catch(() => {});
-                    }
+                }
+                if (action === 'index') dispatchAction({ kind: 'index' });
+                if (action === 'save') {
+                    saveTerminalSettings().then(() => {
+                        Object.assign(persistedGlobalSettings, globalSettings);
+                        Object.keys(persistedSongSettings).forEach(songId => delete persistedSongSettings[songId]);
+                        Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
+                        applyCurrentSettings();
+                        refreshSaveState();
+                    }).catch(() => {});
+                }
+            };
+            const dispatchKey = value => {
+                if (scratchpadMessage) return;
+                if (value === 'DL') deleteArmed = true;
+                else if (value === 'BS') scratchpad = scratchpad.slice(0, -1);
+                else scratchpad = limitText(scratchpad + (value === 'SP' ? ' ' : value));
+                renderScratchpad();
+            };
+            const setEntrySetting = (entry, value) => {
+                if (entry.scope === 'song') {
+                    const values = { ...songSettingValues(entry.songId), [entry.setting]: value };
+                    if (Object.values(values).some(Boolean)) songSettings[entry.songId] = values;
+                    else delete songSettings[entry.songId];
                     return;
                 }
-                const key = event.target.closest('.mTerminalKey');
-                if (key && terminal.contains(key)) {
-                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'fmcbutton' }));
-                    const value = key.textContent.trim();
-                    if (value === 'DL') deleteArmed = true;
-                    else if (value === 'BS') scratchpad = scratchpad.slice(0, -1);
-                    else scratchpad = limitText(scratchpad + (value === 'SP' ? ' ' : value));
-                    renderScratchpad();
-                    return;
-                }
-                const selector = event.target.closest('.mTerminalDash[data-terminal-field]');
-                if (!selector || !terminal.contains(selector)) return;
-                document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'MCPFD' }));
-                const entry = fieldActions.get(selector.dataset.terminalField);
+                globalSettings[entry.setting] = value;
+            };
+            const dispatchSelector = field => {
+                if (scratchpadMessage) return;
+                const entry = fieldActions.get(field);
                 if (!entry) return;
+                if (entry.action?.kind === 'code') {
+                    if (deleteArmed) {
+                        selectedCode = '';
+                        deleteArmed = false;
+                        renderScratchpad();
+                        renderFolio();
+                        return;
+                    }
+                    const code = scratchpad.toUpperCase();
+                    const song = songsByUrl.find(candidate => candidate.code === code);
+                    if (!song) {
+                        showScratchpadMessage('IN VALID CODE');
+                        return;
+                    }
+                    selectedCode = song.code;
+                    scratchpad = '';
+                    renderScratchpad();
+                    renderFolio();
+                    return;
+                }
                 if (entry.action) {
-                    openAction(entry.action);
+                    dispatchAction(entry.action);
                     return;
                 }
                 if (deleteArmed) {
                     if (entry.setting) {
-                        globalSettings[entry.setting] = '';
+                        setEntrySetting(entry, '');
+                        refreshSaveState();
                         renderFolio();
                     }
                     deleteArmed = false;
@@ -12714,8 +13057,8 @@ usort($cats, 'customStrCmp');
                     if (scratchpad) {
                         const value = normalizeGlobalSetting(entry.setting, scratchpad);
                         if (!value) return;
-                        globalSettings[entry.setting] = value;
-                        applyGlobalSettings();
+                        setEntrySetting(entry, value);
+                        refreshSaveState();
                         scratchpad = '';
                         renderScratchpad();
                         renderFolio();
@@ -12723,17 +13066,47 @@ usort($cats, 'customStrCmp');
                         scratchpad = limitText(entry.value || liveValueFor(entry.setting));
                         renderScratchpad();
                     }
-                } else if (!scratchpad && entry.live) {
-                    scratchpad = limitText(entry.value);
-                    renderScratchpad();
                 }
+            };
+            terminal.addEventListener('click', event => {
+                const special = event.target.closest('[data-terminal-special]');
+                if (special && terminal.contains(special)) {
+                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'fmcbutton' }));
+                    dispatchSpecial(special.dataset.terminalSpecial);
+                    return;
+                }
+                const key = event.target.closest('.mTerminalKey');
+                if (key && terminal.contains(key)) {
+                    document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'fmcbutton' }));
+                    dispatchKey(key.textContent.trim());
+                    return;
+                }
+                const selector = event.target.closest('.mLSK[data-terminal-field]');
+                if (!selector || !terminal.contains(selector)) return;
+                document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'MCPFD' }));
+                dispatchSelector(selector.dataset.terminalField);
+            });
+            document.addEventListener('m2songchange', event => {
+                const songId = event.detail?.dataset.songId || event.detail?.closest('.card')?.id;
+                if (songId) applySettings(effectiveSongSettings(songId));
             });
             renderFolio();
-            loadGlobalSettings().then(stored => {
+            loadTerminalSettings().then(stored => {
                 Object.keys(globalSettings).forEach(key => {
-                    globalSettings[key] = normalizeGlobalSetting(key, stored?.[key] || '');
+                    globalSettings[key] = normalizeGlobalSetting(key, stored.global?.[key] || '');
                 });
-                applyGlobalSettings();
+                Object.entries(stored.songs || {}).forEach(([songId, values]) => {
+                    const normalized = {
+                        speed: normalizeGlobalSetting('speed', values?.speed || ''),
+                        sectionWindow: normalizeGlobalSetting('sectionWindow', values?.sectionWindow || ''),
+                        standby: normalizeGlobalSetting('standby', values?.standby || '')
+                    };
+                    if (Object.values(normalized).some(Boolean)) songSettings[songId] = normalized;
+                });
+                Object.assign(persistedGlobalSettings, globalSettings);
+                Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
+                applyCurrentSettings();
+                refreshSaveState();
                 renderFolio();
             }).catch(() => {});
         })();
