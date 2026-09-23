@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '128';
+const M2_PAGE_CODE_VERSION = '132';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -2817,7 +2817,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             position: absolute;
             inset: 0;
             pointer-events: none;
-            transform-origin: center;
         }
 
         .mTerminalNdDirection {
@@ -2827,12 +2826,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             font-size: 12px;
             line-height: 1;
             pointer-events: none;
+            transform: translate(-50%, -50%);
         }
-
-        .mTerminalNdDirectionUp { top: 4px; left: 50%; transform: translateX(-50%); }
-        .mTerminalNdDirectionDown { bottom: 4px; left: 50%; transform: translateX(-50%); }
-        .mTerminalNdDirectionLeft { left: 4px; top: 50%; transform: translateY(-50%); }
-        .mTerminalNdDirectionRight { right: 4px; top: 50%; transform: translateY(-50%); }
 
         .mTerminalNdRoute {
             position: absolute;
@@ -2853,8 +2848,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 190px;
-            height: 190px;
+            width: 165px;
+            height: 165px;
             box-sizing: border-box;
             border: 1px solid #444;
             border-radius: 50%;
@@ -3695,7 +3690,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             <span class="mTerminalNdDirection mTerminalNdDirectionRight">R→</span>
           </div>
           <div class="mTerminalNdWorld">
-            <svg class="mTerminalNdRoute" aria-hidden="true"><g data-nd-route="draft"></g><g data-nd-route="active"></g></svg>
+            <svg class="mTerminalNdRoute" aria-hidden="true"><g data-nd-route="draft"></g><g data-nd-route="active"></g><path data-nd-route="travel"></path><circle data-nd-route="intercept" fill="none" stroke="#00ff00" visibility="hidden"></circle></svg>
             <span id="mTerminalNdHead" class="mTerminalNdHead" hidden></span>
           </div>
         </div>
@@ -7863,6 +7858,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         window.__npKR = krIsOn;
         window.__npKrLooping = audio => krFeedEnergized() &&
             krLoopAudio === audio && currentAudio === audio;
+        window.__npPlaybackRoutingState = () => ({
+            k: kIsOn(),
+            kr: krIsOn(),
+            krPermissive: !!(playbackElektroniksPower.closed && isrAt('OFF') && kIsOn() && krIsOn()),
+            krFeed: krFeedEnergized(),
+            isr: playbackCircuit ? playbackCircuit.isr.effectivePosition : 'OFF',
+            m: playbackCircuit ? playbackCircuit.m.effectivePosition : 'C'
+        });
         publishReadOnlyWindow('__npSectionEligible', sectionDurationEligible);
         let seekRadialStandbySection = 0;
         let seekRadialStandbySeconds = 0;
@@ -8910,6 +8913,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             visibleWhole: transferToRandom,
             visibleSection: transferToRandom
         }, playbackElektroniksPower);
+        playbackCircuit.k.addEventListener('change', () => {
+            document.dispatchEvent(new Event('m2ndmodechange'));
+        });
+        [playbackCircuit.kr, playbackCircuit.isr, playbackCircuit.m, playbackCircuit.sectionRepeatFeed].forEach(ctrl => {
+            ctrl.addEventListener('change', () => {
+                document.dispatchEvent(new Event('m2ndroutechange'));
+            });
+        });
         const legsCallouts = [
             [2500, 35554678], [1000, 373840423], [500, 943407323], [400, 413617446],
             [300, 393724110], [200, 357507397], [100, 344407285], [60, 421103543],
@@ -9240,11 +9251,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         seconds += remaining + duration * Math.max(0, command.repeats - this.iteration - 1);
                     } else seconds += duration * command.repeats;
                 }
+                const totalRemaining = this.progress().totalRemaining;
+                if (rows.length === 1 &&
+                    (!this.commands[this.commandIndex + 1] || this.commands[this.commandIndex + 1].leg.type === 'then') &&
+                    Number.isFinite(totalRemaining)) rows[0].seconds = totalRemaining;
                 return rows;
             }
 
             journey() {
-                if (!this.active || !this.current) return null;
+                if (!this.active || !this.current || this.transitioning) return null;
                 const command = this.current.command;
                 const following = this.commands[this.commandIndex + 1];
                 const afterFollowing = this.commands[this.commandIndex + 2];
@@ -9258,6 +9273,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     holdRepeat: this.iteration > 0 && command.repeats > 1,
                     lastRepeat: this.iteration + 1 === command.repeats,
                     firstLeg: this.completedLegs === 0,
+                    iteration: this.iteration,
+                    completedLegs: this.completedLegs,
                     fraction: Math.max(0, Math.min(1, (playbackTime(this.current.audio) - this.current.start) /
                         (this.current.end - this.current.start)))
                 };
@@ -10960,14 +10977,39 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             }
 
+           // delete not — Parameters match the physical MEAN WELL DDR-120A-24 power supply unit used in this circuit.
+            const DDR120A24_LOAD_REGULATION_OHMS = (28.0 * 0.005) / 3.6;
+            const DDR120A24_OVERLOAD_ONSET_FACTOR = 1.05;
+            const DDR120A24_CC_LIMIT_FACTOR = 1.20;
+            const DDR120A24_OVERLOAD_CEILING_FACTOR = 1.35;
+            const DDR120A24_PEAK_LOAD_FACTOR = 1.50;
+            const DDR120A24_PEAK_DURATION_MS = 3000;
+            const DDR120A24_CC_SHUTDOWN_MS = 6000;
+            const DDR120A24_AUTO_RECOVERY_MS = 1500;
+            const DDR120A24_SHORT_CIRCUIT_VOLTS = 4.5;
+
             class DcSource {
                 constructor(name, nominalVoltage = 28, currentLimit = 3.6) {
                     this.name = name;
                     this.nominalVoltage = nominalVoltage;
+                    this.outputVoltage = nominalVoltage;
                     this.currentLimit = currentLimit;
+                    this.outputResistance = DDR120A24_LOAD_REGULATION_OHMS;
+                    this.overloadOnsetCurrent = currentLimit * DDR120A24_OVERLOAD_ONSET_FACTOR;
+                    this.constantCurrentLimit = currentLimit * DDR120A24_CC_LIMIT_FACTOR;
+                    this.overloadCeilingCurrent = currentLimit * DDR120A24_OVERLOAD_CEILING_FACTOR;
+                    this.peakCurrentLimit = currentLimit * DDR120A24_PEAK_LOAD_FACTOR;
+                    this.peakDurationMs = DDR120A24_PEAK_DURATION_MS;
+                    this.ccShutdownMs = DDR120A24_CC_SHUTDOWN_MS;
+                    this.autoRecoveryMs = DDR120A24_AUTO_RECOVERY_MS;
                     this.positive = new ElectricalTerminal(this, 'L+');
                     this.negative = new ElectricalTerminal(this, 'L-');
                     this.current = 0;
+                    this.unclampedCurrent = 0;
+                    this.mode = 'CV';
+                    this.limiting = false;
+                    this.overloadStartedAt = null;
+                    this.overloadElapsedMs = 0;
                     this.tripped = false;
                     this.tripReason = null;
                 }
@@ -10975,13 +11017,22 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 trip(reason) {
                     this.tripped = true;
                     this.tripReason = reason;
+                    this.mode = 'PROTECT';
+                    this.limiting = true;
+                    this.outputVoltage = 0;
                     this.current = 0;
                 }
 
                 reset() {
                     this.tripped = false;
                     this.tripReason = null;
+                    this.mode = 'CV';
+                    this.limiting = false;
+                    this.overloadStartedAt = null;
+                    this.overloadElapsedMs = 0;
+                    this.outputVoltage = this.nominalVoltage;
                     this.current = 0;
+                    this.unclampedCurrent = 0;
                 }
             }
 
@@ -11195,6 +11246,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #solveAgain = false;
                 #transactionDepth = 0;
                 #names = new Set();
+                #protectionTimer = null;
+                #autoRecoveryTimer = null;
 
                 constructor(name, nominalVoltage = 28, currentLimit = 3.6) {
                     super();
@@ -11206,6 +11259,41 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.loads = [];
                     this.fault = null;
                     this.potentials = new Map();
+                }
+
+                #clearProtectionTimer() {
+                    if (this.#protectionTimer !== null) {
+                        clearTimeout(this.#protectionTimer);
+                        this.#protectionTimer = null;
+                    }
+                }
+
+                #clearAutoRecoveryTimer() {
+                    if (this.#autoRecoveryTimer !== null) {
+                        clearTimeout(this.#autoRecoveryTimer);
+                        this.#autoRecoveryTimer = null;
+                    }
+                }
+
+                #scheduleProtectionTick(delayMs = 250) {
+                    this.#clearProtectionTimer();
+                    const wait = Math.max(50, Math.min(1000, Math.ceil(delayMs)));
+                    this.#protectionTimer = setTimeout(() => {
+                        this.#protectionTimer = null;
+                        this.solve();
+                    }, wait);
+                }
+
+                #scheduleAutoRecovery() {
+                    if (this.#autoRecoveryTimer !== null) return;
+                    this.#autoRecoveryTimer = setTimeout(() => {
+                        this.#autoRecoveryTimer = null;
+                        if (!this.source.tripped) return;
+                        this.source.tripped = false;
+                        this.source.tripReason = null;
+                        this.source.overloadStartedAt = performance.now() - this.source.peakDurationMs;
+                        this.solve();
+                    }, this.source.autoRecoveryMs);
                 }
 
                 register(device, collection) {
@@ -11280,6 +11368,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
                     this.#solving = true;
                     let passes = 0;
+                    let passVoltageCeiling = this.source.nominalVoltage;
                     try {
                         do {
                             this.#solveAgain = false;
@@ -11290,9 +11379,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
                             if (this.source.tripped) {
                                 this.fault = this.source.tripReason;
+                                this.source.outputVoltage = 0;
                                 this.source.current = 0;
+                                this.source.unclampedCurrent = 0;
+                                this.source.mode = 'PROTECT';
+                                this.source.limiting = true;
                                 this.potentials = new Map();
                                 this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
+                                this.#clearProtectionTimer();
+                                this.#scheduleAutoRecovery();
                                 continue;
                             }
 
@@ -11386,26 +11481,112 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                     throw new Error(this.name + ' DC solver did not converge');
                                 }
                             }
-                            this.potentials = new Map(fixed);
-                            unknown.forEach((node, index) => this.potentials.set(node, voltage[index]));
+                            let unclampedCurrent = 0;
+                            (adjacent.get(this.source.positive) || []).forEach(([neighbor, conductance]) => {
+                                const neighborPotential = fixed.has(neighbor)
+                                    ? fixed.get(neighbor)
+                                    : (voltage[positions.get(neighbor)] || 0);
+                                unclampedCurrent += conductance * (this.source.nominalVoltage - neighborPotential);
+                            });
+                            unclampedCurrent = Math.max(0, unclampedCurrent);
+                            this.source.unclampedCurrent = unclampedCurrent;
+
+                            const equivalentConductance = this.source.nominalVoltage > 0
+                                ? unclampedCurrent / this.source.nominalVoltage
+                                : 0;
+                            const now = performance.now();
+                            const rOut = this.source.outputResistance || 0;
+                            let regulatedVoltage = equivalentConductance > 0
+                                ? this.source.nominalVoltage / (1 + equivalentConductance * rOut)
+                                : this.source.nominalVoltage;
+                            let regulatedCurrent = equivalentConductance * regulatedVoltage;
+
+                            if (regulatedCurrent > this.source.currentLimit) {
+                                if (this.source.overloadStartedAt === null) {
+                                    this.source.overloadStartedAt = now;
+                                }
+                                this.source.overloadElapsedMs = Math.max(0, now - this.source.overloadStartedAt);
+                            } else {
+                                this.source.overloadStartedAt = null;
+                                this.source.overloadElapsedMs = 0;
+                                this.#clearProtectionTimer();
+                                this.#clearAutoRecoveryTimer();
+                            }
+
+                            const inPeakWindow = this.source.overloadElapsedMs < this.source.peakDurationMs;
+                            const activeCurrentCeiling = inPeakWindow
+                                ? this.source.peakCurrentLimit
+                                : this.source.constantCurrentLimit;
+
+                            let effectiveVoltage = regulatedVoltage;
+                            let limiting = false;
+                            let mode = 'CV';
+
+                            if (regulatedCurrent > activeCurrentCeiling && equivalentConductance > 0) {
+                                effectiveVoltage = activeCurrentCeiling / equivalentConductance;
+                                limiting = true;
+                                mode = 'CC';
+                            } else if (regulatedCurrent > this.source.currentLimit) {
+                                mode = inPeakWindow ? 'PEAK' : 'CC';
+                                if (!inPeakWindow && regulatedCurrent > this.source.overloadOnsetCurrent && equivalentConductance > 0) {
+                                    const clampTarget = Math.min(regulatedCurrent, this.source.constantCurrentLimit);
+                                    effectiveVoltage = clampTarget / equivalentConductance;
+                                    limiting = true;
+                                }
+                            }
+
+                            effectiveVoltage = Math.max(0, Math.min(passVoltageCeiling, effectiveVoltage));
+                            passVoltageCeiling = effectiveVoltage;
+
+                            const voltageScale = this.source.nominalVoltage > 0
+                                ? effectiveVoltage / this.source.nominalVoltage
+                                : 0;
+                            const scaledFixed = new Map([
+                                [this.source.positive, effectiveVoltage],
+                                [this.source.negative, 0]
+                            ]);
+                            this.potentials = new Map(scaledFixed);
+                            unknown.forEach((node, index) => {
+                                this.potentials.set(node, voltage[index] * voltageScale);
+                            });
+
+                            const actualCurrent = equivalentConductance * effectiveVoltage;
+                            this.source.outputVoltage = effectiveVoltage;
+                            this.source.current = Math.max(0, actualCurrent);
+                            this.source.limiting = limiting;
+                            this.source.mode = mode;
+
                             this.loads.forEach(load => {
                                 load.applyVoltage(this.voltageBetween(load.a1, load.a2), DC_SOLVER_AUTHORITY);
                             });
-                            let sourceCurrent = 0;
-                            (adjacent.get(this.source.positive) || []).forEach(([neighbor, conductance]) => {
-                                sourceCurrent += conductance *
-                                    (this.source.nominalVoltage - (this.potentials.get(neighbor) || 0));
-                            });
-                            this.source.current = Math.max(0, sourceCurrent);
 
-                            if (sourceCurrent > this.source.currentLimit) {
-                                this.source.trip(
-                                    'overcurrent: ' + sourceCurrent.toFixed(3) + ' A exceeds ' +
-                                    this.source.currentLimit.toFixed(3) + ' A'
-                                );
+                            const isDeadShort = limiting && effectiveVoltage < DDR120A24_SHORT_CIRCUIT_VOLTS;
+                            const isSustainedDeepOverload = (
+                                this.source.overloadElapsedMs >= this.source.peakDurationMs &&
+                                regulatedCurrent > this.source.overloadCeilingCurrent &&
+                                (effectiveVoltage < 18.0 || this.source.overloadElapsedMs >= this.source.ccShutdownMs)
+                            );
+
+                            if (isDeadShort || isSustainedDeepOverload) {
+                                const reason = isDeadShort
+                                    ? 'DDR-120A-24 short-circuit foldback protection (' + unclampedCurrent.toFixed(3) + ' A demand, Vout=' + effectiveVoltage.toFixed(2) + ' V)'
+                                    : 'DDR-120A-24 overload protection (' + regulatedCurrent.toFixed(3) + ' A > ' + this.source.currentLimit.toFixed(2) + ' A for ' + (this.source.overloadElapsedMs / 1000).toFixed(1) + ' s)';
+                                this.source.trip(reason);
                                 this.fault = this.source.tripReason;
                                 this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
+                                this.#clearProtectionTimer();
+                                this.#scheduleAutoRecovery();
                                 this.#solveAgain = true;
+                            } else if (this.source.overloadStartedAt !== null) {
+                                const remainingToPeakEnd = this.source.peakDurationMs - this.source.overloadElapsedMs;
+                                const remainingToShutdown = this.source.ccShutdownMs - this.source.overloadElapsedMs;
+                                const nextTick = remainingToPeakEnd > 0
+                                    ? Math.min(250, remainingToPeakEnd + 15)
+                                    : (remainingToShutdown > 0 ? Math.min(250, remainingToShutdown + 15) : 250);
+                                this.#scheduleProtectionTick(nextTick);
+                                this.fault = limiting
+                                    ? 'DDR-120A-24 CC limiting: ' + this.source.current.toFixed(3) + ' A @ ' + effectiveVoltage.toFixed(2) + ' V'
+                                    : 'DDR-120A-24 peak load: ' + this.source.current.toFixed(3) + ' A (' + (this.source.overloadElapsedMs / 1000).toFixed(1) + 's / 3.0s)';
                             } else {
                                 this.fault = null;
                             }
@@ -11418,6 +11599,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
 
                 resetProtection() {
+                    this.#clearProtectionTimer();
+                    this.#clearAutoRecoveryTimer();
                     this.source.reset();
                     this.fault = null;
                     return this.solve();
@@ -11455,9 +11638,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 snapshot() {
                     return {
                         source: {
-                            voltage: this.source.nominalVoltage,
+                            voltage: this.source.tripped ? 0 : this.source.outputVoltage,
+                            nominalVoltage: this.source.nominalVoltage,
+                            outputVoltage: this.source.outputVoltage,
                             current: this.source.current,
+                            unclampedCurrent: this.source.unclampedCurrent,
                             currentLimit: this.source.currentLimit,
+                            constantCurrentLimit: this.source.constantCurrentLimit,
+                            peakCurrentLimit: this.source.peakCurrentLimit,
+                            mode: this.source.mode,
+                            limiting: this.source.limiting,
+                            overloadElapsedMs: this.source.overloadElapsedMs,
                             tripped: this.source.tripped,
                             tripReason: this.source.tripReason
                         },
@@ -12899,6 +13090,64 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         get source() {
                             return freezeTelemetry({ ...circuit.snapshot().source });
                         },
+                        get buses() {
+                            const conductorCurrent = conductor => conductor?.connected
+                                ? Math.abs(circuit.voltageBetween(conductor.from, conductor.to) / conductor.resistance)
+                                : 0;
+                            const contactCurrent = contact => contact?.conductive
+                                ? Math.abs(circuit.voltageBetween(contact.line, contact.load) / contact.resistance)
+                                : 0;
+                            const breakerCurrent = breaker => [...breaker.poles.values()].reduce(
+                                (sum, contact) => sum + contactCurrent(contact), 0
+                            );
+                            const source = circuit.source;
+                            return freezeTelemetry({
+                                sourceVoltage: source.tripped ? 0 : source.outputVoltage,
+                                nominalVoltage: source.nominalVoltage,
+                                current: source.current,
+                                unclampedCurrent: source.unclampedCurrent,
+                                indicatedCurrent: Math.max(0,
+                                    Math.abs(source.current) - Math.abs(timeBusLoads.timeDcAmpsDisplay.current || 0)
+                                ),
+                                currentLimit: source.currentLimit,
+                                constantCurrentLimit: source.constantCurrentLimit,
+                                peakCurrentLimit: source.peakCurrentLimit,
+                                mode: source.mode,
+                                limiting: source.limiting,
+                                overloadElapsedMs: source.overloadElapsedMs,
+                                tripped: source.tripped,
+                                distribution: {
+                                    voltage: circuit.voltageBetween(supplyBusbar.positive, supplyBusbar.negative),
+                                    current: conductorCurrent(wires.sourceFeed)
+                                },
+                                main: {
+                                    voltage: circuit.voltageBetween(mainSystemsContact.load, supplyBusbar.negative),
+                                    current: contactCurrent(mainSystemsContact)
+                                },
+                                page: {
+                                    voltage: circuit.voltageBetween(pageBusbar.positive, pageBusbar.negative),
+                                    current: conductorCurrent(wires.pageBusbarFeed)
+                                },
+                                terminal: {
+                                    voltage: circuit.voltageBetween(terminalBusbar.positive, terminalBusbar.negative),
+                                    current: breakerCurrent(branchBreakers.terminalBus)
+                                },
+                                time: {
+                                    voltage: circuit.voltageBetween(timeBusContact.load, supplyBusbar.negative),
+                                    current: breakerCurrent(branchBreakers.time)
+                                },
+                                branches: {
+                                    mainSense: breakerCurrent(branchBreakers.mainSense),
+                                    panel: breakerCurrent(branchBreakers.panel),
+                                    playback: breakerCurrent(branchBreakers.playback),
+                                    sound: breakerCurrent(branchBreakers.sound),
+                                    archive: breakerCurrent(branchBreakers.archive),
+                                    lighting: breakerCurrent(branchBreakers.lighting),
+                                    terminal: breakerCurrent(branchBreakers.terminalKontroller),
+                                    nd: breakerCurrent(branchBreakers.dysPlayKontroller)
+                                }
+                            });
+                        },
                         get discreteStates() {
                             return freezeTelemetry(netlist.discreteBus.states);
                         },
@@ -12920,7 +13169,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             }]));
                             return freezeTelemetry({
                                 dataPowered: terminalLoads.terminalTextDisplayLoad.energized,
-                                ndPowered: terminalLoads.terminalTextDisplayLoad.energized && terminalLoads.ndGraphicsControllerLoad.energized,
+                                ndPowered: terminalLoads.terminalTextDisplayLoad.energized &&
+                                    terminalLoads.ndGraphicsControllerLoad.energized &&
+                                    terminalLoads.ndDisplayLoad.energized,
                                 planComputerPowered: equipmentLoads.planComputerLoad.energized,
                                 planComputerCurrent: equipmentLoads.planComputerLoad.current,
                                 current: Object.values(loads).reduce((sum, load) => sum + Math.abs(load.current), 0),
@@ -12962,7 +13213,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             document.dispatchEvent(new CustomEvent('m2planpower', { detail: { powered: plan } }));
                         }
                         const data = terminalLoads.terminalTextDisplayLoad.energized;
-                        const nd = data && terminalLoads.ndGraphicsControllerLoad.energized;
+                        const nd = data &&
+                            terminalLoads.ndGraphicsControllerLoad.energized &&
+                            terminalLoads.ndDisplayLoad.energized;
                         const signature = `${data}:${nd}`;
                         if (signature === lastTerminalPower) return;
                         lastTerminalPower = signature;
@@ -13877,6 +14130,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const terminalNdSongs = new Map(songCards.map(song => [song.code, song]));
             const terminalNdRouteDraft = terminalNd.querySelector('[data-nd-route="draft"]');
             const terminalNdRouteActive = terminalNd.querySelector('[data-nd-route="active"]');
+            const terminalNdTravelLine = terminalNd.querySelector('[data-nd-route="travel"]');
+            const terminalNdIntercept = terminalNd.querySelector('[data-nd-route="intercept"]');
             const terminalNdSvgNamespace = 'http://www.w3.org/2000/svg';
             const addTerminalNdNode = (fragment, label, point, duration) => {
                 terminalNdPoints.set(label, point);
@@ -13918,6 +14173,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 terminalNdPoints.clear();
                 terminalNdElements.clear();
                 const fragment = document.createDocumentFragment();
+                const kEnabled = window.__npK ? !!window.__npK() : true;
                 songCards.forEach(song => {
                     const origin = terminalNdSongPoint(song.category, song.virtualOriginKey || song.code);
                     if (song.virtualOriginKey) {
@@ -13927,24 +14183,35 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         return;
                     }
                     const threshold = terminalNdSectionWindow(song);
-                    song.ndSections = song.sectionMarks.map((start, index) => ({
+                    song.ndSections = kEnabled ? song.sectionMarks.map((start, index) => ({
                         start,
                         end: index + 1 < song.sectionMarks.length ? song.sectionMarks[index + 1] : song.duration
-                    })).filter(section => Number.isFinite(section.end) && section.end - section.start > threshold);
+                    })).filter(section => Number.isFinite(section.end) && section.end - section.start > threshold) : [];
                     if (song.ndSections.length) {
-                        song.ndSections.forEach((_, index) => {
+                        song.ndSections.forEach((section, index) => {
                             const offset = terminalNdLocalPoint(index, 34);
                             addTerminalNdNode(fragment, `${song.code}/${index + 1}`, {
                                 x: origin.x + offset.x, y: origin.y + offset.y
-                            }, song.duration);
+                            }, section.end - section.start);
                         });
                     } else addTerminalNdNode(fragment, song.code, origin, song.duration);
                 });
                 terminalNd.append(fragment);
                 terminalNdActiveLabel = '';
+                terminalNdCachedPlanKey = '';
+                if (terminalNdTravel) terminalNdTravel.key = '';
                 renderTerminalNdRoutes();
                 if (terminalNdActiveAudio) moveTerminalNdHead(terminalNdActiveAudio);
             };
+            document.addEventListener('m2ndmodechange', () => {
+                rebuildTerminalNdNodes();
+            });
+            document.addEventListener('m2ndroutechange', () => {
+                terminalNdCachedPlanKey = '';
+                if (terminalNdTravel) terminalNdTravel.key = '';
+                renderTerminalNdRoutes();
+                if (terminalNdActiveAudio) moveTerminalNdHead(terminalNdActiveAudio);
+            });
             const terminalNdLegLabel = leg => {
                 const code = String(leg?.songCode || '').trim().toUpperCase();
                 const song = terminalNdSongs.get(code);
@@ -13959,14 +14226,116 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const match = /^\d{1,2}\/(\d{1,3})\.(\d{1,2})$/.exec(String(leg?.time || ''));
                 return match ? Math.max(0, (Number(match[1]) - 1) * 60 + Number(match[2]) - 1) : 0;
             };
+            const terminalNdLegSectionNumber = leg => {
+                const explicit = Number(leg?.section);
+                if (Number.isFinite(explicit) && explicit > 0) return explicit;
+                const match = /^(\d{1,2})\//.exec(String(leg?.time || ''));
+                return match ? Number(match[1]) || 1 : 1;
+            };
+            const terminalNdExpandSongLegSections = leg => {
+                if (!leg || leg.type !== 'song') return [leg];
+                const code = String(leg.songCode || '').trim().toUpperCase();
+                const song = terminalNdSongs.get(code);
+                if (!song || !song.ndSections?.length || leg.advance === 'Y') return [leg];
+                const startSec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(leg)));
+                if (startSec >= song.ndSections.length) return [leg];
+                const expanded = [];
+                for (let sec = startSec; sec <= song.ndSections.length; sec++) {
+                    const isFirst = sec === startSec;
+                    const secStr = String(sec).padStart(2, '0');
+                    expanded.push({
+                        ...leg,
+                        section: sec,
+                        time: isFirst ? (leg.time || `${secStr}/001.01`) : `${secStr}/001.01`,
+                        seconds: isFirst ? terminalNdLegSeconds(leg) : 0,
+                        advance: 'Y'
+                    });
+                }
+                return expanded;
+            };
+            const terminalNdExpandPlan = plan => {
+                if (!Array.isArray(plan)) return [];
+                const result = [];
+                for (let i = 0; i < plan.length; i++) {
+                    const item = plan[i];
+                    if (!item || item.type === 'then' || item.type === 'hold') {
+                        result.push(item);
+                        continue;
+                    }
+                    const subLegs = terminalNdExpandSongLegSections(item);
+                    for (let s = 0; s < subLegs.length; s++) {
+                        result.push(subLegs[s]);
+                    }
+                }
+                return result;
+            };
+            const terminalNdSmoothChainPoints = waypoints => {
+                if (!waypoints || waypoints.length < 2) return waypoints || [];
+                if (waypoints.length === 2) return waypoints;
+                const out = [waypoints[0]];
+                for (let i = 1; i < waypoints.length - 1; i++) {
+                    const prev = waypoints[i - 1];
+                    const curr = waypoints[i];
+                    const next = waypoints[i + 1];
+                    const d1 = Math.hypot(curr.x - prev.x, curr.y - prev.y);
+                    const d2 = Math.hypot(next.x - curr.x, next.y - curr.y);
+                    if (d1 < 1 || d2 < 1) {
+                        out.push(curr);
+                        continue;
+                    }
+                    const u1 = { x: (curr.x - prev.x) / d1, y: (curr.y - prev.y) / d1 };
+                    const u2 = { x: (next.x - curr.x) / d2, y: (next.y - curr.y) / d2 };
+                    const cross = u1.x * u2.y - u1.y * u2.x;
+                    const dot = u1.x * u2.x + u1.y * u2.y;
+                    const turnAngle = Math.atan2(Math.abs(cross), dot);
+                    if (turnAngle < 0.05 || turnAngle > Math.PI * 0.92) {
+                        out.push(curr);
+                        continue;
+                    }
+                    const halfTan = Math.tan(turnAngle / 2);
+                    const cut = Math.min(14 * halfTan, Math.min(d1, d2) * 0.36);
+                    if (cut < 0.8) {
+                        out.push(curr);
+                        continue;
+                    }
+                    const radius = cut / halfTan;
+                    const dir = Math.sign(cross) || 1;
+                    const before = { x: curr.x - u1.x * cut, y: curr.y - u1.y * cut };
+                    const after = { x: curr.x + u2.x * cut, y: curr.y + u2.y * cut };
+                    const center = {
+                        x: before.x - u1.y * dir * radius,
+                        y: before.y + u1.x * dir * radius
+                    };
+                    const startAng = Math.atan2(before.y - center.y, before.x - center.x);
+                    const steps = Math.max(6, Math.ceil(turnAngle * radius / 1.5));
+                    out.push(before);
+                    for (let s = 1; s < steps; s++) {
+                        const ang = startAng + dir * turnAngle * (s / steps);
+                        out.push({
+                            x: center.x + Math.cos(ang) * radius,
+                            y: center.y + Math.sin(ang) * radius
+                        });
+                    }
+                    out.push(after);
+                }
+                out.push(waypoints[waypoints.length - 1]);
+                return out;
+            };
             const terminalNdEntryPoint = (leg, nextLeg, eligible) => {
                 const star = terminalNdLegPoint(leg);
                 if (!star || !eligible || !nextLeg) return star;
                 const song = terminalNdSongs.get(String(leg.songCode || '').toUpperCase());
                 const next = terminalNdLegPoint(nextLeg);
                 const seconds = terminalNdLegSeconds(leg);
-                if (!song || song.ndSections?.length || !next || !(seconds > 0) || !(song.duration > seconds)) return star;
-                const fraction = seconds / song.duration;
+                if (!song || !next || !(seconds > 0)) return star;
+                let duration = song.duration;
+                if (song.ndSections?.length) {
+                    const sec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(leg)));
+                    const bounds = song.ndSections[sec - 1];
+                    duration = bounds ? bounds.end - bounds.start : duration;
+                }
+                if (!(duration > seconds)) return star;
+                const fraction = seconds / duration;
                 return {
                     x: star.x + (next.x - star.x) * fraction,
                     y: star.y + (next.y - star.y) * fraction
@@ -13979,37 +14348,96 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const outgoing = Math.hypot(to.x - star.x, to.y - star.y);
                 if (incoming < .01 || outgoing < .01) return [from, to];
                 const inbound = { x: (star.x - from.x) / incoming, y: (star.y - from.y) / incoming };
+                const outbound = { x: (to.x - star.x) / outgoing, y: (to.y - star.y) / outgoing };
+                const cross = inbound.x * outbound.y - inbound.y * outbound.x;
+                const turnAngle = Math.atan2(Math.abs(cross), inbound.x * outbound.x + inbound.y * outbound.y);
+                if (turnAngle < .035 || turnAngle > Math.PI * 5 / 6) return [from, to];
+                const halfAngleTangent = Math.tan(turnAngle / 2);
+                const cutDistance = Math.min(38 * halfAngleTangent, Math.min(incoming, outgoing) * .45);
+                if (cutDistance < .5) return [from, to];
+                const radius = cutDistance / halfAngleTangent;
+                const direction = Math.sign(cross);
                 const before = {
-                    x: star.x - inbound.x * incoming * .55,
-                    y: star.y - inbound.y * incoming * .55
+                    x: star.x - inbound.x * cutDistance,
+                    y: star.y - inbound.y * cutDistance
                 };
+                const after = {
+                    x: star.x + outbound.x * cutDistance,
+                    y: star.y + outbound.y * cutDistance
+                };
+                const center = {
+                    x: before.x - inbound.y * direction * radius,
+                    y: before.y + inbound.x * direction * radius
+                };
+                const startAngle = Math.atan2(before.y - center.y, before.x - center.x);
+                const steps = Math.max(8, Math.ceil(turnAngle * radius / .5));
                 const points = [from, before];
-                for (let index = 1; index <= 24; index++) {
-                    const amount = index / 24;
-                    const inverse = 1 - amount;
+                for (let index = 1; index <= steps; index++) {
+                    if (index === steps) {
+                        points.push(after);
+                        continue;
+                    }
+                    const angle = startAngle + direction * turnAngle * index / steps;
                     points.push({
-                        x: inverse * inverse * before.x + 2 * inverse * amount * star.x + amount * amount * to.x,
-                        y: inverse * inverse * before.y + 2 * inverse * amount * star.y + amount * amount * to.y
+                        x: center.x + Math.cos(angle) * radius,
+                        y: center.y + Math.sin(angle) * radius
                     });
                 }
+                points.push(to);
                 return points;
             };
+            const terminalNdHoldHalfLength = 96;
+            const terminalNdHoldRadius = 36;
             const terminalNdHoldPoints = (star, next) => {
                 const angle = next ? Math.atan2(next.y - star.y, next.x - star.x) : 0;
                 const cosine = Math.cos(angle);
                 const sine = Math.sin(angle);
-                const a = 24;
-                const b = 12;
+                const a = terminalNdHoldHalfLength;
+                const b = terminalNdHoldRadius;
                 const local = (x, y) => ({ x: star.x + x * cosine - y * sine, y: star.y + x * sine + y * cosine });
-                const points = [star, local(-a, -b), local(a, -b)];
-                for (let index = 1; index <= 16; index++) {
-                    const turn = -Math.PI / 2 + Math.PI * index / 16;
+                const points = [star];
+                for (let index = 1; index <= 32; index++) {
+                    const t = index / 32;
+                    const left = 1 - t;
+                    points.push(local(a * (3 * left * left * t / 3 + 3 * left * t * t * 2 / 3 + t * t * t),
+                        -b * (3 * left * t * t + t * t * t)));
+                }
+                for (let index = 1; index <= 64; index++) {
+                    const turn = -Math.PI / 2 + Math.PI * index / 64;
                     points.push(local(a + b * Math.cos(turn), b * Math.sin(turn)));
                 }
                 points.push(local(-a, b));
-                for (let index = 1; index <= 16; index++) {
-                    const turn = Math.PI / 2 + Math.PI * index / 16;
+                for (let index = 1; index <= 64; index++) {
+                    const turn = Math.PI / 2 + Math.PI * index / 64;
                     points.push(local(-a + b * Math.cos(turn), b * Math.sin(turn)));
+                }
+                for (let index = 1; index <= 32; index++) {
+                    const t = index / 32;
+                    const left = 1 - t;
+                    points.push(local(-a * (left * left * left + 3 * left * left * t * 2 / 3 + 3 * left * t * t / 3),
+                        -b * (left * left * left + 3 * left * left * t)));
+                }
+                return points;
+            };
+            const terminalNdSoloHoldPoints = star => {
+                const a = terminalNdHoldHalfLength;
+                const b = terminalNdHoldRadius;
+                const centerX = star.x - b;
+                const points = [star, { x: star.x, y: star.y + a }];
+                for (let index = 1; index <= 64; index++) {
+                    const angle = Math.PI * index / 64;
+                    points.push({
+                        x: centerX + b * Math.cos(angle),
+                        y: star.y + a + b * Math.sin(angle)
+                    });
+                }
+                points.push({ x: centerX - b, y: star.y - a });
+                for (let index = 1; index <= 64; index++) {
+                    const angle = Math.PI + Math.PI * index / 64;
+                    points.push({
+                        x: centerX + b * Math.cos(angle),
+                        y: star.y - a + b * Math.sin(angle)
+                    });
                 }
                 points.push(star);
                 return points;
@@ -14040,6 +14468,578 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             const terminalNdPathText = points => points.map((point, index) =>
                 `${index ? 'L' : 'M'}${800 + point.x} ${475 + point.y}`).join('');
+            const terminalNdTravelMetrics = points => {
+                const lengths = [0];
+                for (let index = 1; index < points.length; index++) {
+                    lengths.push(lengths[index - 1] + Math.hypot(
+                        points[index].x - points[index - 1].x,
+                        points[index].y - points[index - 1].y
+                    ));
+                }
+                return { points, lengths, total: lengths.at(-1) || 0 };
+            };
+            const terminalNdTravelPathPoint = (path, distance) => {
+                const target = Math.max(0, Math.min(path.total, distance));
+                if (target <= 0 || path.points.length < 2) return path.points[0];
+                let low = 1;
+                let high = path.lengths.length - 1;
+                while (low < high) {
+                    const middle = (low + high) >> 1;
+                    if (path.lengths[middle] < target) low = middle + 1;
+                    else high = middle;
+                }
+                const previous = path.lengths[low - 1];
+                const segment = path.lengths[low] - previous;
+                const fraction = segment > 0 ? (target - previous) / segment : 0;
+                const from = path.points[low - 1];
+                const to = path.points[low];
+                return {
+                    x: from.x + (to.x - from.x) * fraction,
+                    y: from.y + (to.y - from.y) * fraction
+                };
+            };
+            const terminalNdTravelClosest = (path, point) => {
+                let closest = { distance: 0, separation: Infinity };
+                for (let index = 1; index < path.points.length; index++) {
+                    const from = path.points[index - 1];
+                    const to = path.points[index];
+                    const dx = to.x - from.x;
+                    const dy = to.y - from.y;
+                    const lengthSquared = dx * dx + dy * dy;
+                    if (lengthSquared <= .000001) continue;
+                    const fraction = Math.max(0, Math.min(1,
+                        ((point.x - from.x) * dx + (point.y - from.y) * dy) / lengthSquared));
+                    const x = from.x + dx * fraction;
+                    const y = from.y + dy * fraction;
+                    const separation = Math.hypot(point.x - x, point.y - y);
+                    if (separation < closest.separation) closest = {
+                        distance: path.lengths[index - 1] + Math.sqrt(lengthSquared) * fraction,
+                        separation
+                    };
+                }
+                return closest;
+            };
+            const terminalNdPointAtSignedDistance = (fullPath, signedDist, nextCourse = null, prevCourse = null) => {
+                if (!fullPath || !fullPath.points?.length) return { x: 0, y: 0 };
+                if (fullPath.points.length === 1) return fullPath.points[0];
+                if (signedDist < 0) {
+                    const p0 = fullPath.points[0];
+                    if (Number.isFinite(prevCourse)) {
+                        return {
+                            x: p0.x + Math.cos(prevCourse) * signedDist,
+                            y: p0.y + Math.sin(prevCourse) * signedDist
+                        };
+                    }
+                    let p1 = fullPath.points[1];
+                    for (let i = 1; i < fullPath.points.length; i++) {
+                        if (Math.hypot(fullPath.points[i].x - p0.x, fullPath.points[i].y - p0.y) > 0.001) {
+                            p1 = fullPath.points[i];
+                            break;
+                        }
+                    }
+                    const len = Math.hypot(p1.x - p0.x, p1.y - p0.y) || 1;
+                    const ux = (p1.x - p0.x) / len;
+                    const uy = (p1.y - p0.y) / len;
+                    return { x: p0.x + ux * signedDist, y: p0.y + uy * signedDist };
+                }
+                if (signedDist > fullPath.total) {
+                    const pn = fullPath.points[fullPath.points.length - 1];
+                    const extra = signedDist - fullPath.total;
+                    if (Number.isFinite(nextCourse)) {
+                        return {
+                            x: pn.x + Math.cos(nextCourse) * extra,
+                            y: pn.y + Math.sin(nextCourse) * extra
+                        };
+                    }
+                    let pm = fullPath.points[fullPath.points.length - 2];
+                    for (let i = fullPath.points.length - 2; i >= 0; i--) {
+                        if (Math.hypot(pn.x - fullPath.points[i].x, pn.y - fullPath.points[i].y) > 0.001) {
+                            pm = fullPath.points[i];
+                            break;
+                        }
+                    }
+                    const len = Math.hypot(pn.x - pm.x, pn.y - pm.y) || 1;
+                    const ux = (pn.x - pm.x) / len;
+                    const uy = (pn.y - pm.y) / len;
+                    return { x: pn.x + ux * extra, y: pn.y + uy * extra };
+                }
+                return terminalNdTravelPathPoint(fullPath, signedDist);
+            };
+            const terminalNdAdjacentCardLeg = (audio, direction) => {
+                const cards = [...document.querySelectorAll('.card:not([style*="display: none"])')]
+                    .filter(c => c.closest('.cardWrap')?.style.display !== 'none');
+                if (!cards.length) return null;
+                const currentCard = audio?.__virtualSong?.hostCard || audio?.closest('.card');
+                const idx = cards.indexOf(currentCard);
+                const targetCard = direction > 0
+                    ? (cards[idx + 1] || cards[0])
+                    : (cards[idx - 1] || cards[cards.length - 1]);
+                const targetCode = targetCard?.dataset.songUrl?.trim().toUpperCase();
+                const targetSong = targetCode ? terminalNdSongs.get(targetCode) : null;
+                if (!targetSong) return null;
+                const hasSec = !!targetSong.ndSections?.length;
+                return {
+                    type: 'song',
+                    songCode: targetCode,
+                    section: hasSec ? 1 : undefined,
+                    time: hasSec ? '01/001.01' : '',
+                    seconds: 0,
+                    advance: 'Y'
+                };
+            };
+            const terminalNdSoloDescriptor = audio => {
+                if (!terminalNdSoloStarted || window.__npTerminalLegsActive?.() || !audio || audio.ended) return null;
+                const memberCard = audio?.__virtualSong?.members[audio.__virtualIndex]?.card;
+                const code = (memberCard || audio?.closest('.card'))?.dataset.songUrl?.trim().toUpperCase();
+                const song = terminalNdSongs.get(code);
+                if (!song) return null;
+                const routing = window.__npPlaybackRoutingState?.() || { k: true, kr: false, krPermissive: false, isr: 'OFF', m: 'C' };
+                const rate = Math.max(0.05, Number(audio.playbackRate) || 1);
+                const nowTime = playbackTime(audio);
+                const fullDuration = playbackDuration(audio) || song.duration || 0;
+                if (!routing.k || song.virtualOriginKey || !song.ndSections?.length) {
+                    return {
+                        label: code,
+                        krHold: false,
+                        routeLegs: [],
+                        etaEntries: [[code, Math.max(0, fullDuration - nowTime) / rate]],
+                        journey: null
+                    };
+                }
+                let activeSec = 1;
+                for (let index = 1; index < song.ndSections.length; index++) {
+                    if (nowTime < song.ndSections[index].start) break;
+                    activeSec = index + 1;
+                }
+                const activeBounds = song.ndSections[activeSec - 1];
+                const label = `${code}/${activeSec}`;
+                const segStart = activeBounds.start;
+                const segEnd = Math.max(segStart + 0.01, activeBounds.end);
+                const segFraction = Math.max(0, Math.min(1, (nowTime - segStart) / (segEnd - segStart)));
+                const subDuration = Math.max(0.05, (segEnd - segStart) / rate);
+                const subRemaining = Math.max(0.01, (segEnd - nowTime) / rate);
+                const currentSubLeg = {
+                    type: 'song',
+                    songCode: code,
+                    section: activeSec,
+                    time: `${String(activeSec).padStart(2, '0')}/001.01`,
+                    seconds: 0,
+                    advance: 'Y'
+                };
+                if (routing.krPermissive) {
+                    return {
+                        label,
+                        krHold: true,
+                        routeLegs: [],
+                        etaEntries: [[label, Math.max(0, segEnd - nowTime) / rate]],
+                        journey: {
+                            current: currentSubLeg,
+                            next: null,
+                            following: null,
+                            afterFollowing: null,
+                            repeatPending: false,
+                            holdRepeat: false,
+                            lastRepeat: true,
+                            firstLeg: true,
+                            iteration: 0,
+                            completedLegs: 0,
+                            fraction: segFraction,
+                            subDuration,
+                            subRemaining
+                        }
+                    };
+                }
+                if (routing.isr === 'I' || routing.isr === 'S') {
+                    return {
+                        label,
+                        krHold: false,
+                        routeLegs: [],
+                        etaEntries: [[label, Math.max(0, segEnd - nowTime) / rate]],
+                        journey: null
+                    };
+                }
+                const remainingLegs = [];
+                for (let sec = activeSec; sec <= song.ndSections.length; sec++) {
+                    const secStr = String(sec).padStart(2, '0');
+                    remainingLegs.push({
+                        type: 'song',
+                        songCode: code,
+                        section: sec,
+                        time: `${secStr}/001.01`,
+                        seconds: 0,
+                        advance: 'Y'
+                    });
+                }
+                if (activeSec === song.ndSections.length) {
+                    if (routing.isr === 'OFF') {
+                        remainingLegs.push({
+                            type: 'song',
+                            songCode: code,
+                            section: 1,
+                            time: '01/001.01',
+                            seconds: 0,
+                            advance: 'Y'
+                        });
+                    } else if (routing.isr === 'R' && (routing.m === 'D' || routing.m === 'U')) {
+                        const adjLeg = terminalNdAdjacentCardLeg(audio, routing.m === 'D' ? 1 : -1);
+                        if (adjLeg) remainingLegs.push(adjLeg);
+                    }
+                }
+                const etaEntries = [];
+                if (remainingLegs.length === 1) {
+                    etaEntries.push([label, Math.max(0, segEnd - nowTime) / rate]);
+                } else {
+                    etaEntries.push([label, 0]);
+                    for (let sec = activeSec + 1; sec <= song.ndSections.length; sec++) {
+                        etaEntries.push([`${code}/${sec}`, Math.max(0, song.ndSections[sec - 1].start - nowTime) / rate]);
+                    }
+                    if (activeSec === song.ndSections.length && remainingLegs[1]) {
+                        etaEntries.push([terminalNdLegLabel(remainingLegs[1]), Math.max(0, segEnd - nowTime) / rate]);
+                    }
+                }
+                const journey = remainingLegs.length >= 2 ? {
+                    current: remainingLegs[0],
+                    next: remainingLegs[1],
+                    following: remainingLegs[1],
+                    afterFollowing: remainingLegs[2] || null,
+                    repeatPending: false,
+                    holdRepeat: false,
+                    lastRepeat: true,
+                    firstLeg: activeSec === 1,
+                    iteration: 0,
+                    completedLegs: activeSec - 1,
+                    fraction: segFraction,
+                    subDuration,
+                    subRemaining
+                } : null;
+                return {
+                    label,
+                    krHold: false,
+                    routeLegs: remainingLegs,
+                    etaEntries,
+                    journey
+                };
+            };
+            const terminalNdResolveJourney = (journey, audio) => {
+                if (!journey || !journey.current) {
+                    const solo = terminalNdSoloDescriptor(audio);
+                    return solo ? solo.journey : null;
+                }
+                const code = String(journey.current.songCode || '').trim().toUpperCase();
+                const song = terminalNdSongs.get(code);
+                if (!song || !song.ndSections?.length || journey.current.advance === 'Y') return journey;
+                const startSec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(journey.current)));
+                if (startSec >= song.ndSections.length) return journey;
+                const t = audio ? playbackTime(audio) : 0;
+                let activeSec = startSec;
+                for (let sec = startSec; sec <= song.ndSections.length; sec++) {
+                    const bounds = song.ndSections[sec - 1];
+                    if (t < bounds.end - 0.001 || sec === song.ndSections.length) {
+                        activeSec = sec;
+                        break;
+                    }
+                }
+                const activeBounds = song.ndSections[activeSec - 1];
+                const secOffset = activeSec === startSec ? Math.max(0, terminalNdLegSeconds(journey.current)) : 0;
+                const segStart = activeBounds.start + secOffset;
+                const segEnd = Math.max(segStart + 0.01, activeBounds.end);
+                const subFraction = Math.max(0, Math.min(1, (t - segStart) / (segEnd - segStart)));
+                const rate = Math.max(0.05, Number(audio?.playbackRate) || 1);
+                const subDuration = Math.max(0.05, (segEnd - segStart) / rate);
+                const subRemaining = Math.max(0.01, (segEnd - t) / rate);
+                const currentSubLeg = {
+                    ...journey.current,
+                    section: activeSec,
+                    seconds: secOffset,
+                    advance: 'Y'
+                };
+                const hasMoreSections = activeSec < song.ndSections.length;
+                const nextSubLeg = hasMoreSections
+                    ? { ...journey.current, section: activeSec + 1, time: `${String(activeSec + 1).padStart(2, '0')}/001.01`, seconds: 0, advance: 'Y' }
+                    : (journey.repeatPending
+                        ? { ...journey.current, section: startSec, seconds: Math.max(0, terminalNdLegSeconds(journey.current)), advance: 'Y' }
+                        : journey.next);
+                const afterNextSubLeg = hasMoreSections
+                    ? (activeSec + 2 <= song.ndSections.length
+                        ? { ...journey.current, section: activeSec + 2, time: `${String(activeSec + 2).padStart(2, '0')}/001.01`, seconds: 0, advance: 'Y' }
+                        : (journey.repeatPending
+                            ? { ...journey.current, section: startSec, seconds: Math.max(0, terminalNdLegSeconds(journey.current)), advance: 'Y' }
+                            : journey.following))
+                    : journey.afterFollowing;
+                return {
+                    ...journey,
+                    current: currentSubLeg,
+                    next: nextSubLeg,
+                    following: hasMoreSections ? nextSubLeg : journey.following,
+                    afterFollowing: afterNextSubLeg,
+                    repeatPending: hasMoreSections ? false : journey.repeatPending,
+                    fraction: subFraction,
+                    subDuration,
+                    subRemaining
+                };
+            };
+            const terminalNdAdvanceTravel = (travel, seconds) => {
+                const turnRate = Math.PI / 5;
+                const rollAccel = 2.6 * turnRate;
+                const angleDiff = (target, source) => Math.atan2(Math.sin(target - source), Math.cos(target - source));
+                const directedDiff = (target, source, dir) => {
+                    const raw = (target - source) % (2 * Math.PI);
+                    if (dir >= 0) return raw < 0 ? raw + 2 * Math.PI : raw;
+                    return raw > 0 ? raw - 2 * Math.PI : raw;
+                };
+                // Critically-damped / overdamped angular rate controller (zeta >= 1.05 -> zero heading oscillation / zero wiggle!)
+                const smoothTurnRate = (signedError, currentRate = 0) => {
+                    const kp = 1.18;
+                    const mag = Math.abs(signedError);
+                    const targetRate = (kp * signedError) / Math.sqrt(1 + (kp * kp * mag) / (1.8 * rollAccel));
+                    const damped = targetRate - .52 * currentRate;
+                    return Math.max(-turnRate, Math.min(turnRate, damped));
+                };
+                const steer = (desired, step) => {
+                    const current = Number(travel.turnRate) || 0;
+                    const limit = rollAccel * step;
+                    const next = current + Math.max(-limit, Math.min(limit, desired - current));
+                    travel.turnRate = Math.abs(next) < .0003 && Math.abs(desired) < .0003 ? 0 : next;
+                    const change = (current + travel.turnRate) * step / 2;
+                    travel.heading += change;
+                    return change;
+                };
+                const accelerate = (desiredSpeed, step) => {
+                    const current = Number.isFinite(Number(travel.moveSpeed)) ? Number(travel.moveSpeed) : (Number(travel.speed) || 1);
+                    const accelRate = desiredSpeed < current
+                        ? Math.max(14, current * 3.8)
+                        : Math.max(4.5, current * 1.35 + 2.2);
+                    const maxDelta = accelRate * step;
+                    const next = current + Math.max(-maxDelta, Math.min(maxDelta, desiredSpeed - current));
+                    travel.moveSpeed = Math.max(0.005, next);
+                    return travel.moveSpeed;
+                };
+                let remaining = Math.max(0, seconds);
+                while (remaining > .000001) {
+                    const step = Math.min(.04, remaining);
+                    const routeSpeed = Math.max(0.015, Number(travel.speed) || 1);
+                    const fullPath = travel.fullPath || travel.path;
+                    const targetS = Math.min(
+                        fullPath.total,
+                        (Number(travel.targetS) || 0) + (travel.elapsed + step) * routeSpeed
+                    );
+                    const routePoint = fullPath
+                        ? terminalNdPointAtSignedDistance(fullPath, targetS)
+                        : (travel.routePoint || travel.goal);
+                    const aheadSample = fullPath
+                        ? terminalNdPointAtSignedDistance(fullPath, targetS + 5)
+                        : routePoint;
+                    const routeCourse = Math.hypot(aheadSample.x - routePoint.x, aheadSample.y - routePoint.y) > 0.001
+                        ? Math.atan2(aheadSample.y - routePoint.y, aheadSample.x - routePoint.x)
+                        : (travel.routeCourse ?? travel.heading);
+                    const courseX = Math.cos(routeCourse);
+                    const courseY = Math.sin(routeCourse);
+                    const relX = travel.x - routePoint.x;
+                    const relY = travel.y - routePoint.y;
+                    const alongError = relX * courseX + relY * courseY;
+                    const crossSigned = -relX * courseY + relY * courseX;
+                    const crossAbs = Math.abs(crossSigned);
+                    const distToDot = Math.hypot(relX, relY);
+                    const courseError = angleDiff(routeCourse, travel.heading);
+
+                    if (travel.reversal) {
+                        const reversal = travel.reversal;
+                        const turnDir = reversal.dir || (reversal.dir = crossSigned >= 0 ? 1 : -1);
+                        const reverseCourse = routeCourse + Math.PI;
+                        const revTurnSpeed = Math.min(6.0, Math.max(routeSpeed * 1.35, 1.6 + 0.28 * distToDot));
+                        if (reversal.phase === 'outbound') {
+                            const dirRemaining = directedDiff(reverseCourse, travel.heading, turnDir);
+                            const signedErr = angleDiff(reverseCourse, travel.heading);
+                            const errToUse = reversal.turned < Math.PI * .55
+                                ? dirRemaining
+                                : (Math.abs(dirRemaining) < Math.PI * 1.25 ? dirRemaining : signedErr);
+                            steer(smoothTurnRate(errToUse, travel.turnRate || 0), step);
+                            const moveSpeed = accelerate(revTurnSpeed, step);
+                            travel.x += Math.cos(travel.heading) * moveSpeed * step;
+                            travel.y += Math.sin(travel.heading) * moveSpeed * step;
+                            reversal.turned += Math.abs(travel.turnRate || 0) * step;
+                            if (reversal.turned >= Math.PI * .72 && Math.abs(signedErr) <= .12) {
+                                reversal.phase = 'parallel';
+                            }
+                            travel.elapsed += step;
+                            remaining -= step;
+                            continue;
+                        }
+                        if (reversal.phase === 'parallel') {
+                            const reverseError = angleDiff(reverseCourse, travel.heading);
+                            steer(smoothTurnRate(reverseError, travel.turnRate || 0), step);
+                            const leadForReturnTurn = Math.max(4, routeSpeed * (Math.PI / turnRate));
+                            const distToTurnIn = alongError + leadForReturnTurn;
+                            const targetParallelSpeed = distToTurnIn > 0
+                                ? Math.min(revTurnSpeed * 1.7, revTurnSpeed + Math.sqrt(2 * 5 * distToTurnIn) * .5)
+                                : revTurnSpeed;
+                            const moveSpeed = accelerate(targetParallelSpeed, step);
+                            travel.x += Math.cos(travel.heading) * moveSpeed * step;
+                            travel.y += Math.sin(travel.heading) * moveSpeed * step;
+                            if (distToTurnIn <= 0) {
+                                reversal.phase = 'return';
+                                reversal.turned = 0;
+                                reversal.returnSpeed = Math.max(
+                                    routeSpeed * 1.05,
+                                    Math.min(revTurnSpeed, Math.max(1.1, crossAbs * turnRate / 2))
+                                );
+                            }
+                            travel.elapsed += step;
+                            remaining -= step;
+                            continue;
+                        }
+                        if (reversal.phase === 'return') {
+                            const sternS = targetS - Math.min(8, crossAbs * 0.45);
+                            const aimPoint = terminalNdPointAtSignedDistance(fullPath, sternS + 6);
+                            const aimCourse = Math.atan2(aimPoint.y - travel.y, aimPoint.x - travel.x);
+                            const dirRemaining = directedDiff(aimCourse, travel.heading, turnDir);
+                            const signedErr = angleDiff(aimCourse, travel.heading);
+                            const errToUse = reversal.turned < Math.PI * .5
+                                ? dirRemaining
+                                : (Math.abs(dirRemaining) < Math.PI * 1.25 ? dirRemaining : signedErr);
+                            steer(smoothTurnRate(errToUse, travel.turnRate || 0), step);
+                            const moveSpeed = accelerate(reversal.returnSpeed || revTurnSpeed, step);
+                            travel.x += Math.cos(travel.heading) * moveSpeed * step;
+                            travel.y += Math.sin(travel.heading) * moveSpeed * step;
+                            reversal.turned += Math.abs(travel.turnRate || 0) * step;
+                            if (reversal.turned >= Math.PI * .65 && Math.abs(signedErr) <= .15) {
+                                travel.reversal = null;
+                            }
+                            travel.elapsed += step;
+                            remaining -= step;
+                            continue;
+                        }
+                    }
+
+                    if (travel.mode === 'plan') {
+                        // Next-leg deceleration foresight
+                        let foresightSpeedCeiling = Infinity;
+                        const remLegDist = Math.max(0, fullPath.total - targetS);
+                        if (Number.isFinite(travel.nextLegSpeed) && travel.nextLegSpeed > 0) {
+                            const cornerTurn = Number.isFinite(travel.nextLegCourse)
+                                ? Math.abs(angleDiff(travel.nextLegCourse, routeCourse))
+                                : 0;
+                            const cornerFactor = 1 / (1 + 1.15 * Math.abs(Math.sin(cornerTurn / 2)));
+                            const entrySpeed = Math.min(travel.nextLegSpeed, Math.max(0.12, routeSpeed * cornerFactor));
+                            if (entrySpeed < routeSpeed) {
+                                const decel = Math.max(4, routeSpeed * 1.6);
+                                const brakeDist = Math.max(6, (routeSpeed * routeSpeed - entrySpeed * entrySpeed) / (2 * decel) + entrySpeed * 1.2);
+                                if (remLegDist <= brakeDist) {
+                                    const blend = Math.max(0, Math.min(1, remLegDist / brakeDist));
+                                    foresightSpeedCeiling = entrySpeed + (routeSpeed - entrySpeed) * blend;
+                                }
+                            }
+                        }
+
+                        // Project aircraft onto fullPath to decouple lateral path-following from longitudinal speed control
+                        const nearestOnFull = terminalNdTravelClosest(fullPath, { x: travel.x, y: travel.y });
+                        const aircraftS = nearestOnFull.distance;
+                        const lateralSeparation = nearestOnFull.separation;
+
+                        // Forward path lookahead (ALWAYS ahead of aircraftS -> guarantees zero S-wave wiggle!)
+                        const forwardLookahead = Math.max(14, Math.min(28, 14 + (travel.moveSpeed || routeSpeed) * 1.8 + lateralSeparation * 0.75));
+                        const forwardPathS = aircraftS + forwardLookahead;
+
+                        // Off-track stern entry point (behind targetS -> used ONLY when outside the corridor or misaligned)
+                        const estTurnSpeed = Math.min(4.8, Math.max(routeSpeed * 1.15, 0.9 + 0.22 * distToDot));
+                        const estTurnRadius = estTurnSpeed / turnRate;
+                        const alignmentPenalty = 1 - Math.cos(courseError);
+                        const rolloutAdvance = estTurnRadius * (Math.abs(Math.sin(courseError)) + 0.85 * alignmentPenalty);
+                        const sternOffset = Math.min(28, rolloutAdvance + crossAbs * 0.65 + (alongError > 0 ? alongError * 0.6 + 4 : 2.0));
+                        const sternS = targetS - sternOffset;
+
+                        // Smooth blend weight: 0 inside the capture corridor (pure forward path tracking, zero wiggle!),
+                        // 1 when off-track (crossAbs > 14) or pointing away from routeCourse (|courseError| > 55 deg)
+                        const crossBlend = Math.max(0, Math.min(1, (lateralSeparation - 4.5) / 10.0));
+                        const angleBlend = Math.max(0, Math.min(1, (Math.abs(courseError) - 0.45) / 0.75));
+                        const sternWeight = Math.max(crossBlend, angleBlend);
+
+                        const blendedAimS = sternWeight * sternS + (1 - sternWeight) * forwardPathS;
+                        // When largely aligned with the track, never aim behind aircraftS + 10 px!
+                        const safeAimS = sternWeight < 0.25
+                            ? Math.max(aircraftS + 11, blendedAimS)
+                            : blendedAimS;
+                        const aimPoint = terminalNdPointAtSignedDistance(fullPath, safeAimS, travel.nextLegCourse);
+
+                        const dxAim = aimPoint.x - travel.x;
+                        const dyAim = aimPoint.y - travel.y;
+                        const desiredCourse = Math.hypot(dxAim, dyAim) > 0.001
+                            ? Math.atan2(dyAim, dxAim)
+                            : routeCourse;
+                        const headingError = angleDiff(desiredCourse, travel.heading);
+                        steer(smoothTurnRate(headingError, travel.turnRate || 0), step);
+
+                        // Longitudinal Speed Law:
+                        // - If ahead of the green dot (alongError > 0) and in corridor: brake smoothly in-lane!
+                        // - If behind or off-track: phase-plane closing speed v = routeSpeed + sqrt(2*a*d)
+                        let targetSpeed = routeSpeed;
+                        if (alongError > 0.05 && sternWeight < 0.5) {
+                            const brakeFactor = Math.max(0.03, 1 / (1 + 1.25 * alongError));
+                            targetSpeed = routeSpeed * brakeFactor;
+                        } else {
+                            const alongBehind = Math.max(0, -alongError);
+                            const turnAlignment = Math.max(0, Math.cos(headingError));
+                            const phasePlaneClosingSpeed = routeSpeed + Math.min(6.5, Math.sqrt(2 * 1.45 * alongBehind) + lateralSeparation * 0.15);
+                            const compactTurnSpeed = Math.min(
+                                estTurnSpeed,
+                                routeSpeed + Math.max(0.65, Math.min(3.6, 0.24 * distToDot))
+                            );
+                            targetSpeed = compactTurnSpeed * (1 - turnAlignment) + phasePlaneClosingSpeed * turnAlignment;
+                        }
+                        targetSpeed = Math.min(foresightSpeedCeiling, targetSpeed);
+                        const moveSpeed = accelerate(targetSpeed, step);
+                        travel.x += Math.cos(travel.heading) * moveSpeed * step;
+                        travel.y += Math.sin(travel.heading) * moveSpeed * step;
+                        travel.elapsed += step;
+                        remaining -= step;
+                        continue;
+                    }
+                    const goalDistance = (travel.elapsed + step + 5) * travel.speed;
+                    const goal = terminalNdTravelPathPoint(travel.path, goalDistance);
+                    const dx = goal.x - travel.x;
+                    const dy = goal.y - travel.y;
+                    const distance = Math.hypot(dx, dy);
+                    const course = distance > .000001 ? Math.atan2(dy, dx) : travel.heading;
+                    const difference = angleDiff(course, travel.heading);
+                    steer(smoothTurnRate(difference, travel.turnRate || 0), step);
+                    const moveSpeed = accelerate(travel.speed, step);
+                    travel.x += Math.cos(travel.heading) * moveSpeed * step;
+                    travel.y += Math.sin(travel.heading) * moveSpeed * step;
+                    travel.elapsed += step;
+                    remaining -= step;
+                }
+            };
+            const renderTerminalNdTravel = () => {
+                if (!terminalNdTravel) {
+                    terminalNdTravelLine.setAttribute('d', '');
+                    terminalNdIntercept.setAttribute('visibility', 'hidden');
+                    return;
+                }
+                const future = [{ x: terminalNdTravel.x, y: terminalNdTravel.y }];
+                const range = terminalNdRanges[terminalNdRangeIndex];
+                const bendPerPixel = (terminalNdTravel.turnRate || 0) * .042;
+                let x = terminalNdTravel.x;
+                let y = terminalNdTravel.y;
+                for (let pixel = 1; pixel <= 37; pixel++) {
+                    const angle = terminalNdTravel.heading + bendPerPixel * (pixel - .5);
+                    x += Math.cos(angle) * range;
+                    y += Math.sin(angle) * range;
+                    future.push({ x, y });
+                }
+                terminalNdTravelLine.setAttribute('d', terminalNdPathText(future));
+                terminalNdTravelLine.setAttribute('stroke', '#fff');
+                terminalNdTravelLine.setAttribute('stroke-width',
+                    String(1.5 * range));
+                const point = terminalNdTravel.mode === 'plan' && terminalNdTravel.catchingUp && window.__npTerminalLegsActive?.() ?
+                    terminalNdTravel.routePoint : null;
+                terminalNdIntercept.setAttribute('visibility', point ? 'visible' : 'hidden');
+                if (point) {
+                    terminalNdIntercept.setAttribute('cx', String(800 + point.x));
+                    terminalNdIntercept.setAttribute('cy', String(475 + point.y));
+                    terminalNdIntercept.setAttribute('r', String(5 * range));
+                    terminalNdIntercept.setAttribute('stroke-width', String(1.5 * range));
+                }
+            };
             const terminalNdDraftRoute = active => {
                 let draftRoute = legsDraft;
                 if (active.length && !draftOriginActive && legsActivatedPlanText && JSON.stringify(legsDraft) === legsActivatedPlanText) {
@@ -14059,9 +15059,43 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             const renderTerminalNdEta = () => {
                 const values = new Map();
+                const rate = Math.max(.05, Number(terminalNdActiveAudio?.playbackRate) || 1);
+                const nowTime = terminalNdActiveAudio ? playbackTime(terminalNdActiveAudio) : 0;
                 for (const row of window.__npTerminalLegsEtaRows?.() || []) {
+                    const code = String(row.leg?.songCode || '').trim().toUpperCase();
+                    const song = terminalNdSongs.get(code);
+                    if (song?.ndSections?.length && row.leg?.advance !== 'Y') {
+                        const startSec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(row.leg)));
+                        let cumulative = Number(row.seconds) || 0;
+                        for (let sec = startSec; sec <= song.ndSections.length; sec++) {
+                            const secLabel = `${code}/${sec}`;
+                            const bounds = song.ndSections[sec - 1];
+                            if (row.seconds === 0 && terminalNdActiveAudio) {
+                                if (nowTime < bounds.start) {
+                                    if (!values.has(secLabel)) values.set(secLabel, (bounds.start - nowTime) / rate);
+                                } else if (nowTime < bounds.end) {
+                                    const rem = sec === song.ndSections.length ? Math.max(0, bounds.end - nowTime) / rate : 0;
+                                    if (!values.has(secLabel)) values.set(secLabel, rem);
+                                }
+                            } else {
+                                if (!values.has(secLabel)) values.set(secLabel, cumulative);
+                                const offset = sec === startSec ? Math.max(0, terminalNdLegSeconds(row.leg)) : 0;
+                                cumulative += Math.max(0, (bounds.end - (bounds.start + offset)) / rate);
+                            }
+                        }
+                        continue;
+                    }
                     const label = terminalNdLegLabel(row.leg);
                     if (label && !values.has(label)) values.set(label, row.seconds);
+                }
+                if (terminalNdSoloStarted && !window.__npTerminalLegsActive?.() &&
+                    terminalNdActiveAudio && !terminalNdActiveAudio.ended) {
+                    const solo = terminalNdSoloDescriptor(terminalNdActiveAudio);
+                    if (solo?.etaEntries) {
+                        for (const [lbl, secs] of solo.etaEntries) {
+                            values.set(lbl, secs);
+                        }
+                    }
                 }
                 terminalNdElements.forEach((node, label) => {
                     const eta = node.querySelector('.mTerminalNdEta');
@@ -14076,7 +15110,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 terminalNdRouteActive.replaceChildren();
                 const draftLabels = new Set();
                 const activeLabels = new Set();
-                const addRoute = (plan, group, labels, color, dashed) => {
+                const addRoute = (rawPlan, group, labels, color, dashed, allowEndHold = true) => {
+                    const plan = terminalNdExpandPlan(rawPlan);
                     const segments = [[]];
                     plan.forEach(leg => {
                         if (!leg || leg.type === 'then') {
@@ -14099,7 +15134,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         segment.forEach((entry, index) => {
                             if (!entry.star) return;
                             const next = segment[index + 1];
-                            if (entry.hold > 0) pathText += terminalNdPathText(terminalNdHoldPoints(entry.star, next?.point));
+                            if (index === 0 && entry.point && Math.hypot(entry.point.x - entry.star.x, entry.point.y - entry.star.y) > .01) {
+                                pathText += terminalNdPathText([entry.star, entry.point]);
+                            }
+                            if (!next) {
+                                if (allowEndHold) pathText += terminalNdPathText(terminalNdSoloHoldPoints(entry.star));
+                            } else if (entry.hold > 0) {
+                                pathText += terminalNdPathText(terminalNdHoldPoints(entry.star, next.point));
+                            }
                             if (next?.star && entry.point && next.point) {
                                 pathText += terminalNdPathText(terminalNdSegmentPoints(entry.point, next.point, next.star));
                             }
@@ -14113,12 +15155,42 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     if (dashed) path.setAttribute('stroke-dasharray', `${6 * terminalNdRanges[terminalNdRangeIndex]} ${4 * terminalNdRanges[terminalNdRangeIndex]}`);
                     group.append(path);
                 };
-                const active = window.__npTerminalLegsActive?.() ? window.__npTerminalActiveLegs?.() || [] : [];
+                const rawActive = window.__npTerminalLegsActive?.() ? window.__npTerminalActiveLegs?.() || [] : [];
+                const rawJourney = window.__npTerminalLegsJourney?.();
+                const journey = terminalNdResolveJourney(rawJourney, terminalNdActiveAudio);
+                const active = rawActive.map((leg, idx) => {
+                    if (idx === 0 && leg?.type === 'song' && leg.advance !== 'Y' && journey?.current?.type === 'song' &&
+                        String(leg.songCode || '').trim().toUpperCase() === String(journey.current.songCode || '').trim().toUpperCase() &&
+                        Number(journey.current.section) > terminalNdLegSectionNumber(leg)) {
+                        return { ...leg, section: journey.current.section, seconds: journey.current.seconds || 0 };
+                    }
+                    return leg;
+                });
                 const draftRoute = terminalNdDraftRoute(active);
-                addRoute(draftRoute, terminalNdRouteDraft, draftLabels, '#fff', true);
-                addRoute(active, terminalNdRouteActive, activeLabels, '#d665ff', false);
-                const journey = window.__npTerminalLegsJourney?.();
+                addRoute(draftRoute, terminalNdRouteDraft, draftLabels, '#fff', true, true);
+                addRoute(active, terminalNdRouteActive, activeLabels, '#d665ff', false, true);
                 const highlighted = new Set();
+                if (!window.__npTerminalLegsActive?.()) {
+                    const solo = terminalNdSoloDescriptor(terminalNdActiveAudio);
+                    if (solo?.label) terminalNdActiveLabel = solo.label;
+                    if (solo?.krHold) {
+                        const star = terminalNdPoints.get(solo.label);
+                        if (star) {
+                            const path = document.createElementNS(terminalNdSvgNamespace, 'path');
+                            path.setAttribute('d', terminalNdPathText(terminalNdSoloHoldPoints(star)));
+                            path.setAttribute('stroke', '#d665ff');
+                            path.setAttribute('stroke-width', String(2 * terminalNdRanges[terminalNdRangeIndex]));
+                            terminalNdRouteActive.append(path);
+                            activeLabels.add(solo.label);
+                            highlighted.add(solo.label);
+                        }
+                    } else if (solo?.routeLegs?.length >= 2) {
+                        addRoute(solo.routeLegs, terminalNdRouteActive, activeLabels, '#d665ff', false, false);
+                    } else if (solo?.label) {
+                        activeLabels.add(solo.label);
+                        highlighted.add(solo.label);
+                    }
+                }
                 if (journey) {
                     highlighted.add(terminalNdLegLabel(journey.current));
                     highlighted.add(terminalNdLegLabel(journey.following));
@@ -14134,6 +15206,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             let terminalNdActiveAudio = null;
             let terminalNdActiveLabel = '';
+            let terminalNdSoloStarted = false;
+            let terminalNdTravel = null;
             const terminalNdRanges = [1, 5, 10, 20, 50];
             let terminalNdRangeIndex = 0;
             let terminalNdStepIndex = -1;
@@ -14143,11 +15217,63 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let terminalNdDataOn = true;
             let terminalNdRotateOn = false;
             const terminalNdCompass = document.querySelector('#mTerminalNd .mTerminalNdCompass');
+            const terminalNdDirections = [
+                [terminalNdCompass.querySelector('.mTerminalNdDirectionUp'), 0, -1],
+                [terminalNdCompass.querySelector('.mTerminalNdDirectionDown'), 0, 1],
+                [terminalNdCompass.querySelector('.mTerminalNdDirectionLeft'), -1, 0],
+                [terminalNdCompass.querySelector('.mTerminalNdDirectionRight'), 1, 0]
+            ];
             const terminalNdInnerRangeLabel = document.querySelector('[data-nd-range-label="inner"]');
             const terminalNdOuterRangeLabel = document.querySelector('[data-nd-range-label="outer"]');
+            let terminalNdCameraPoint = { x: 0, y: 0 };
+            let terminalNdCameraScale = 1;
+            let terminalNdCameraRotation = 0;
+            let terminalNdCameraTargetRotation = 0;
+            let terminalNdCameraFrame = 0;
+            let terminalNdCameraLastTimestamp = 0;
+            const terminalNdRotationDelta = angle => ((angle + 180) % 360 + 360) % 360 - 180;
+            const positionTerminalNdDirections = () => {
+                const width = terminalNdDisplay.clientWidth;
+                const height = terminalNdDisplay.clientHeight;
+                if (!(width > 0 && height > 0)) return;
+                const angle = terminalNdCameraRotation * Math.PI / 180;
+                const cosine = Math.cos(angle);
+                const sine = Math.sin(angle);
+                const halfWidth = Math.max(0, width / 2 - 12);
+                const halfHeight = Math.max(0, height / 2 - 12);
+                terminalNdDirections.forEach(([element, x, y]) => {
+                    const rotatedX = x * cosine - y * sine;
+                    const rotatedY = x * sine + y * cosine;
+                    const distance = Math.min(
+                        Math.abs(rotatedX) > .000001 ? halfWidth / Math.abs(rotatedX) : Infinity,
+                        Math.abs(rotatedY) > .000001 ? halfHeight / Math.abs(rotatedY) : Infinity
+                    );
+                    element.style.left = `${width / 2 + rotatedX * distance}px`;
+                    element.style.top = `${height / 2 + rotatedY * distance}px`;
+                });
+            };
+            new ResizeObserver(positionTerminalNdDirections).observe(terminalNdDisplay);
+            const applyTerminalNdCameraTransform = () => {
+                terminalNd.style.setProperty('--nd-range', String(1 / terminalNdCameraScale));
+                terminalNd.style.setProperty('--nd-label-rotation', `${-terminalNdCameraRotation}deg`);
+                terminalNd.style.transform = `translate(-50%, -50%) rotate(${terminalNdCameraRotation}deg) translate(${-terminalNdCameraPoint.x * terminalNdCameraScale}px, ${-terminalNdCameraPoint.y * terminalNdCameraScale}px) scale(${terminalNdCameraScale})`;
+                positionTerminalNdDirections();
+            };
+            const animateTerminalNdCamera = timestamp => {
+                terminalNdCameraFrame = 0;
+                const elapsed = terminalNdCameraLastTimestamp ? Math.min(64, timestamp - terminalNdCameraLastTimestamp) : 16;
+                terminalNdCameraLastTimestamp = timestamp;
+                const difference = terminalNdRotationDelta(terminalNdCameraTargetRotation - terminalNdCameraRotation);
+                if (Math.abs(difference) < .08) terminalNdCameraRotation = terminalNdCameraTargetRotation;
+                else terminalNdCameraRotation += difference * (1 - Math.exp(-elapsed / 220));
+                applyTerminalNdCameraTransform();
+                if (Math.abs(terminalNdRotationDelta(terminalNdCameraTargetRotation - terminalNdCameraRotation)) >= .08) {
+                    terminalNdCameraFrame = requestAnimationFrame(animateTerminalNdCamera);
+                }
+            };
             const terminalNdStepTargets = () => {
                 const active = window.__npTerminalLegsActive?.() ? window.__npTerminalActiveLegs?.() || [] : [];
-                return [...active, ...terminalNdDraftRoute(active)]
+                return terminalNdExpandPlan([...active, ...terminalNdDraftRoute(active)])
                     .filter(leg => leg?.type === 'song')
                     .map(terminalNdLegPoint)
                     .filter(Boolean);
@@ -14158,15 +15284,19 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const point = (selectedLeg && legHasData(selectedLeg) ? terminalNdLegPoint(selectedLeg) : null) || stepPoint ||
                     terminalNdCurrentPoint || { x: 0, y: 0 };
                 const range = terminalNdRanges[terminalNdRangeIndex];
-                const scale = 1 / range;
+                terminalNdCameraPoint = point;
+                terminalNdCameraScale = 1 / range;
                 terminalNdInnerRangeLabel.textContent = `${range / 2}X`;
                 terminalNdOuterRangeLabel.textContent = `${range}X`;
                 const rotation = terminalNdRotateOn && Number.isFinite(terminalNdHeading) ?
                     -90 - terminalNdHeading * 180 / Math.PI : 0;
-                terminalNd.style.setProperty('--nd-range', String(range));
-                terminalNd.style.setProperty('--nd-label-rotation', `${-rotation}deg`);
-                terminalNd.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) translate(${-point.x * scale}px, ${-point.y * scale}px) scale(${scale})`;
-                terminalNdCompass.style.transform = `rotate(${rotation}deg)`;
+                terminalNdCameraTargetRotation = terminalNdRotationDelta(rotation);
+                const difference = terminalNdRotationDelta(terminalNdCameraTargetRotation - terminalNdCameraRotation);
+                if (Math.abs(difference) < .08 && !terminalNdCameraFrame) terminalNdCameraRotation = terminalNdCameraTargetRotation;
+                applyTerminalNdCameraTransform();
+                if (Math.abs(difference) >= .08 && !terminalNdCameraFrame) {
+                    terminalNdCameraFrame = requestAnimationFrame(animateTerminalNdCamera);
+                }
             };
             const terminalNdPathHeading = (points, fraction) => {
                 const before = terminalNdPointOnPath(points, Math.max(0, fraction - .002));
@@ -14178,69 +15308,233 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const setTerminalNdHeadPoint = (point, heading = null) => {
                 terminalNdCurrentPoint = point;
                 if (heading !== null) terminalNdHeading = heading;
-                terminalNdHead.style.left = `calc(50% + ${point.x}px)`;
-                terminalNdHead.style.top = `calc(50% + ${point.y}px)`;
+                terminalNdHead.style.left = '50%';
+                terminalNdHead.style.top = '50%';
+                terminalNdHead.style.transform = `translate3d(${point.x}px, ${point.y}px, 0) scale(var(--nd-range)) translate(-50%, -50%)`;
                 terminalNdHead.hidden = false;
                 renderTerminalNdCamera();
             };
+            const terminalNdTravelHeading = (points, fallback = 0) => {
+                for (let index = 1; index < points.length; index++) {
+                    const dx = points[index].x - points[0].x;
+                    const dy = points[index].y - points[0].y;
+                    if (Math.hypot(dx, dy) > .000001) return Math.atan2(dy, dx);
+                }
+                return fallback;
+            };
+            const terminalNdPlanTravelPoints = (start, journey) => {
+                const star = terminalNdLegPoint(journey.current);
+                if (!star) return [start];
+                if (!journey.following) return [start, ...terminalNdSoloHoldPoints(star).slice(1)];
+                if (journey.repeatPending) {
+                    const followingStar = terminalNdLegPoint(journey.following);
+                    const followingEntry = terminalNdEntryPoint(journey.following, journey.afterFollowing,
+                        !!journey.afterFollowing) || followingStar;
+                    return [start, ...terminalNdHoldPoints(star, followingEntry)];
+                }
+                const nextStar = journey.next ? terminalNdLegPoint(journey.next) : null;
+                const nextEntry = terminalNdEntryPoint(journey.next, journey.afterFollowing,
+                    !!journey.afterFollowing);
+                return nextStar && nextEntry ? terminalNdSegmentPoints(start, nextEntry, nextStar) : [start, star];
+            };
+            let terminalNdCachedPlanKey = '';
+            let terminalNdCachedPlanPath = null;
+            const terminalNdLegDurationEstimate = leg => {
+                if (!leg || leg.type !== 'song') return null;
+                const code = String(leg.songCode || '').trim().toUpperCase();
+                const song = terminalNdSongs.get(code);
+                if (!song || !(song.duration > 0)) return null;
+                if (song.ndSections?.length) {
+                    const sec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(leg)));
+                    const bounds = song.ndSections[sec - 1];
+                    if (bounds) {
+                        const offset = Math.max(0, terminalNdLegSeconds(leg));
+                        const end = leg.advance === 'Y' ? bounds.end : song.duration;
+                        return Math.max(1, end - (bounds.start + offset));
+                    }
+                }
+                return Math.max(1, song.duration - Math.max(0, terminalNdLegSeconds(leg)));
+            };
+            const terminalNdPlanPosition = (journey, key = '') => {
+                if (!key || key !== terminalNdCachedPlanKey || !terminalNdCachedPlanPath) {
+                    const star = terminalNdLegPoint(journey.current);
+                    const origin = (journey.holdRepeat ? star : terminalNdEntryPoint(journey.current, journey.following,
+                        !!journey.following)) || star;
+                    terminalNdCachedPlanKey = key;
+                    terminalNdCachedPlanPath = terminalNdTravelMetrics(terminalNdPlanTravelPoints(origin, journey));
+                }
+                const path = terminalNdCachedPlanPath;
+                const fraction = Math.max(0, Math.min(1, Number(journey.fraction) || 0));
+                const distance = path.total * fraction;
+                const point = terminalNdTravelPathPoint(path, distance);
+                let next = 1;
+                while (next < path.lengths.length && path.lengths[next] <= distance) next++;
+                return {
+                    point,
+                    tail: [point, ...path.points.slice(next)],
+                    fullPath: path,
+                    targetDistance: distance,
+                    fullTotal: path.total
+                };
+            };
+            const terminalNdMoveTravel = (travel, timestamp, moving) => {
+                const seconds = Math.min(.08, Math.max(0, (timestamp - travel.lastTimestamp) / 1000));
+                travel.lastTimestamp = timestamp;
+                if (moving) terminalNdAdvanceTravel(travel, seconds);
+                setTerminalNdHeadPoint({ x: travel.x, y: travel.y }, travel.heading);
+                renderTerminalNdTravel();
+            };
             const moveTerminalNdHead = audio => {
-                const journey = window.__npTerminalLegsJourney?.();
+                const rawJourney = window.__npTerminalLegsJourney?.();
+                const solo = !rawJourney ? terminalNdSoloDescriptor(audio) : null;
+                if (solo?.label && solo.label !== terminalNdActiveLabel) {
+                    terminalNdActiveLabel = solo.label;
+                    renderTerminalNdRoutes();
+                }
+                const journey = rawJourney ? terminalNdResolveJourney(rawJourney, audio) : (solo?.journey || null);
                 if (journey) {
                     const star = terminalNdLegPoint(journey.current);
                     if (star) {
-                        if (journey.holdRepeat) {
-                            const followingStar = journey.following ? terminalNdLegPoint(journey.following) : null;
-                            const followingEntry = terminalNdEntryPoint(journey.following, journey.afterFollowing,
-                                !!journey.afterFollowing);
-                            const points = terminalNdHoldPoints(star, followingStar);
-                            if (journey.lastRepeat && followingEntry && followingStar) {
-                                points.push(...terminalNdSegmentPoints(star, followingEntry, followingStar).slice(1));
+                        const key = JSON.stringify([
+                            journey.current, journey.next, journey.following, journey.afterFollowing,
+                            journey.iteration, journey.completedLegs, journey.lastRepeat
+                        ]);
+                        const timestamp = performance.now();
+                        const playbackClock = playbackTime(audio);
+                        if (terminalNdTravel?.mode === 'plan' && terminalNdTravel.key === key &&
+                            playbackClock + .12 < terminalNdTravel.playbackClock) terminalNdTravel.key = '';
+                        const position = terminalNdPlanPosition(journey, key);
+                        const path = terminalNdTravelMetrics(position.tail);
+                        const remaining = Number.isFinite(journey.subRemaining)
+                            ? journey.subRemaining
+                            : window.__npTerminalLegsProgress?.().currentRemaining;
+                        const speed = Number.isFinite(journey.subDuration)
+                            ? position.fullTotal / Math.max(0.25, journey.subDuration)
+                            : path.total / Math.max(0.25, Number(remaining) || 1);
+                        let nextLegSpeed = null;
+                        let nextLegCourse = null;
+                        if (journey.next) {
+                            const nextStar = terminalNdLegPoint(journey.next);
+                            const currentEnd = position.fullPath.points.at(-1) || star;
+                            if (nextStar && currentEnd) {
+                                const dxNext = nextStar.x - currentEnd.x;
+                                const dyNext = nextStar.y - currentEnd.y;
+                                const distNext = Math.hypot(dxNext, dyNext);
+                                const durNext = terminalNdLegDurationEstimate(journey.next);
+                                if (distNext > 0.5 && durNext > 0) {
+                                    nextLegSpeed = distNext / durNext;
+                                    nextLegCourse = Math.atan2(dyNext, dxNext);
+                                }
                             }
-                            setTerminalNdHeadPoint(terminalNdPointOnPath(points, journey.fraction),
-                                terminalNdPathHeading(points, journey.fraction));
-                            return;
                         }
-                        if (journey.repeatPending) {
-                            setTerminalNdHeadPoint(star);
-                            return;
+                        const newTravel = !terminalNdTravel || terminalNdTravel.mode !== 'plan' || terminalNdTravel.key !== key;
+                        if (newTravel) {
+                            const previous = terminalNdTravel?.mode === 'plan' ? terminalNdTravel : null;
+                            const start = previous ? { x: previous.x, y: previous.y } : position.point;
+                            const heading = previous?.heading ?? terminalNdTravelHeading(position.tail);
+                            terminalNdTravel = {
+                                mode: 'plan', key, x: start.x, y: start.y,
+                                heading,
+                                path,
+                                fullPath: position.fullPath,
+                                targetS: position.targetDistance,
+                                speed,
+                                nextLegSpeed,
+                                nextLegCourse,
+                                turnRate: previous?.turnRate || 0,
+                                moveSpeed: previous?.moveSpeed ?? speed,
+                                goal: position.point,
+                                catchingUp: !!previous && Math.hypot(start.x - position.point.x, start.y - position.point.y) > 4.5,
+                                reversal: previous?.reversal || null,
+                                audio, iteration: journey.iteration,
+                                legLabel: terminalNdLegLabel(journey.current), playbackClock,
+                                elapsed: 0, lastTimestamp: timestamp
+                            };
+                            if (previous && previous.legLabel !== terminalNdTravel.legLabel) {
+                                renderTerminalNdRoutes();
+                            }
                         }
-                        const start = terminalNdEntryPoint(journey.current, journey.following,
-                            !!journey.following);
-                        const nextStar = journey.next ? terminalNdLegPoint(journey.next) : null;
-                        const next = terminalNdEntryPoint(journey.next, journey.afterFollowing,
-                            !!journey.afterFollowing);
-                        const points = next && nextStar ? terminalNdSegmentPoints(start, next, nextStar) : [star];
-                        setTerminalNdHeadPoint(terminalNdPointOnPath(points, journey.fraction),
-                            terminalNdPathHeading(points, journey.fraction));
+                        const range = terminalNdRanges[terminalNdRangeIndex];
+                        const aheadPoint = terminalNdPointAtSignedDistance(position.fullPath, position.targetDistance + 6);
+                        const course = Math.hypot(aheadPoint.x - position.point.x, aheadPoint.y - position.point.y) > .001 ?
+                            Math.atan2(aheadPoint.y - position.point.y, aheadPoint.x - position.point.x) :
+                            terminalNdTravelHeading(path.points, terminalNdTravel.heading);
+                        const courseX = Math.cos(course);
+                        const courseY = Math.sin(course);
+                        const offsetX = terminalNdTravel.x - position.point.x;
+                        const offsetY = terminalNdTravel.y - position.point.y;
+                        const alongError = offsetX * courseX + offsetY * courseY;
+                        const crossSigned = -offsetX * courseY + offsetY * courseX;
+                        const crossAbs = Math.abs(crossSigned);
+                        const gap = Math.hypot(offsetX, offsetY);
+                        const behindNose = offsetX * Math.cos(terminalNdTravel.heading) +
+                            offsetY * Math.sin(terminalNdTravel.heading);
+                        terminalNdTravel.path = path;
+                        terminalNdTravel.fullPath = position.fullPath;
+                        terminalNdTravel.targetS = position.targetDistance;
+                        terminalNdTravel.speed = speed;
+                        terminalNdTravel.nextLegSpeed = nextLegSpeed;
+                        terminalNdTravel.nextLegCourse = nextLegCourse;
+                        terminalNdTravel.range = range;
+                        terminalNdTravel.routePoint = position.point;
+                        terminalNdTravel.routeCourse = course;
+                        terminalNdTravel.goal = position.point;
+                        terminalNdTravel.elapsed = 0;
+                        const courseError = Math.atan2(Math.sin(course - terminalNdTravel.heading),
+                            Math.cos(course - terminalNdTravel.heading));
+                        if (terminalNdTravel.catchingUp) {
+                            if (gap <= 4 && Math.abs(courseError) <= Math.PI / 6) {
+                                terminalNdTravel.catchingUp = false;
+                                terminalNdTravel.reversal = null;
+                            }
+                        } else if (gap > 10) {
+                            terminalNdTravel.catchingUp = true;
+                        }
+                        // Only trigger a formal reversal on large manual timeline rewinds (> 28 px ahead),
+                        // never on normal in-lane tracking or slow tracks where in-lane braking / stern entry handles it!
+                        const canBrakeInLane = alongError > 0 && crossAbs <= 24 && Math.abs(courseError) <= Math.PI * 0.45 && alongError <= 28;
+                        if (newTravel && terminalNdTravel.catchingUp && !terminalNdTravel.reversal && !canBrakeInLane) {
+                            if (alongError > 28 && behindNose > 14) {
+                                terminalNdTravel.reversal = {
+                                    phase: 'outbound',
+                                    turned: 0,
+                                    dir: crossSigned >= 0 ? 1 : -1
+                                };
+                            }
+                        }
+                        if (terminalNdTravel.reversal) {
+                            const turnSpeed = Math.max(speed * 1.25, 4);
+                            const turnRadius = turnSpeed / (Math.PI / 5);
+                            const leadForReturnTurn = speed * 4 + turnRadius * .5;
+                            if (!terminalNdTravel.catchingUp || canBrakeInLane ||
+                                (terminalNdTravel.reversal.phase !== 'return' && alongError < -(leadForReturnTurn + 18))) {
+                                terminalNdTravel.reversal = null;
+                            }
+                        }
+                        terminalNdMoveTravel(terminalNdTravel, timestamp, !!audio && !audio.paused);
+                        terminalNdTravel.playbackClock = playbackClock;
                         return;
                     }
                 }
-                const memberCard = audio?.__virtualSong?.members[audio.__virtualIndex]?.card;
-                const code = (memberCard || audio?.closest('.card'))?.dataset.songUrl?.trim().toUpperCase();
-                const song = terminalNdSongs.get(code);
-                if (!song) return;
-                let label = code;
-                if (!song.virtualOriginKey && song.ndSections?.length) {
-                    let section = 1;
-                    for (let index = 1; index < song.ndSections.length; index++) {
-                        if (audio.currentTime < song.ndSections[index].start) break;
-                        section = index + 1;
-                    }
-                    label = `${code}/${section}`;
-                }
-                const point = terminalNdPoints.get(label);
-                if (!point) return;
-                if (label === terminalNdActiveLabel) {
-                    if (terminalNdHeading !== null) {
-                        terminalNdHeading = null;
-                        renderTerminalNdCamera();
-                    }
+                if (window.__npTerminalLegsActive?.()) {
+                    if (terminalNdTravel) setTerminalNdHeadPoint(
+                        { x: terminalNdTravel.x, y: terminalNdTravel.y }, terminalNdTravel.heading);
                     return;
                 }
-                terminalNdActiveLabel = label;
+                const label = solo?.label || '';
+                const point = label ? terminalNdPoints.get(label) : null;
+                if (!point) return;
+                terminalNdTravel = null;
+                terminalNdTravelLine.setAttribute('d', '');
+                if (label !== terminalNdActiveLabel) {
+                    terminalNdActiveLabel = label;
+                    terminalNdHeading = null;
+                    setTerminalNdHeadPoint(point);
+                    renderTerminalNdRoutes();
+                    return;
+                }
                 terminalNdHeading = null;
                 setTerminalNdHeadPoint(point);
-                if (!terminalNdDataOn) renderTerminalNdRoutes();
             };
             let terminalNdFrame = 0;
             const tickTerminalNd = () => {
@@ -14252,14 +15546,36 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             document.addEventListener('playing', event => {
                 if (event.target?.tagName !== 'AUDIO') return;
                 terminalNdActiveAudio = event.target;
+                terminalNdSoloStarted = !window.__npTerminalLegsActive?.();
+                if (terminalNdTravel) terminalNdTravel.lastTimestamp = performance.now();
                 moveTerminalNdHead(event.target);
+                if (terminalNdSoloStarted) renderTerminalNdRoutes();
                 if (!terminalNdFrame) terminalNdFrame = requestAnimationFrame(tickTerminalNd);
             }, true);
             document.addEventListener('timeupdate', event => {
-                if (event.target === terminalNdActiveAudio) moveTerminalNdHead(event.target);
+                if (event.target === terminalNdActiveAudio) {
+                    if (!terminalNdFrame) moveTerminalNdHead(event.target);
+                    if (!window.__npTerminalLegsActive?.()) renderTerminalNdEta();
+                }
             }, true);
             document.addEventListener('seeked', event => {
-                if (event.target === terminalNdActiveAudio) moveTerminalNdHead(event.target);
+                if (event.target === terminalNdActiveAudio) {
+                    if ((window.__npTerminalLegsActive?.() || terminalNdSoloStarted) && terminalNdTravel) {
+                        terminalNdTravel.key = '';
+                        terminalNdTravel.lastTimestamp = performance.now();
+                    } else terminalNdTravel = null;
+                    moveTerminalNdHead(event.target);
+                    if (!window.__npTerminalLegsActive?.()) {
+                        renderTerminalNdRoutes();
+                    }
+                }
+            }, true);
+            document.addEventListener('ended', event => {
+                if (event.target === terminalNdActiveAudio && !window.__npTerminalLegsActive?.()) {
+                    terminalNdTravel = null;
+                    terminalNdTravelLine.setAttribute('d', '');
+                    renderTerminalNdRoutes();
+                }
             }, true);
             const categories = [...new Set(songCards.map(song => song.category).filter(Boolean))].sort(compareTerminalText);
             const songLetters = [...new Set(songCards.map(song =>
@@ -14567,12 +15883,68 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     actionEntry('', '<PER SONG', { kind: 'folio', folio: { kind: 'per-song', page: 1 } }, '2L'),
                     actionEntry('', '<LEGS', { kind: 'folio', folio: { kind: 'legs', page: 1 } }, '3L'),
                     actionEntry('', '<ARCHIVE', { kind: 'folio', folio: { kind: 'archive', page: 1 } }, '4L'),
+                    actionEntry('', 'ELEC>', { kind: 'folio', folio: { kind: 'elec', page: 1 } }, '4R'),
                     actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '1R'),
                     actionEntry('', 'PLUG>', { kind: 'folio', folio: { kind: 'plug', page: 1 } }, '2R'),
                     actionEntry('', 'KONTROLS>', { kind: 'folio', folio: { kind: 'kontrols', page: 1 } }, '3R'),
                     actionEntry('', 'TEST>', { kind: 'run-test' }, '5R')
                 ]
             });
+            const electricalFolio = () => {
+                const buses = window.m2Electrical?.buses;
+                const page = Math.max(1, Math.min(2, folio.page || 1));
+                const voltageText = value => Number.isFinite(value) ? `${value.toFixed(1)}V` : '□□';
+                const currentText = value => Number.isFinite(value) ? `${value.toFixed(3)}A` : '□□';
+                const ampReading = value => Number.isFinite(value) ? value.toFixed(4) : '0.0000';
+                const entry = (title, value, field, color = 'white') => ({
+                    title,
+                    value: '',
+                    field,
+                    valueRuns: [{
+                        column: field.endsWith('R') ? Math.max(12, 24 - value.length) : 0,
+                        text: value,
+                        color,
+                        size: 'large'
+                    }]
+                });
+                const entries = page === 1 ? [
+                    {
+                        title: '',
+                        value: '',
+                        field: '1L',
+                        titleRuns: [
+                            { column: 0, text: 'SOURCE V', color: 'white', size: 'small' },
+                            { column: 10, text: 'SRCE/T', color: 'white', size: 'small' },
+                            { column: 18, text: 'DCAMPS', color: 'white', size: 'small' }
+                        ],
+                        valueRuns: [
+                            { column: 0, text: voltageText(buses?.sourceVoltage), color: buses?.tripped ? 'red' : (buses?.limiting || buses?.mode === 'PEAK') ? 'amber' : 'green', size: 'large' },
+                            { column: 10, text: ampReading(buses?.indicatedCurrent), color: buses?.tripped ? 'red' : buses?.indicatedCurrent >= 3.2 ? 'amber' : 'white', size: 'large' },
+                            { column: 18, text: ampReading(buses?.current), color: buses?.tripped ? 'red' : buses?.current >= 3.2 ? 'amber' : 'white', size: 'large' }
+                        ]
+                    },
+                    entry('DC BUS V', voltageText(buses?.distribution?.voltage), '2L'),
+                    entry('LIMIT A', currentText(buses?.currentLimit), '2R'),
+                    entry('MAIN BUS V', voltageText(buses?.main?.voltage), '3L'),
+                    entry('MAIN BUS A', currentText(buses?.main?.current), '3R'),
+                    entry('PAGE BUS V', voltageText(buses?.page?.voltage), '4L'),
+                    entry('PAGE BUS A', currentText(buses?.page?.current), '4R'),
+                    entry('TERM BUS V', voltageText(buses?.terminal?.voltage), '5L'),
+                    entry('TERM BUS A', currentText(buses?.terminal?.current), '5R')
+                ] : [
+                    entry('TIME BUS V', voltageText(buses?.time?.voltage), '1L'),
+                    entry('TIME BUS A', currentText(buses?.time?.current), '1R'),
+                    entry('A0 SENSE A', currentText(buses?.branches?.mainSense), '2L'),
+                    entry('A1 PANEL A', currentText(buses?.branches?.panel), '2R'),
+                    entry('A2 PLAYBK A', currentText(buses?.branches?.playback), '3L'),
+                    entry('A3 SOUND A', currentText(buses?.branches?.sound), '3R'),
+                    entry('A4 ARCHIVE A', currentText(buses?.branches?.archive), '4L'),
+                    entry('A5 LIGHT A', currentText(buses?.branches?.lighting), '4R'),
+                    entry('A8 TERM A', currentText(buses?.branches?.terminal), '5L'),
+                    entry('A9 ND A', currentText(buses?.branches?.nd), '5R')
+                ];
+                return { name: 'ELEC', entries };
+            };
             const kontrolsFolio = () => {
                 let column = 0;
                 const valueRuns = [];
@@ -15019,6 +16391,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const folioRegistry = {
                 index: indexFolio,
                 kontrols: kontrolsFolio,
+                elec: electricalFolio,
                 global: globalFolio,
                 'per-song': perSongFolio,
                 'legs-song-search': legsSongSearchFolio,
@@ -15045,6 +16418,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     const last = savedLegSlots.reduce((index, slot, offset) => slot ? offset : index, -1);
                     return folio.kind === 'save-curr' ? Math.floor((last + 1) / 4) + 1 : Math.max(1, Math.floor(last / 4) + 1);
                 }
+                if (folio.kind === 'elec') return 2;
                 if (folio.kind === 'archive') return 2;
                 return 1;
             };
@@ -15085,7 +16459,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     actionEntry('', '<PAGE', { kind: 'page', folio: { ...folio, page: currentPage - 1 } }) : folio.returnTarget ?
                     actionEntry('', folio.returnLabel || '<RE-TURN', { kind: 'back', folio: folio.returnTarget }) : null);
                 if (currentPage < total) {
-                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
+                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs', 'elec'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
                         kind: 'page', folio: { ...folio, page: currentPage + 1 }
                     }));
                 }
@@ -15168,6 +16542,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 renderTerminalNdRoutes();
                 renderTerminalNdCamera();
             };
+            window.setInterval(() => {
+                if (folio.kind === 'elec' && !testRunning) renderFolio();
+            }, 1000);
             const resetTerminalInterface = () => {
                 terminalInterfaceGeneration++;
                 folio = { kind: 'index', page: 1 };
@@ -15829,6 +17206,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     renderTerminalNdCamera();
                     renderTerminalNdRoutes();
                     if (terminalNdActiveAudio) moveTerminalNdHead(terminalNdActiveAudio);
+                    else renderTerminalNdTravel();
                     renderFolio();
                     return;
                 }
@@ -15954,6 +17332,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (!window.m2Electrical?.terminal?.planComputerPowered) return;
                 const hadActivePlan = !!activePlanFingerprint;
                 legsProgress = event.detail || { active: false };
+                if (legsProgress.active) {
+                    terminalNdSoloStarted = false;
+                    if (terminalNdTravel) terminalNdTravel.key = '';
+                } else {
+                    terminalNdTravelLine.setAttribute('d', '');
+                    terminalNdIntercept.setAttribute('visibility', 'hidden');
+                }
                 
                 if (hadActivePlan && !legsProgress.active) {
                     legsDraft = [];
