@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
-const M2_BROWSER_CACHE_VERSION = '15';
-const M2_PAGE_CODE_VERSION = '104';
+const M2_BROWSER_CACHE_VERSION = '16';
+const M2_PAGE_CODE_VERSION = '121';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
 require_once dirname(__DIR__) . '/wiki/vendor/autoload.php';
+require_once __DIR__ . '/nd-category-layout.php';
+require_once __DIR__ . '/nd-song-durations.php';
 
 function m2_code_variant(): string
 {
@@ -724,6 +726,14 @@ $cats = $cat_stmt->fetchAll(PDO::FETCH_COLUMN);
 $cats = array_map('normalize_german', $cats);
 $cats = array_unique($cats);
 usort($cats, 'customStrCmp');
+$ndCategoryPositions = m2_nd_category_positions(array_map(
+    static fn(array $row): string => trim((string) $row['category']),
+    $results
+));
+$ndSongDurations = m2_nd_song_durations(array_map(
+    static fn(array $row): string => trim((string) $row['url']),
+    $results
+));
 ?>
 
 <!DOCTYPE html>
@@ -762,7 +772,7 @@ usort($cats, 'customStrCmp');
 
         @font-face {
             font-family: anyocr;
-            src: url('<?= htmlspecialchars(m2_versioned_asset('/css/fonts/BoeingCDU-Large.ttf'), ENT_QUOTES, 'UTF-8') ?>');
+            src: url('<?= htmlspecialchars(m2_versioned_asset('/m/css/Large.ttf'), ENT_QUOTES, 'UTF-8') ?>');
         }
 
         @counter-style ca {
@@ -922,6 +932,7 @@ usort($cats, 'customStrCmp');
         }
 
         .cSide {
+            position: relative;
             cursor: var(--m2-cursor-default);
             user-select: none;
             width: 25px;
@@ -942,6 +953,14 @@ usort($cats, 'customStrCmp');
             color: white;
             text-decoration: none
         }
+
+        .mSongUrl {
+    position: absolute;
+    bottom: 18px;
+    transform: rotate(90deg) scaleY(0.9) scaleX(1) translateY(2px);
+    transform-origin: center;
+    text-transform: uppercase;
+}
 
         .mLyricsToggle {
             border: 0;
@@ -2719,12 +2738,21 @@ usort($cats, 'customStrCmp');
             overflow-wrap: anywhere;
         }
 
-        #mTerminal {
+        .mTerminalPair {
             display: flex;
             width: max-content;
             max-width: 100%;
-            min-width: 0;
             margin: 0 0 24px;
+            align-items: flex-start;
+            gap: 2px;
+            overflow-x: auto;
+        }
+
+        #mTerminal {
+            display: flex;
+            flex: 0 0 auto;
+            width: max-content;
+            min-width: 0;
             padding: 12px 20px;
             align-items: flex-start;
             gap: 34px;
@@ -2732,13 +2760,14 @@ usort($cats, 'customStrCmp');
             color: #fff;
             border: 1px solid #fff;
             font-size: 16px;
-            overflow-x: auto;
             user-select: none;
             -webkit-user-select: none;
         }
 
         #mTerminal,
-        #mTerminal * {
+        #mTerminal *,
+        .mTerminalNd,
+        .mTerminalNd * {
             font-family: anyocr, monospace;
         }
 
@@ -2749,6 +2778,208 @@ usort($cats, 'customStrCmp');
             gap: 14px;
             flex: 0 0 auto;
         }
+
+        .mTerminalNd {
+            position: relative;
+            flex: 0 0 520px;
+            height: 382px;
+            box-sizing: border-box;
+            border: 1px solid #fff;
+            background: #000;
+            overflow: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #mTerminalNd,
+        #mTerminalNd * {
+            font-family: sans-serif;
+        }
+
+        .mTerminalNdWorld {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 1600px;
+            height: 950px;
+            --nd-range: 1;
+            transform: translate(-50%, -50%);
+        }
+
+        .mTerminalNdCompass {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            transform-origin: center;
+        }
+
+        .mTerminalNdDirection {
+            position: absolute;
+            z-index: 3;
+            color: #00ff00;
+            font-size: 12px;
+            line-height: 1;
+            pointer-events: none;
+        }
+
+        .mTerminalNdDirectionUp { top: 4px; left: 50%; transform: translateX(-50%); }
+        .mTerminalNdDirectionDown { bottom: 4px; left: 50%; transform: translateX(-50%); }
+        .mTerminalNdDirectionLeft { left: 4px; top: 50%; transform: translateY(-50%); }
+        .mTerminalNdDirectionRight { right: 4px; top: 50%; transform: translateY(-50%); }
+
+        .mTerminalNdRoute {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            overflow: visible;
+            pointer-events: none;
+        }
+
+        .mTerminalNdRoute path {
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .mTerminalNdRing {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 190px;
+            height: 190px;
+            box-sizing: border-box;
+            border: 1px solid #444;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .mTerminalNdRing:nth-child(2) {
+            width: 330px;
+            height: 330px;
+        }
+
+        .mTerminalNdRangeLabel {
+            position: absolute;
+            top: -7px;
+            left: 50%;
+            padding: 0 3px;
+            transform: translateX(-50%);
+            color: #fff;
+            background: #000;
+            font-size: 11px;
+            line-height: 13px;
+            white-space: nowrap;
+        }
+
+        .mTerminalNdNode {
+            position: absolute;
+            z-index: 1;
+            width: 0;
+            height: 0;
+            transform-origin: 0 0;
+            transform: scale(var(--nd-range)) rotate(var(--nd-label-rotation, 0deg));
+            color: #a9dfff;
+            font-size: 12px;
+            line-height: 1.1;
+            white-space: nowrap;
+            pointer-events: none;
+        }
+
+        .mTerminalNdCode {
+            position: absolute;
+            top: 6px;
+            left: 0;
+            transform: translateX(-50%);
+            text-align: left;
+        }
+
+        .mTerminalNdDuration {
+            display: none;
+            font-size: 10px;
+        }
+
+        .mTerminalNdEta {
+            display: none;
+            font-size: 10px;
+        }
+
+        .mTerminalNdNode.is-draft-leg .mTerminalNdDuration,
+        .mTerminalNdNode.is-route-leg .mTerminalNdDuration {
+            display: block;
+        }
+
+        .mTerminalNdNode.is-route-leg.is-eta-on .mTerminalNdEta:not([hidden]) {
+            display: block;
+        }
+
+        .mTerminalNdNode[hidden] {
+            display: none;
+        }
+
+        .mTerminalNdNode.is-draft-leg .mTerminalNdCode,
+        .mTerminalNdNode.is-route-leg .mTerminalNdCode {
+            top: 5px;
+            left: 11px;
+            transform: none;
+        }
+
+        .mTerminalNdNode.is-draft-leg .mTerminalNdCode { color: #fff; }
+        .mTerminalNdNode.is-route-leg .mTerminalNdCode { color: #fff; }
+        .mTerminalNdNode.is-active-leg .mTerminalNdCode { color: #d665ff; }
+        .mTerminalNdNode.is-draft-leg { z-index: 2; }
+        .mTerminalNdNode.is-route-leg { z-index: 2; }
+        .mTerminalNdNode.is-active-leg { z-index: 3; }
+
+        .mTerminalNdStar {
+            display: none;
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            width: 20px;
+            height: 20px;
+            overflow: visible;
+            fill: none;
+            stroke: #fff;
+            stroke-width: 1.5;
+        }
+
+        .mTerminalNdNode.is-draft-leg .mTerminalNdStar,
+        .mTerminalNdNode.is-route-leg .mTerminalNdStar { display: block; }
+        .mTerminalNdNode.is-active-leg .mTerminalNdStar { stroke: #d665ff; }
+
+        .mTerminalNdHead {
+            position: absolute;
+            z-index: 2;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #fff;
+            transform-origin: 0 0;
+            transform: scale(var(--nd-range)) translate(-50%, -50%);
+            animation: mTerminalNdHeadFlash 1s steps(1, end) infinite;
+            pointer-events: none;
+        }
+
+        @keyframes mTerminalNdHeadFlash {
+            50% { opacity: 0; }
+        }
+
+        .mTerminalNdNode::before {
+            content: '';
+            position: absolute;
+            top: -4.5px;
+            left: -4.5px;
+            width: 9px;
+            height: 9px;
+            box-sizing: border-box;
+            border: 1px solid #78cfff;
+            border-radius: 50%;
+        }
+
+        .mTerminalNdNode.is-draft-leg::before,
+        .mTerminalNdNode.is-route-leg::before { display: none; }
 
         .mTerminalDashColumn {
             display: grid;
@@ -2807,7 +3038,7 @@ usort($cats, 'customStrCmp');
             align-items: center;
             justify-content: center;
             overflow: hidden;
-            color: #fff;
+            color: var(--terminal-ink, #fff);
             font-size: 1.5em;
             line-height: 1;
             white-space: pre;
@@ -2818,36 +3049,40 @@ usort($cats, 'customStrCmp');
         }
 
         .mTerminalCell.is-green {
-            color: #00ff00;
+            --terminal-ink: #00ff00;
         }
 
         .mTerminalCell.is-amber {
-            color: yellow;
+            --terminal-ink: yellow;
         }
 
         .mTerminalCell.is-red {
-            color: red;
+            --terminal-ink: red;
         }
 
         .mTerminalCell.is-gray {
-            color: gray;
+            --terminal-ink: gray;
         }
 
         .mTerminalCell.is-cyan {
-            color: cyan;
+            --terminal-ink: cyan;
         }
 
         .mTerminalCell.is-magenta {
-            color: magenta;
+            --terminal-ink: magenta;
         }
 
         .mTerminalCell.is-inverted {
             color: #000;
-            background: #fff;
+            background: var(--terminal-ink, #fff);
         }
 
         .mTerminalCell.is-flashing {
             animation: mTerminalFlash 1s steps(1, end) infinite;
+        }
+
+        #mTerminalScreen.is-test-sweep .mTerminalCell.is-flashing {
+            animation-duration: 200ms;
         }
 
         @keyframes mTerminalFlash {
@@ -2898,8 +3133,6 @@ usort($cats, 'customStrCmp');
             background: #000;
             color: #fff;
             cursor: var(--m2-cursor-pointer);
-            font: inherit;
-            line-height: 0;
         }
 
         .mTerminalSpecialButton {
@@ -3006,7 +3239,7 @@ usort($cats, 'customStrCmp');
                     <span>TOTAL</span>
                 </div>
             </div>
-            <img id="pageArchiveR2" class="mBtn" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/r2off.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="r2off.png" data-avionics-type="momentary-button" data-avionics-id="PAGE_ARCHIVE_R2" data-avionics-power="archive" data-avionics-command="ARCHIVE.INSTALL" draggable="false" alt="download archive">
+            <img id="pageArchiveR2" class="mBtn" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/r2off.png'), ENT_QUOTES, 'UTF-8') ?>" data-asset="r2off.png" data-elektroniks-type="momentary-button" data-elektroniks-id="PAGE_ARCHIVE_R2" data-elektroniks-power="archive" data-elektroniks-command="ARCHIVE.INSTALL" draggable="false" alt="download archive">
         </div>
     </div>
     <div class="tBar">
@@ -3161,6 +3394,7 @@ usort($cats, 'customStrCmp');
                     <a href="editm.php?id=<?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" class="editBtn" onclick="event.stopPropagation()">E</a>
 
                     <a href="serv/com.php?no=№ <?= htmlspecialchars((string)$row['link_id'], ENT_QUOTES, 'UTF-8') ?>" id="comBtn" onclick="openCom(event, this)">C</a>
+                    <span class="mSongUrl"><?= htmlspecialchars($url, ENT_QUOTES, 'UTF-8') ?></span>
                     <?php if (trim((string)($row['trans'] ?? '')) !== ''): ?>
                     <button type="button" class="mLyricsToggle" aria-pressed="false" onclick="toggleCardLyrics(event, this)">L</button>
                     <?php endif; ?>
@@ -3356,6 +3590,7 @@ usort($cats, 'customStrCmp');
             <div class="mUnderPanelFuture" aria-hidden="true"></div>
         </div>
     </section>
+    <div class="mTerminalPair">
     <section id="mTerminal">
         <div class="mTerminalConsole">
             <div class="mTerminalDashColumn">
@@ -3428,18 +3663,36 @@ usort($cats, 'customStrCmp');
                     <button type="button" class="mTerminalKey">*</button>
                 </div>
                 <div class="mTerminalSpecialisenBox">
-                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="first">FP</button>
-                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="last">LP</button>
-                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="index">IN</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="first">FRST<br>PAGE</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="last">LAST<br>PAGE</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="index">NDEX</button>
                     <button type="button" class="mTerminalSave" data-terminal-special="save">SAVE<span class="mTerminalSaveLight"></span></button>
-                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="song">SON</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="song">SONG</button>
                     <button type="button" class="mTerminalSpecialButton" data-terminal-special="legs">LEG</button>
                     <button type="button" class="mTerminalSpecialButton" data-terminal-special="direct">DCT</button>
-                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="clear">CLR</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="clear">KLR</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="skip">SKIP</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="step">STEP</button>
+                    <button type="button" class="mTerminalSpecialButton" data-terminal-special="putin">PUTN</button>
                 </div>
             </div>
         </div>
     </section>
+        <div id="mTerminalNd" class="mTerminalNd" aria-hidden="true">
+          <span class="mTerminalNdRing"><span class="mTerminalNdRangeLabel" data-nd-range-label="inner"></span></span>
+          <span class="mTerminalNdRing"><span class="mTerminalNdRangeLabel" data-nd-range-label="outer"></span></span>
+          <div class="mTerminalNdCompass">
+            <span class="mTerminalNdDirection mTerminalNdDirectionUp">U↑</span>
+            <span class="mTerminalNdDirection mTerminalNdDirectionDown">D↓</span>
+            <span class="mTerminalNdDirection mTerminalNdDirectionLeft">L←</span>
+            <span class="mTerminalNdDirection mTerminalNdDirectionRight">R→</span>
+          </div>
+          <div class="mTerminalNdWorld">
+            <svg class="mTerminalNdRoute" aria-hidden="true"><g data-nd-route="draft"></g><g data-nd-route="active"></g></svg>
+            <span id="mTerminalNdHead" class="mTerminalNdHead" hidden></span>
+          </div>
+        </div>
+    </div>
     <button id="spawn" class="ctlBtn" style="position:fixed;left:10px;bottom:10px;z-index:9999;display:none">J</button>
     <datalist id="catList">
         <?php foreach ($cats as $c) {
@@ -3700,7 +3953,7 @@ usort($cats, 'customStrCmp');
                             {
                                 id: 'mainSenseBreaker',
                                 designation: 'A0',
-                                name: 'MAIN AVIONICS BUS SENSE',
+                                name: 'MAIN ELEKTRONIKS BUS SENSE',
                                 members: ['mainSystemsLoad']
                             },
                             {
@@ -3997,7 +4250,7 @@ usort($cats, 'customStrCmp');
             }
         }
 
-        class AvionicsDataBus extends EventTarget {
+        class ElektroniksDataBus extends EventTarget {
             #receivers = new Map();
             #sequence = 0;
 
@@ -4007,9 +4260,9 @@ usort($cats, 'customStrCmp');
             }
 
             register(label, receiver, powered = () => true) {
-                if (typeof label !== 'string' || !label.length) throw new TypeError('Avionics label required');
-                if (typeof receiver !== 'function') throw new TypeError('Avionics receiver required: ' + label);
-                if (this.commands && !this.commands.has(label)) throw new Error('Unregistered avionics command: ' + label);
+                if (typeof label !== 'string' || !label.length) throw new TypeError('Elektroniks label required');
+                if (typeof receiver !== 'function') throw new TypeError('Elektroniks receiver required: ' + label);
+                if (this.commands && !this.commands.has(label)) throw new Error('Unregistered elektroniks command: ' + label);
                 const endpoint = { receiver, powered };
                 if (!this.#receivers.has(label)) this.#receivers.set(label, new Set());
                 this.#receivers.get(label).add(endpoint);
@@ -4133,7 +4386,7 @@ usort($cats, 'customStrCmp');
         Object.freeze(CircuitContact.prototype);
         Object.freeze(CircuitContact);
 
-        class AvionicsSelector extends EventTarget {
+        class ElektroniksSelector extends EventTarget {
             #position;
             #electricalInputs = new Map();
 
@@ -4190,7 +4443,7 @@ usort($cats, 'customStrCmp');
             }
         }
 
-        class AvionicsPermissive extends EventTarget {
+        class ElektroniksPermissive extends EventTarget {
             constructor(name, inputs, test) {
                 super();
                 this.name = name;
@@ -4260,7 +4513,7 @@ usort($cats, 'customStrCmp');
             }
         }
 
-        class AvionicsMomentaryButton extends DiscreteInput {
+        class ElektroniksMomentaryButton extends DiscreteInput {
             constructor(name, { power = null, bus, command, payload = {} } = {}) {
                 super(name, { power });
                 this.bus = bus;
@@ -4276,23 +4529,23 @@ usort($cats, 'customStrCmp');
             }
         }
 
-        class AvionicsDeviceRegistry {
+        class ElektroniksDeviceRegistry {
             #factories = new Map();
 
             register(type, factory) {
-                if (this.#factories.has(type)) throw new Error('Duplicate avionics device type: ' + type);
+                if (this.#factories.has(type)) throw new Error('Duplicate elektroniks device type: ' + type);
                 this.#factories.set(type, factory);
                 return this;
             }
 
             create(spec, context) {
                 const factory = this.#factories.get(spec.type);
-                if (!factory) throw new Error('Unknown avionics device type: ' + spec.type);
+                if (!factory) throw new Error('Unknown elektroniks device type: ' + spec.type);
                 return factory(spec, context);
             }
         }
 
-        class AvionicsBoard {
+        class ElektroniksBoard {
             #devices = new Map();
             #specs = new Map();
             #electricalNetlist = null;
@@ -4305,7 +4558,7 @@ usort($cats, 'customStrCmp');
             }
 
             add(spec) {
-                if (!spec.id || this.#devices.has(spec.id)) throw new Error('Duplicate or missing avionics device id: ' + spec.id);
+                if (!spec.id || this.#devices.has(spec.id)) throw new Error('Duplicate or missing elektroniks device id: ' + spec.id);
                 const device = this.registry.create(spec, {
                     bus: this.bus,
                     powerContacts: this.powerContacts
@@ -4313,7 +4566,7 @@ usort($cats, 'customStrCmp');
                 device.id = spec.id;
                 this.#devices.set(spec.id, device);
                 this.#specs.set(spec.id, { ...spec });
-                this.#electricalNetlist?.attachAvionicsDevice(spec, device, this.#electricalOptions);
+                this.#electricalNetlist?.attachElektroniksDevice(spec, device, this.#electricalOptions);
                 return device;
             }
 
@@ -4335,12 +4588,12 @@ usort($cats, 'customStrCmp');
 
             connectElectricalNetlist(netlist, options = {}) {
                 if (this.#electricalNetlist && this.#electricalNetlist !== netlist) {
-                    throw new Error('Avionics board already connected to another electrical netlist');
+                    throw new Error('Elektroniks board already connected to another electrical netlist');
                 }
                 this.#electricalNetlist = netlist;
                 this.#electricalOptions = { ...options };
                 this.#specs.forEach((spec, id) => {
-                    netlist.attachAvionicsDevice(spec, this.#devices.get(id), this.#electricalOptions);
+                    netlist.attachElektroniksDevice(spec, this.#devices.get(id), this.#electricalOptions);
                 });
                 return this;
             }
@@ -4361,22 +4614,22 @@ usort($cats, 'customStrCmp');
             }
 
             mount(root = document) {
-                root.querySelectorAll('[data-avionics-type][data-avionics-id]').forEach(element => {
-                    const id = element.dataset.avionicsId;
+                root.querySelectorAll('[data-elektroniks-type][data-elektroniks-id]').forEach(element => {
+                    const id = element.dataset.elektroniksId;
                     if (this.#devices.has(id)) return;
                     let payload = {};
                     try {
-                        if (element.dataset.avionicsPayload) payload = JSON.parse(element.dataset.avionicsPayload);
+                        if (element.dataset.elektroniksPayload) payload = JSON.parse(element.dataset.elektroniksPayload);
                     } catch (error) {}
                     const device = this.add({
                         id,
                         name: element.getAttribute('aria-label') || id,
-                        type: element.dataset.avionicsType,
-                        power: element.dataset.avionicsPower || 'main',
-                        command: element.dataset.avionicsCommand || '',
+                        type: element.dataset.elektroniksType,
+                        power: element.dataset.elektroniksPower || 'main',
+                        command: element.dataset.elektroniksCommand || '',
                         payload
                     });
-                    if (device instanceof AvionicsMomentaryButton) {
+                    if (device instanceof ElektroniksMomentaryButton) {
                         element.addEventListener('click', event => {
                             event.preventDefault();
                             device.pulse();
@@ -4397,7 +4650,7 @@ usort($cats, 'customStrCmp');
         }
 
         const commandPayloadIsObject = payload => payload !== null && typeof payload === 'object' && !Array.isArray(payload);
-        const avionicsCommands = new CommandRegistry();
+        const elektroniksCommands = new CommandRegistry();
         [
             'PLAYBACK.REPEAT.WHOLE',
             'PLAYBACK.REPEAT.SECTION',
@@ -4412,73 +4665,73 @@ usort($cats, 'customStrCmp');
             'SOUND.ALARM.START',
             'SOUND.ALARM.STOP',
             'ARCHIVE.INSTALL'
-        ].forEach(label => avionicsCommands.define(label, {
+        ].forEach(label => elektroniksCommands.define(label, {
             version: 1,
             validate: commandPayloadIsObject
         }));
-        avionicsCommands.define('PANEL.MECHANICAL.PLAY', {
+        elektroniksCommands.define('PANEL.MECHANICAL.PLAY', {
             version: 1,
             validate: payload => commandPayloadIsObject(payload) &&
                 typeof payload.name === 'string' && payload.name.length > 0
         });
-        avionicsCommands.define('SOUND.UI.PLAY', {
+        elektroniksCommands.define('SOUND.UI.PLAY', {
             version: 1,
             validate: payload => commandPayloadIsObject(payload) &&
                 typeof payload.name === 'string' && payload.name.length > 0
         });
-        const avionicsBus = new AvionicsDataBus(avionicsCommands);
-        const avionicsDeviceRegistry = new AvionicsDeviceRegistry();
+        const elektroniksBus = new ElektroniksDataBus(elektroniksCommands);
+        const elektroniksDeviceRegistry = new ElektroniksDeviceRegistry();
         const boardValidator = new BoardValidator();
-        const resolveAvionicsPower = (spec, context) => {
+        const resolveElektroniksPower = (spec, context) => {
             if (!spec.power) return null;
             if (!(spec.power in context.powerContacts)) {
-                throw new Error('Unknown avionics power bus: ' + spec.power);
+                throw new Error('Unknown elektroniks power bus: ' + spec.power);
             }
             return context.powerContacts[spec.power];
         };
-        avionicsDeviceRegistry
+        elektroniksDeviceRegistry
             .register('maintained-discrete', (spec, context) => new DiscreteInput(
                 spec.name || spec.id,
                 {
                     closed: spec.closed,
-                    power: resolveAvionicsPower(spec, context)
+                    power: resolveElektroniksPower(spec, context)
                 }
             ))
-            .register('selector', (spec, context) => new AvionicsSelector(
+            .register('selector', (spec, context) => new ElektroniksSelector(
                 spec.name || spec.id,
                 spec.positions,
                 spec.initial,
-                { power: resolveAvionicsPower(spec, context) }
+                { power: resolveElektroniksPower(spec, context) }
             ))
             .register('analog-control', (spec, context) => new AnalogControl(
                 spec.name || spec.id,
                 spec.value,
                 {
-                    power: resolveAvionicsPower(spec, context),
+                    power: resolveElektroniksPower(spec, context),
                     referenceVoltage: spec.referenceVoltage || 5
                 }
             ))
-            .register('momentary-button', (spec, context) => new AvionicsMomentaryButton(
+            .register('momentary-button', (spec, context) => new ElektroniksMomentaryButton(
                 spec.name || spec.id,
                 {
-                    power: resolveAvionicsPower(spec, context),
+                    power: resolveElektroniksPower(spec, context),
                     bus: context.bus,
                     command: spec.command,
                     payload: spec.payload
                 }
             ));
 
-        class SoundAvionicsUnit extends EventTarget {
+        class SoundElektroniksUnit extends EventTarget {
             #activities = new Set();
 
             constructor(bus, powerContact) {
                 super();
-                this.name = 'SOUND AVIONICS UNIT';
+                this.name = 'SOUND ELEKTRONIKS UNIT';
                 this.powerContact = powerContact;
                 this.volume = new AnalogControl('VOLUME', 1, { power: powerContact });
                 this.speed = new AnalogControl('SPEED', 0.5, { power: powerContact });
                 this.reverb = new AnalogControl('REVERB', 0, { power: powerContact });
-                this.coupling = new AvionicsSelector(
+                this.coupling = new ElektroniksSelector(
                     'L COUPLING', ['OFF', 'ON'], 'ON', { power: powerContact }
                 );
                 this.bus = bus;
@@ -4536,20 +4789,20 @@ usort($cats, 'customStrCmp');
             }
         }
 
-        class PlaybackAvionicsUnit extends EventTarget {
+        class PlaybackElektroniksUnit extends EventTarget {
             #activities = new Set();
             #sectionWindowPowerAuthority = Symbol('K R3 POWER');
 
             constructor(loads, powerContact) {
                 super();
-                this.name = 'PLAYBACK AVIONICS UNIT';
-                this.bus = avionicsBus;
+                this.name = 'PLAYBACK ELEKTRONIKS UNIT';
+                this.bus = elektroniksBus;
                 this.sectionWindowPower = new CircuitContact(
                     'K R3 ANALOG POWER',
                     false,
                     this.#sectionWindowPowerAuthority
                 );
-                this.board = new AvionicsBoard(avionicsDeviceRegistry, this.bus, {
+                this.board = new ElektroniksBoard(elektroniksDeviceRegistry, this.bus, {
                     main: powerContact,
                     r3: this.sectionWindowPower
                 });
@@ -4595,7 +4848,7 @@ usort($cats, 'customStrCmp');
                 Object.entries(commands).forEach(([label, receiver]) => {
                     this.bus.register(label, receiver, () => this.pageContact.active);
                 });
-                this.sectionRepeatFeed = new AvionicsPermissive(
+                this.sectionRepeatFeed = new ElektroniksPermissive(
                     'KR EFFECTIVE PERMISSIVE',
                     [this.pageContact, this.plContact, this.isr, this.k, this.kr],
                     () => this.pageContact.active &&
@@ -4670,7 +4923,7 @@ usort($cats, 'customStrCmp');
             }
         }
 
-        class ArchiveAvionicsUnit extends EventTarget {
+        class ArchiveElektroniksUnit extends EventTarget {
             #checkPromise = null;
             #installPromise = null;
             #operationController = null;
@@ -4678,7 +4931,7 @@ usort($cats, 'customStrCmp');
 
             constructor(bus, powerContact, checker, installer) {
                 super();
-                this.name = 'ARCHIVE AVIONICS UNIT';
+                this.name = 'ARCHIVE ELEKTRONIKS UNIT';
                 this.bus = bus;
                 this.powerContact = powerContact;
                 this.checker = checker;
@@ -4791,24 +5044,24 @@ usort($cats, 'customStrCmp');
 
         const PAGE_CONTROL_AUTHORITY = Symbol('PAGE CONTROL BUS');
         const pageMainSystemsPower = new CircuitContact('MAIN SYSTEMS POWER', false, PAGE_CONTROL_AUTHORITY);
-        const panelAvionicsPower = new CircuitContact('PANEL AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
-        const playbackAvionicsPower = new CircuitContact('PLAYBACK AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
-        const soundAvionicsPower = new CircuitContact('SOUND AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
-        const archiveAvionicsPower = new CircuitContact('ARCHIVE AVIONICS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const panelElektroniksPower = new CircuitContact('PANEL ELEKTRONIKS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const playbackElektroniksPower = new CircuitContact('PLAYBACK ELEKTRONIKS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const soundElektroniksPower = new CircuitContact('SOUND ELEKTRONIKS POWER', false, PAGE_CONTROL_AUTHORITY);
+        const archiveElektroniksPower = new CircuitContact('ARCHIVE ELEKTRONIKS POWER', false, PAGE_CONTROL_AUTHORITY);
         const timeBusPower = new CircuitContact('TIME BUS POWER', false, PAGE_CONTROL_AUTHORITY);
         let timeBusInputs = null;
         const timeBusIsPowered = () => timeBusPower.closed;
         const setTimeBusInputValue = (id, value) => timeBusInputs?.[id]?.setValue(value) || false;
         const setTimeBusSetClosed = closed => timeBusInputs?.setInput?.setClosed(closed) || false;
         const timeBusSetIsActive = () => !!timeBusInputs?.setInput?.active;
-        const soundCircuit = new SoundAvionicsUnit(avionicsBus, soundAvionicsPower);
-        avionicsBus.register(
+        const soundCircuit = new SoundElektroniksUnit(elektroniksBus, soundElektroniksPower);
+        elektroniksBus.register(
             'PANEL.MECHANICAL.PLAY',
             payload => driveMechanicalSound(payload.name)
         );
-        const archiveCircuit = new ArchiveAvionicsUnit(
-            avionicsBus,
-            archiveAvionicsPower,
+        const archiveCircuit = new ArchiveElektroniksUnit(
+            elektroniksBus,
+            archiveElektroniksPower,
             signal => checkM2BrowserArchive(signal),
             signal => installM2BrowserArchive(signal)
         );
@@ -4819,30 +5072,30 @@ usort($cats, 'customStrCmp');
             mainSystemsEvents.dispatchEvent(new Event('ready'));
             window.dispatchEvent(new Event('m2mainready'));
         });
-        const m2ExpansionBoard = new AvionicsBoard(avionicsDeviceRegistry, avionicsBus, {
+        const m2ExpansionBoard = new ElektroniksBoard(elektroniksDeviceRegistry, elektroniksBus, {
             main: pageMainSystemsPower,
-            panel: panelAvionicsPower,
-            playback: playbackAvionicsPower,
-            sound: soundAvionicsPower,
-            archive: archiveAvionicsPower,
+            panel: panelElektroniksPower,
+            playback: playbackElektroniksPower,
+            sound: soundElektroniksPower,
+            archive: archiveElektroniksPower,
             time: timeBusPower
         });
         window.addEventListener('DOMContentLoaded', () => m2ExpansionBoard.mount(document));
-        publishReadOnlyWindow('m2Avionics', Object.freeze({
+        publishReadOnlyWindow('m2Elektroniks', Object.freeze({
             get powers() {
                 return freezeTelemetry({
                     main: pageMainSystemsPower.closed,
-                    panel: panelAvionicsPower.closed,
-                    playback: playbackAvionicsPower.closed,
-                    sound: soundAvionicsPower.closed,
-                    archive: archiveAvionicsPower.closed,
+                    panel: panelElektroniksPower.closed,
+                    playback: playbackElektroniksPower.closed,
+                    sound: soundElektroniksPower.closed,
+                    archive: archiveElektroniksPower.closed,
                     time: timeBusPower.closed
                 });
             },
             get units() {
                 return freezeTelemetry({
                     sound: {
-                        powered: soundAvionicsPower.closed,
+                        powered: soundElektroniksPower.closed,
                         active: soundCircuit.active,
                         coupling: soundCircuit.coupling.effectivePosition,
                         volume: soundCircuit.volume.value,
@@ -4850,14 +5103,14 @@ usort($cats, 'customStrCmp');
                         reverb: soundCircuit.reverb.value
                     },
                     archive: {
-                        powered: archiveAvionicsPower.closed,
+                        powered: archiveElektroniksPower.closed,
                         active: archiveCircuit.active,
                         state: archiveCircuit.state
                     }
                 });
             },
             get commands() {
-                return Object.freeze(avionicsCommands.labels);
+                return Object.freeze(elektroniksCommands.labels);
             },
             validate() {
                 return freezeTelemetry(boardValidator.validate({
@@ -5232,7 +5485,7 @@ usort($cats, 'customStrCmp');
                 state.velocity += (raw - state.velocity) * easing;
                 const strength = Math.min(1, state.velocity / 360);
                 const rate = 1 + 0.2 * strength;
-                const level = 0.5 * Math.sqrt(strength);
+                const level = 0.25 * Math.sqrt(strength);
                 if ((!Number.isFinite(state.rate) || Math.abs(rate - state.rate) >= 0.01 ||
                     Math.abs(level - state.level) >= 0.02) && now - state.updateTime >= 40) {
                     const time = getContext().currentTime;
@@ -5318,7 +5571,7 @@ usort($cats, 'customStrCmp');
                         gain: 0, duration: PANEL_SOUND_LOOPS[id][0]
                     });
                     if (innerMotion.intro) {
-                        innerMotion.intro.gain.gain.linearRampToValueAtTime(0.3, time + 0.28);
+                        innerMotion.intro.gain.gain.linearRampToValueAtTime(0.15, time + 0.28);
                     }
                     innerMotion.rate = NaN;
                     innerMotion.level = NaN;
@@ -5348,7 +5601,7 @@ usort($cats, 'customStrCmp');
                         if (innerMotion.outro) {
                             const endingDuration = remaining - offset;
                             const rate = Math.min(1.2, Math.max(0.15, endingDuration / Math.max(0.06, brakeSeconds)));
-                            const level = Math.min(0.45, 0.18 + 0.32 * strength);
+                            const level = Math.min(0.225, 0.09 + 0.16 * strength);
                             const fade = Math.min(0.38, Math.max(0.2, brakeSeconds * 0.45));
                             innerMotion.outro.source.playbackRate.setValueAtTime(rate, time);
                             innerMotion.outro.gain.gain.linearRampToValueAtTime(level, time + fade);
@@ -5359,7 +5612,7 @@ usort($cats, 'customStrCmp');
                 innerMotion.phase = phase;
                 if (!innerMotion.bed) return;
                 const rate = 0.75 + 0.45 * strength;
-                const level = 0.9 * Math.sqrt(strength);
+                const level = 0.45 * Math.sqrt(strength);
                 if (now - innerMotion.lastUpdate < 40 && Number.isFinite(innerMotion.rate)) return;
                 if (Math.abs(rate - innerMotion.rate) < 0.01 && Math.abs(level - innerMotion.level) < 0.02) return;
                 moveInnerParam(innerMotion.bed.source.playbackRate, rate, time, 0.12);
@@ -5470,7 +5723,12 @@ usort($cats, 'customStrCmp');
             '/m/css/cursors/MOUSE_LEFT_RIGHT_ARROW.png',
             ...CONTROL_ASSET_FILES.map(name => '/m/img/' + name),
             ...Object.values(UI_SOUND_FILES),
-            ...PANEL_WAV_IDS.map(id => '/m/img/' + id + '.wav')
+            ...PANEL_WAV_IDS.map(id => '/m/img/' + id + '.wav'),
+            ...[35554678, 373840423, 943407323, 413617446, 393724110, 357507397, 344407285,
+                421103543, 833201175, 55244678, 310788122, 727820660, 1057591814, 368797183]
+                .map(id => `/m/img/${id}.wav`),
+            '/m/img/terminal-test-ok.wav',
+            '/m/img/terminal-test-fail.wav'
         ];
 
         function collectM2ArchiveManifest() {
@@ -5710,10 +5968,13 @@ usort($cats, 'customStrCmp');
 
         window.m2Archive = Object.freeze({
             version: M2_BROWSER_CACHE_VERSION,
+            pageVersion: M2_PAGE_CODE_VERSION,
+            assetKey: m2ArchiveAssetKey,
             manifest: collectM2ArchiveManifest,
+            check: () => checkM2BrowserArchive(),
             install: () => {
-                const frame = avionicsBus.transmit('ARCHIVE.INSTALL', {}, 'M2 ARCHIVE API');
-                if (!frame.handled) return Promise.reject(frame.errors[0] || new Error('ARCHIVE AVIONICS UNIT is not powered'));
+                const frame = elektroniksBus.transmit('ARCHIVE.INSTALL', {}, 'M2 ARCHIVE API');
+                if (!frame.handled) return Promise.reject(frame.errors[0] || new Error('ARCHIVE ELEKTRONIKS UNIT is not powered'));
                 return Promise.resolve(frame.results[0]);
             }
         });
@@ -5752,7 +6013,7 @@ usort($cats, 'customStrCmp');
         }
 
         function playMechanicalSound(name) {
-            return avionicsBus.transmit('PANEL.MECHANICAL.PLAY', { name }, 'PAGE PANEL').handled;
+            return elektroniksBus.transmit('PANEL.MECHANICAL.PLAY', { name }, 'PAGE PANEL').handled;
         }
 
         function driveElectricalSound(name) {
@@ -5776,7 +6037,7 @@ usort($cats, 'customStrCmp');
         }
 
         function playElectricalSound(name) {
-            return avionicsBus.transmit('SOUND.UI.PLAY', { name }, 'PAGE PANEL').handled;
+            return elektroniksBus.transmit('SOUND.UI.PLAY', { name }, 'PAGE PANEL').handled;
         }
 
         function driveStartAlarm() {
@@ -5800,7 +6061,7 @@ usort($cats, 'customStrCmp');
         }
 
         function startAlarm() {
-            return avionicsBus.transmit('SOUND.ALARM.START', {}, 'PAGE PANEL').handled;
+            return elektroniksBus.transmit('SOUND.ALARM.START', {}, 'PAGE PANEL').handled;
         }
 
         function driveStopAlarm() {
@@ -5817,7 +6078,7 @@ usort($cats, 'customStrCmp');
         }
 
         function stopAlarm() {
-            return avionicsBus.transmit('SOUND.ALARM.STOP', {}, 'PAGE PANEL').handled;
+            return elektroniksBus.transmit('SOUND.ALARM.STOP', {}, 'PAGE PANEL').handled;
         }
 
 
@@ -6356,6 +6617,8 @@ usort($cats, 'customStrCmp');
                 if (member.line) member.line.classList.toggle('lrcActive', member === active);
             });
             info.hostCard.dataset.art = active.art || '';
+            const urlLabel = info.hostWrap.querySelector('.mSongUrl');
+            if (urlLabel) urlLabel.textContent = active.card.dataset.songUrl || '';
             synchronizeVirtualMemberControls(info, active);
             if (active.media && window.loadMediaEl) window.loadMediaEl(active.media);
             return active;
@@ -7818,6 +8081,8 @@ usort($cats, 'customStrCmp');
             if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
             const next = Math.max(0, Math.min(99, seekRadialStandbySection + Math.trunc(steps)));
             if (next === seekRadialStandbySection) return false;
+            seekRadialInstrument.sectionGearMotion = null;
+            panelSoundBank.stopRotary('seekSectionTerminal');
             seekRadialStandbySection = next;
             manualStandbyBaseline = { section: seekRadialStandbySection, seconds: seekRadialStandbySeconds };
             setTimeBusInputValue('sectionSensor', seekRadialStandbySection / 99);
@@ -7832,6 +8097,8 @@ usort($cats, 'customStrCmp');
             if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(time)) return false;
             const next = Math.max(0, Math.min(SEEK_RADIAL_MAX_SECONDS, seekRadialStandbySeconds + Math.trunc(steps)));
             if (next === seekRadialStandbySeconds) return false;
+            seekRadialInstrument.timeGearMotion = null;
+            panelSoundBank.stopRotary('seekTimeTerminal');
             seekRadialStandbySeconds = next;
             manualStandbyBaseline = { section: seekRadialStandbySection, seconds: seekRadialStandbySeconds };
             setTimeBusInputValue('timeSensor', seekRadialStandbySeconds / SEEK_RADIAL_MAX_SECONDS);
@@ -8306,6 +8573,36 @@ usort($cats, 'customStrCmp');
             });
         }
 
+        window.__npTerminalFlushVideos = mode => {
+            const currentVideo = currentAudio ? activeMediaForCard(currentAudio.closest('.card')) : null;
+            const videos = [...document.querySelectorAll('.card video')].filter(video => {
+                if (mode === 'current') return video === currentVideo;
+                if (mode === 'yes') return video.dataset.sync === 'true';
+                if (mode === 'no') return video.dataset.sync !== 'true';
+                return mode === 'all';
+            });
+            videos.forEach(video => {
+                const replacement = video.cloneNode(true);
+                const member = video.__virtualMember;
+                if (member) {
+                    replacement.__virtualMember = member;
+                    member.media = replacement;
+                }
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
+                video.replaceWith(replacement);
+                if (window.loadMediaEl) window.loadMediaEl(replacement);
+                replacement.load();
+                if (member && currentAudio?.__virtualSong === member.info && member.info.activeIndex !== member.index) return;
+                if (replacement.dataset.sync === 'true') {
+                    if (replacement === activeMediaForCard(currentAudio?.closest('.card'))) syncVideoToAudio(currentAudio, !currentAudio.paused);
+                } else if (replacement.autoplay) {
+                    replacement.play().catch(() => {});
+                }
+            });
+            return videos.length;
+        };
         function syncVideoToAudio(audio, playVideo = false) {
             const card = audio?.closest('.card');
             const media = card ? activeMediaForCard(card) : null;
@@ -8559,7 +8856,7 @@ usort($cats, 'customStrCmp');
             advanceShuffle();
         }
 
-        playbackCircuit = new PlaybackAvionicsUnit({
+        playbackCircuit = new PlaybackElektroniksUnit({
             wholeRepeat: repeatWholeCard,
             sectionRepeat: repeatEligibleSection,
             previousCard: transferToPrevious,
@@ -8569,7 +8866,12 @@ usort($cats, 'customStrCmp');
             categorySection: transferToRandom,
             visibleWhole: transferToRandom,
             visibleSection: transferToRandom
-        }, playbackAvionicsPower);
+        }, playbackElektroniksPower);
+        const legsCallouts = [
+            [2500, 35554678], [1000, 373840423], [500, 943407323], [400, 413617446],
+            [300, 393724110], [200, 357507397], [100, 344407285], [60, 421103543],
+            [30, 310788122], [10, 1057591814]
+        ];
         class LegsExecutor extends EventTarget {
             constructor() {
                 super();
@@ -8579,22 +8881,34 @@ usort($cats, 'customStrCmp');
                 this.commands = [];
                 this.commandIndex = 0;
                 this.iteration = 0;
+                this.completedLegs = 0;
+                this.completedHistory = [];
                 this.generation = 0;
                 this.transitioning = false;
                 this.current = null;
+                this.lastCalloutRemaining = null;
+                this.calloutsPlayed = new Set();
+                this.calloutAudio = new Set();
             }
 
             compile(plan) {
                 const commands = [];
-                let playable = null;
-                plan.forEach((leg, sourceIndex) => {
-                    if (leg.type === 'hold') {
-                        if (playable) commands.push({ sourceIndex, leg: { ...playable }, repeats: Number(leg.times) || 0, hold: true });
-                        return;
+                for (let sourceIndex = 0; sourceIndex < plan.length; sourceIndex++) {
+                    const leg = plan[sourceIndex];
+                    if (leg.type === 'hold') continue;
+                    if (leg.type === 'then') {
+                        commands.push({ sourceIndex, leg: { ...leg }, repeats: 1, rows: 1 });
+                        continue;
                     }
-                    playable = { ...leg };
-                    commands.push({ sourceIndex, leg: { ...leg }, repeats: 1, hold: false });
-                });
+                    let rows = 1;
+                    let repeats = 1;
+                    while (plan[sourceIndex + rows]?.type === 'hold') {
+                        repeats += Number(plan[sourceIndex + rows].times) || 0;
+                        rows++;
+                    }
+                    commands.push({ sourceIndex, leg: { ...leg }, repeats, rows });
+                    sourceIndex += rows - 1;
+                }
                 return commands;
             }
 
@@ -8623,12 +8937,16 @@ usort($cats, 'customStrCmp');
             bounds(audio, leg) {
                 const duration = playbackDuration(audio) || audio.duration;
                 if (!(duration > 0)) return null;
+                const timeMatch = /^(\d{1,2})\/(\d{1,3})\.(\d{1,2})$/.exec(String(leg.time || ''));
+                const section = Number.isFinite(Number(leg.section)) ? Number(leg.section) : Number(timeMatch?.[1]) || 0;
+                const seconds = Number.isFinite(Number(leg.seconds)) ? Number(leg.seconds) : timeMatch ?
+                    (Number(timeMatch[2]) - 1) * 60 + Number(timeMatch[3]) - 1 : 0;
                 if (audio.__virtualSong) {
                     const member = audio.__virtualSong.members[audio.__virtualIndex];
                     const memberStart = Number(member?.virtualStart);
                     const memberDuration = Number(member?.audio?.duration);
                     if (!Number.isFinite(memberStart) || !(memberDuration > 0)) return null;
-                    const start = memberStart + Math.max(0, Number(leg.seconds) || 0);
+                    const start = memberStart + Math.max(0, seconds);
                     const end = memberStart + memberDuration;
                     if (start >= end) return null;
                     return { start, end, duration };
@@ -8643,12 +8961,12 @@ usort($cats, 'customStrCmp');
                     return [start, end];
                 }).filter(segment => Number.isFinite(segment[0]) && Number.isFinite(segment[1]) &&
                     segment[1] > segment[0] && (!Number.isFinite(threshold) || segment[1] - segment[0] > threshold));
-                let start = Math.max(0, Number(leg.seconds) || 0);
+                let start = Math.max(0, seconds);
                 let end = duration;
-                if (Number(leg.section) > 0) {
-                    const segment = segments[Number(leg.section) - 1];
+                if (section > 0) {
+                    const segment = segments[section - 1];
                     if (!segment) return null;
-                    start = segment[0] + Math.max(0, Number(leg.seconds) || 0);
+                    start = segment[0] + Math.max(0, seconds);
                     if (leg.advance === 'Y') end = segment[1];
                 }
                 if (start >= end) return null;
@@ -8657,22 +8975,37 @@ usort($cats, 'customStrCmp');
 
             async activate(plan) {
                 const snapshot = JSON.parse(JSON.stringify(plan));
-                const commands = this.compile(snapshot);
+                const proposedCommands = this.compile(snapshot);
+                const currentIndex = this.active && this.current ? proposedCommands.findIndex(command =>
+                    command.leg.type !== 'then' &&
+                    command.leg.songCode === this.current.command.leg.songCode &&
+                    Number(command.leg.section) === Number(this.current.command.leg.section)) : -1;
+                const startIndex = currentIndex >= 0 ? proposedCommands[currentIndex].sourceIndex : 0;
+                const remaining = snapshot.slice(startIndex);
+                const commands = this.compile(remaining);
                 if (!commands.length) return false;
                 for (const command of commands) {
+                    if (command.leg.type === 'then') continue;
                     const card = this.cardForCode(command.leg.songCode);
                     if (!card) return false;
                     const audio = await this.readyAudio(card, null);
                     if (!audio || !this.bounds(audio, command.leg)) return false;
+                }
+                if (currentIndex >= 0) {
+                    return this.update(remaining);
                 }
                 const previousAudio = this.current?.audio;
                 this.cancel();
                 playbackCircuit.dropPl();
                 if (previousAudio && !previousAudio.paused) previousAudio.pause();
                 this.plan = snapshot;
+                this.calloutsPlayed.clear();
+                this.lastCalloutRemaining = null;
                 this.commands = commands;
                 this.commandIndex = 0;
                 this.iteration = 0;
+                this.completedLegs = 0;
+                this.completedHistory = [];
                 this.active = true;
                 const generation = ++this.generation;
                 this.dispatchState();
@@ -8685,11 +9018,23 @@ usort($cats, 'customStrCmp');
             }
 
             update(plan) {
-                if (!this.active) return false;
+                if (!this.active || !this.current) return false;
                 const commands = this.compile(JSON.parse(JSON.stringify(plan)));
-                if (!commands.length || this.commandIndex >= commands.length) return false;
+                if (!commands.length || commands[0].leg.type === 'then') return false;
+                const bounds = this.bounds(this.current.audio, commands[0].leg);
+                const position = playbackTime(this.current.audio);
+                if (!bounds || !Number.isFinite(position) || position >= bounds.end) return false;
                 this.plan = JSON.parse(JSON.stringify(plan));
                 this.commands = commands;
+                this.commandIndex = 0;
+                this.iteration = Math.min(this.iteration, commands[0].repeats - 1);
+                this.current = {
+                    ...this.current,
+                    start: Math.max(this.current.start, bounds.start),
+                    end: bounds.end,
+                    command: commands[0]
+                };
+                this.lastCalloutRemaining = null;
                 this.dispatchState();
                 return true;
             }
@@ -8697,7 +9042,8 @@ usort($cats, 'customStrCmp');
             async runCurrent(generation = this.generation) {
                 if (!this.active || generation !== this.generation) return false;
                 const command = this.commands[this.commandIndex];
-                if (!command || command.repeats < 1) return this.advance();
+                if (!command || command.leg.type === 'then') return this.finish();
+                if (command.repeats < 1) return this.advance();
                 const card = this.cardForCode(command.leg.songCode);
                 if (!card) return this.fail();
                 this.transitioning = true;
@@ -8709,10 +9055,18 @@ usort($cats, 'customStrCmp');
                 this.selecting = true;
                 selectCardAudio(audio, card);
                 this.selecting = false;
-                const target = queuePhysicalSeek(audio, bounds.start, true) || audio;
+                const target = audio.__virtualSong ?
+                    playVirtualMember(
+                        audio.__virtualSong,
+                        audio.__virtualIndex,
+                        Math.max(0, bounds.start - Number(audio.__virtualSong.members[audio.__virtualIndex]?.virtualStart || 0)),
+                        false
+                    ) || audio :
+                    queuePhysicalSeek(audio, bounds.start, true) || audio;
                 this.current.audio = target;
                 this.transitioning = false;
-                await playAudio(target, 'legs');
+                const played = await playAudio(target, 'legs');
+                if (!played) return this.fail();
                 this.dispatchState();
                 return true;
             }
@@ -8728,7 +9082,11 @@ usort($cats, 'customStrCmp');
             tick(audio, time) {
                 if (!this.active || this.transitioning || !this.current || seekRadialOwner(audio) !== seekRadialOwner(this.current.audio)) return false;
                 this.current.audio = audio;
-                if (time < this.current.end - .05 * Math.max(.1, Number(audio.playbackRate) || 1)) {
+                if (time < this.current.end - .001) {
+                    this.dispatchProgress();
+                    return false;
+                }
+                if (audio.__virtualSong) {
                     this.dispatchProgress();
                     return false;
                 }
@@ -8739,7 +9097,7 @@ usort($cats, 'customStrCmp');
             ended(audio) {
                 if (!this.active || this.transitioning || !this.current || seekRadialOwner(audio) !== seekRadialOwner(this.current.audio)) return false;
                 this.current.audio = audio;
-                if (audio.__virtualSong && playbackTime(audio) < this.current.end - .001) {
+                if (playbackTime(audio) < this.current.end - .001) {
                     this.dispatchProgress();
                     return false;
                 }
@@ -8753,23 +9111,107 @@ usort($cats, 'customStrCmp');
                 if (!command) return this.finish();
                 if (this.iteration + 1 < command.repeats) this.iteration++;
                 else {
-                    this.commandIndex++;
+                    this.completedHistory.push({ ...command.leg });
+                    this.plan.splice(command.sourceIndex, command.rows);
+                    this.commands = this.compile(this.plan);
+                    this.commandIndex = 0;
                     this.iteration = 0;
+                    this.completedLegs++;
                 }
-                if (this.commandIndex >= this.commands.length) return this.finish();
+                if (!this.commands.length) return this.finish();
                 const generation = this.generation;
                 this.transitioning = true;
                 queueMicrotask(() => this.runCurrent(generation));
                 this.dispatchState();
                 return true;
             }
-
+            async divert(sourceIndex) {
+                if (!this.active || !this.current) return false;
+                const target = this.commands.find(command => command.sourceIndex === sourceIndex);
+                const currentIndex = this.current.command.sourceIndex;
+                if (!target || sourceIndex <= currentIndex || target.leg.type === 'hold') return false;
+                const audio = this.current.audio;
+                if (audio && !audio.paused) audio.pause();
+                this.plan.splice(0, sourceIndex);
+                this.commands = this.compile(this.plan);
+                this.commandIndex = 0;
+                this.iteration = 0;
+                this.completedLegs = 0;
+                this.completedHistory = [];
+                this.current = null;
+                this.transitioning = false;
+                this.calloutsPlayed.clear();
+                this.lastCalloutRemaining = null;
+                const generation = ++this.generation;
+                const started = await this.runCurrent(generation);
+                if (!started) this.fail();
+                return started;
+            }
+            skip() {
+                if (!this.active) return false;
+                if (this.current?.audio && !this.current.audio.paused) {
+                    this.current.audio.pause();
+                }
+                const command = this.commands[this.commandIndex];
+                if (!command) return this.finish();
+                this.completedHistory.push({ ...command.leg });
+                this.plan.splice(command.sourceIndex, command.rows);
+                this.commands = this.compile(this.plan);
+                this.commandIndex = 0;
+                this.iteration = 0;
+                this.completedLegs++;
+                if (!this.commands.length) return this.finish();
+                const generation = ++this.generation;
+                this.transitioning = true;
+                queueMicrotask(() => this.runCurrent(generation));
+                this.dispatchState();
+                return true;
+            }
             commandDuration(command) {
                 const card = this.cardForCode(command.leg.songCode);
                 const audio = card ? audioForCard(card) : null;
                 if (!audio) return null;
                 const bounds = this.bounds(audio, command.leg);
                 return bounds ? (bounds.end - bounds.start) / Math.max(.05, Number(command.leg.rate) || soundCircuit.playbackRate) : null;
+            }
+
+            etaRows() {
+                if (!this.active || !this.current) return [];
+                const rate = Math.max(.05, Number(this.current.audio?.playbackRate) || soundCircuit.playbackRate);
+                let seconds = 0;
+                const rows = [];
+                for (let index = this.commandIndex; index < this.commands.length; index++) {
+                    const command = this.commands[index];
+                    if (command.leg.type === 'then') break;
+                    rows.push({ leg: { ...command.leg }, seconds });
+                    const duration = this.commandDuration(command);
+                    if (duration === null) break;
+                    if (index === this.commandIndex) {
+                        const remaining = Math.max(0, this.current.end - playbackTime(this.current.audio)) / rate;
+                        seconds += remaining + duration * Math.max(0, command.repeats - this.iteration - 1);
+                    } else seconds += duration * command.repeats;
+                }
+                return rows;
+            }
+
+            journey() {
+                if (!this.active || !this.current) return null;
+                const command = this.current.command;
+                const following = this.commands[this.commandIndex + 1];
+                const afterFollowing = this.commands[this.commandIndex + 2];
+                const next = this.iteration + 1 < command.repeats ? command : following;
+                return {
+                    current: { ...command.leg },
+                    next: next && next.leg.type !== 'then' ? { ...next.leg } : null,
+                    following: following && following.leg.type !== 'then' ? { ...following.leg } : null,
+                    afterFollowing: afterFollowing && afterFollowing.leg.type !== 'then' ? { ...afterFollowing.leg } : null,
+                    repeatPending: this.iteration + 1 < command.repeats,
+                    holdRepeat: this.iteration > 0 && command.repeats > 1,
+                    lastRepeat: this.iteration + 1 === command.repeats,
+                    firstLeg: this.completedLegs === 0,
+                    fraction: Math.max(0, Math.min(1, (playbackTime(this.current.audio) - this.current.start) /
+                        (this.current.end - this.current.start)))
+                };
             }
 
             progress() {
@@ -8779,11 +9221,13 @@ usort($cats, 'customStrCmp');
                 const currentRemaining = Math.max(0, this.current.end - currentTime) / rate;
                 const duration = playbackDuration(this.current.audio) || this.current.audio.duration;
                 const model = Number.isFinite(duration) && duration > 0 ? seekRadialModel(this.current.audio, currentTime, duration) : null;
-                const next = this.commands[this.commandIndex + (this.iteration + 1 < this.commands[this.commandIndex].repeats ? 0 : 1)] || null;
+                const nextCandidate = this.commands[this.commandIndex + (this.iteration + 1 < this.commands[this.commandIndex].repeats ? 0 : 1)] || null;
+                const next = nextCandidate?.leg.type === 'then' ? null : nextCandidate;
                 let total = currentRemaining;
                 let known = true;
                 for (let index = this.commandIndex; index < this.commands.length; index++) {
                     const command = this.commands[index];
+                    if (command.leg.type === 'then') break;
                     const duration = this.commandDuration(command);
                     if (duration === null) {
                         known = false;
@@ -8795,18 +9239,38 @@ usort($cats, 'customStrCmp');
                 }
                 return {
                     active: true,
-                    currentLeg: this.current.command.sourceIndex + 1,
+                    currentLeg: this.current.command.leg.songCode || '□□',
                     currentSection: Number(this.current.command.leg.section) || 0,
                     currentRemaining,
-                    nextLeg: next ? next.sourceIndex + 1 : null,
-                    nextEta: currentRemaining,
+                    nextLeg: next ? next.leg.songCode || '----' : '----',
+                    nextEta: next ? currentRemaining : '----',
                     totalRemaining: known ? total : null,
                     percent: model ? Math.max(0, Math.min(100, Math.round(model.activePercent))) : null
                 };
             }
 
+            playCallout(id) {
+                const audio = new Audio(`/m/img/${id}.wav`);
+                this.calloutAudio.add(audio);
+                const done = () => this.calloutAudio.delete(audio);
+                audio.addEventListener('ended', done, { once: true });
+                audio.addEventListener('error', done, { once: true });
+                audio.play().catch(done);
+            }
             dispatchProgress() {
                 const progress = this.progress();
+                if (Number.isFinite(progress.totalRemaining)) {
+                    if (this.lastCalloutRemaining !== null) {
+                        legsCallouts.forEach(([threshold, id]) => {
+                            if (this.lastCalloutRemaining > threshold && progress.totalRemaining <= threshold &&
+                                !this.calloutsPlayed.has(threshold)) {
+                                this.calloutsPlayed.add(threshold);
+                                this.playCallout(id);
+                            }
+                        });
+                    }
+                    this.lastCalloutRemaining = progress.totalRemaining;
+                }
                 const second = Math.floor(progress.currentRemaining || 0);
                 if (second === this.lastProgressSecond) return;
                 this.lastProgressSecond = second;
@@ -8823,6 +9287,7 @@ usort($cats, 'customStrCmp');
                 this.active = false;
                 this.current = null;
                 this.transitioning = false;
+                this.lastCalloutRemaining = null;
                 this.generation++;
                 playbackCircuit.dropPl();
                 if (audio && !audio.paused) audio.pause();
@@ -8848,9 +9313,15 @@ usort($cats, 'customStrCmp');
         }
         legsExecutor = new LegsExecutor();
         window.__npTerminalActivateLegs = plan => legsExecutor.activate(plan);
-        window.__npTerminalUpdateActiveLegs = plan => legsExecutor.update(plan);
         window.__npTerminalLegsProgress = () => legsExecutor.progress();
         window.__npTerminalLegsActive = () => legsExecutor.active;
+        window.__npTerminalActiveLegs = () => JSON.parse(JSON.stringify(legsExecutor.plan));
+        window.__npTerminalLegsCompleted = () => legsExecutor.completedLegs;
+        window.__npTerminalLegsHistory = () => legsExecutor.completedHistory.map(leg => ({ ...leg }));
+        window.__npTerminalLegsJourney = () => legsExecutor.journey();
+        window.__npTerminalLegsEtaRows = () => legsExecutor.etaRows();
+        window.__npTerminalLegsSkip = () => legsExecutor.skip();
+        window.__npTerminalLegsDivert = sourceIndex => legsExecutor.divert(sourceIndex);
         window.__npTerminalIsrAt = position => isrAt(position);
         window.__npTerminalProgSnapshot = () => {
             const audio = currentAudio;
@@ -8871,7 +9342,7 @@ usort($cats, 'customStrCmp');
         };
         let playbackPowerRecovery = null;
         const applyPlaybackCircuitPower = () => {
-            const powered = playbackAvionicsPower.closed;
+            const powered = playbackElektroniksPower.closed;
             if (!powered) {
                 legsExecutor.cancel();
                 const audio = currentAudio;
@@ -8899,12 +9370,12 @@ usort($cats, 'customStrCmp');
             const audio = recovery.audio;
             let restored = false;
             const restore = () => {
-                if (restored || !playbackAvionicsPower.closed || audio !== currentAudio) return;
+                if (restored || !playbackElektroniksPower.closed || audio !== currentAudio) return;
                 restored = true;
                 audio.removeEventListener('loadedmetadata', restore);
                 seekPlayback(audio, recovery.time, false);
                 syncVideoToAudio(audio, recovery.wasPlaying);
-                if (recovery.wasPlaying && soundAvionicsPower.closed) {
+                if (recovery.wasPlaying && soundElektroniksPower.closed) {
                     playAudio(audio, 'A2 breaker reset');
                 }
             };
@@ -8916,7 +9387,7 @@ usort($cats, 'customStrCmp');
                 if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) restore();
             });
         };
-        playbackAvionicsPower.addEventListener('change', applyPlaybackCircuitPower);
+        playbackElektroniksPower.addEventListener('change', applyPlaybackCircuitPower);
         applyPlaybackCircuitPower();
         const applySoundCircuitPower = () => {
             const powered = soundCircuit.powerContact.closed;
@@ -8948,6 +9419,7 @@ usort($cats, 'customStrCmp');
 
         document.addEventListener('ended', (e) => {
             if (e.target.tagName !== 'AUDIO') return;
+            if (e.target !== currentAudio) return;
             if (legsExecutor.ended(e.target)) return;
             if (window.__npKrLooping(e.target) && krLoopStart !== null && krLoopEnd !== null) {
                 const signal = playbackCircuit.pulseBoundary({
@@ -8986,7 +9458,6 @@ usort($cats, 'customStrCmp');
                 updateLoopState();
                 playAudio(currentAudio, 'play button');
             } else {
-                if (isrAt('E')) legsExecutor.cancel();
                 playbackCircuit.dropPl();
                 currentAudio.pause();
             }
@@ -9115,6 +9586,10 @@ usort($cats, 'customStrCmp');
                 if (mVol) mVol.style.transform = 'rotate(' + (Math.cbrt(soundCircuit.volume.value) * 305) + 'deg)';
             };
             const setVol = (lin, source = 'manual') => {
+                if (source === 'manual' && volumeGearMotion) {
+                    volumeGearMotion = null;
+                    panelSoundBank.stopRotary('mVolTerminal');
+                }
                 lin = Math.max(0, Math.min(1, lin));
                 if (!soundCircuit.volume.setValue(Math.pow(lin, 3))) return false;
                 if (source === 'manual') manualVolumeBaseline = lin;
@@ -9270,6 +9745,10 @@ usort($cats, 'customStrCmp');
                 if (mSpd) mSpd.style.transform = 'rotate(' + ((0.5 - soundCircuit.speed.value) * 360) + 'deg)';
             };
             const setSpd = (p, source = 'manual') => {
+                if (source === 'manual' && speedGearMotion) {
+                    speedGearMotion = null;
+                    panelSoundBank.stopRotary('mSpdTerminal');
+                }
                 if (!soundCircuit.speed.setValue(p)) return false;
                 if (source === 'manual') manualSpeedBaseline = speedRateAt(p);
                 if (!speedUpdateQueued) {
@@ -9350,8 +9829,15 @@ usort($cats, 'customStrCmp');
                 if (mR3) mR3.style.transform = 'rotate(' + ((playbackCircuit.sectionWindow.value * 305) - 152.5) + 'deg)';
             };
             const setR3 = (value, source = 'manual') => {
+                if (source === 'manual' && sectionWindowGearMotion) {
+                    sectionWindowGearMotion = null;
+                    panelSoundBank.stopRotary('mR3Terminal');
+                }
                 if (!playbackCircuit.sectionWindow.setValue(value)) return false;
-                if (source === 'manual') manualSectionWindowBaseline = Math.round(value * SECTION_WINDOW_MAX_SECONDS);
+                if (source === 'manual') {
+                    manualSectionWindowBaseline = Math.round(value * SECTION_WINDOW_MAX_SECONDS);
+                    document.dispatchEvent(new Event('m2manualsectionwindowchange'));
+                }
                 if (!sectionWindowUpdateQueued) {
                     sectionWindowUpdateQueued = true;
                     requestAnimationFrame(() => {
@@ -9853,16 +10339,15 @@ usort($cats, 'customStrCmp');
                     if (info && Number.isInteger(index) && info.members[index]) {
                         const switchingCard = !cardAudioIsCurrent(card);
                         if (switchingCard) playbackCircuit?.dropPl();
-                        const memberAudio = switchingCard ?
-                            playVirtualMember(info, 0, 0, false) : currentAudio;
+                        const memberAudio = playVirtualMember(info, index, 0, false);
                         if (!memberAudio) return;
                         if (switchingCard) activateCardAudio(memberAudio, true, 'virtual lyric');
                         const activate = () => {
                             if (seekRadialOwner(currentAudio) !== info) return;
-                            if (!switchingCard) activateCardAudio(currentAudio, false, 'virtual lyric');
-                            ensureVirtualMetadata(info, currentAudio).then(ready => {
+                            ensureVirtualMetadata(info, memberAudio).then(ready => {
                                 if (!ready || seekRadialOwner(currentAudio) !== info) return;
-                                queuePhysicalSeek(currentAudio, info.members[index].virtualStart);
+                                const target = queuePhysicalSeek(memberAudio, info.members[index].virtualStart) || memberAudio;
+                                if (!switchingCard) activateCardAudio(target, false, 'virtual lyric');
                             });
                         };
                         if (memberAudio.readyState >= 1) activate();
@@ -11089,7 +11574,7 @@ usort($cats, 'customStrCmp');
             class DcNetlist {
                 #devices = new Map();
                 #specs = new Map();
-                #avionicsDevices = new WeakSet();
+                #elektroniksDevices = new WeakSet();
                 #wireNumber = 700;
 
                 constructor(circuit, registry, { supplies = {}, returns = {}, protectedSupplies = [] } = {}) {
@@ -11132,8 +11617,8 @@ usort($cats, 'customStrCmp');
                     return this.#devices.get(id) || null;
                 }
 
-                attachAvionicsDevice(spec, device, options = {}) {
-                    if (this.#avionicsDevices.has(device) || spec.electrical === false) return device;
+                attachElektroniksDevice(spec, device, options = {}) {
+                    if (this.#elektroniksDevices.has(device) || spec.electrical === false) return device;
                     const supply = spec.dcSupply || options.supply || 'main';
                     const returnName = spec.dcReturn || options.return || 'dc';
                     const sense = spec.sense || options.sense || 'power';
@@ -11151,7 +11636,7 @@ usort($cats, 'customStrCmp');
                             powerContact: device.power
                         });
                         device.bindElectricalInput(input);
-                    } else if (device instanceof AvionicsSelector) {
+                    } else if (device instanceof ElektroniksSelector) {
                         device.positions.forEach(position => {
                             const input = this.add({
                                 id: prefix + '_' + position,
@@ -11178,12 +11663,12 @@ usort($cats, 'customStrCmp');
                         });
                         device.bindElectricalInput(input);
                     }
-                    this.#avionicsDevices.add(device);
+                    this.#elektroniksDevices.add(device);
                     return device;
                 }
 
                 attachSelector(id, selector, options = {}) {
-                    return this.attachAvionicsDevice({
+                    return this.attachElektroniksDevice({
                         id,
                         type: 'selector',
                         name: selector.name,
@@ -11195,7 +11680,7 @@ usort($cats, 'customStrCmp');
                 }
 
                 attachAnalog(id, control, options = {}) {
-                    if (this.#avionicsDevices.has(control)) return control;
+                    if (this.#elektroniksDevices.has(control)) return control;
                     const input = this.add({
                         id,
                         type: 'analog-input',
@@ -11207,7 +11692,7 @@ usort($cats, 'customStrCmp');
                         powerContact: control.power
                     });
                     control.bindElectricalInput(input);
-                    this.#avionicsDevices.add(control);
+                    this.#elektroniksDevices.add(control);
                     return control;
                 }
 
@@ -11315,7 +11800,7 @@ usort($cats, 'customStrCmp');
                     context.wire((spec.name || spec.id) + ' RETURN', lamp.a2, context.returnTerminal);
                     return lamp;
                 })
-                .register('avionics-unit', (spec, context) => {
+                .register('elektroniks-unit', (spec, context) => {
                     const unit = context.circuit.addLoad(new DcPoweredLoad(
                         spec.name || spec.id,
                         { resistance: spec.resistance }
@@ -11893,7 +12378,7 @@ usort($cats, 'customStrCmp');
                             'CB-P0 PAGE CONTROL', circuit, ['control']
                         ),
                         mainSense: new DcBranchCircuitBreaker(
-                            'CB-A0 MAIN AVIONICS BUS SENSE', circuit, ['main']
+                            'CB-A0 MAIN ELEKTRONIKS BUS SENSE', circuit, ['main']
                         ),
                         panel: new DcBranchCircuitBreaker(
                             'CB-A1 PANEL CONTROLLER', circuit, ['main']
@@ -12043,12 +12528,12 @@ usort($cats, 'customStrCmp');
                         ]
                     });
                     const equipmentLoads = netlist.install([
-                        { id: 'mainSystemsLoad', type: 'avionics-unit', name: 'A0 MAIN AVIONICS BUS SENSE', supply: 'mainSense', return: 'dc', resistance: 28000 },
-                        { id: 'panelSystemsLoad', type: 'avionics-unit', name: 'A1 PANEL CONTROLLER', supply: 'panel', return: 'dc', resistance: 560 },
-                        { id: 'playbackSystemsLoad', type: 'avionics-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'playback', return: 'dc', resistance: 560 },
-                        { id: 'soundSystemsLoad', type: 'avionics-unit', name: 'A3 SOUND CONTROLLER', supply: 'sound', return: 'dc', resistance: 280 },
-                        { id: 'archiveSystemsLoad', type: 'avionics-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'dc', resistance: 1120 },
-                        { id: 'lightingSystemsLoad', type: 'avionics-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'dc', resistance: 1120 }
+                        { id: 'mainSystemsLoad', type: 'elektroniks-unit', name: 'A0 MAIN ELEKTRONIKS BUS SENSE', supply: 'mainSense', return: 'dc', resistance: 28000 },
+                        { id: 'panelSystemsLoad', type: 'elektroniks-unit', name: 'A1 PANEL CONTROLLER', supply: 'panel', return: 'dc', resistance: 560 },
+                        { id: 'playbackSystemsLoad', type: 'elektroniks-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'playback', return: 'dc', resistance: 560 },
+                        { id: 'soundSystemsLoad', type: 'elektroniks-unit', name: 'A3 SOUND CONTROLLER', supply: 'sound', return: 'dc', resistance: 280 },
+                        { id: 'archiveSystemsLoad', type: 'elektroniks-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'dc', resistance: 1120 },
+                        { id: 'lightingSystemsLoad', type: 'elektroniks-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'dc', resistance: 1120 }
                     ]);
                     const activityLoads = netlist.install([
                         { id: 'playbackActivityLoad', type: 'switched-load', name: 'A2-L PLAYBACK MEDIA LOAD', supply: 'playback', return: 'dc', resistance: 560 },
@@ -12088,10 +12573,10 @@ usort($cats, 'customStrCmp');
                     ]);
                     const powerBridges = [
                         [equipmentLoads.mainSystemsLoad, pageMainSystemsPower],
-                        [equipmentLoads.panelSystemsLoad, panelAvionicsPower],
-                        [equipmentLoads.playbackSystemsLoad, playbackAvionicsPower],
-                        [equipmentLoads.soundSystemsLoad, soundAvionicsPower],
-                        [equipmentLoads.archiveSystemsLoad, archiveAvionicsPower]
+                        [equipmentLoads.panelSystemsLoad, panelElektroniksPower],
+                        [equipmentLoads.playbackSystemsLoad, playbackElektroniksPower],
+                        [equipmentLoads.soundSystemsLoad, soundElektroniksPower],
+                        [equipmentLoads.archiveSystemsLoad, archiveElektroniksPower]
                     ];
                     powerBridges.forEach(([load, contact]) => {
                         const synchronize = () => contact.setClosed(
@@ -12112,7 +12597,7 @@ usort($cats, 'customStrCmp');
                         this.#timeBusContactAuthority
                     );
                     playbackCircuit.plContact.addEventListener('change', synchronizeTimeBusContact);
-                    playbackAvionicsPower.addEventListener('change', synchronizeTimeBusContact);
+                    playbackElektroniksPower.addEventListener('change', synchronizeTimeBusContact);
                     synchronizeTimeBusContact();
                     const synchronizeTimeBusPower = () => timeBusPower.setClosed(
                         timeBusLoads.timeActiveDisplay.energized && !circuit.source.tripped,
@@ -13029,7 +13514,10 @@ usort($cats, 'customStrCmp');
                     }
                 });
             };
-            const renderTerminalScreen = () => renderTerminalRows(Array.from({ length: terminalRows }, (_, row) => row));
+            const renderTerminalScreen = () => {
+                terminalScreen.classList.toggle('is-test-sweep', testRunning && testState.phase === 'sweep');
+                renderTerminalRows(Array.from({ length: terminalRows }, (_, row) => row));
+            };
             const writeTerminalAligned = (row, value, alignment, attributes = {}) => {
                 const text = [...String(value ?? '')].slice(0, terminalColumns).join('');
                 const column = alignment === 'right' ? terminalColumns - text.length : alignment === 'center' ? Math.floor((terminalColumns - text.length) / 2) : 0;
@@ -13092,9 +13580,13 @@ usort($cats, 'customStrCmp');
                 }
                 return first.length - second.length;
             };
+            const terminalNdDurations = <?= json_encode($ndSongDurations, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
             const sourceSongCards = [...document.querySelectorAll('.cardWrap')].map((wrap, index) => {
                 const card = wrap.querySelector('.card');
                 const virtualMember = card?.__virtualMember;
+                const sectionMarks = virtualMember ? [] : [...(card?.querySelectorAll('.cLyr .lrcLine:not([data-l])') || [])]
+                    .map(line => Number.parseFloat(line.dataset.t))
+                    .filter(Number.isFinite);
                 return {
                     id: card?.id || String(index),
                     title: card?.querySelector('.cName')?.textContent.trim() || '',
@@ -13103,6 +13595,10 @@ usort($cats, 'customStrCmp');
                     url: card?.dataset.songUrl?.trim() || '',
                     seriesTitle: virtualMember?.info?.seriesTitle || '',
                     memberTitle: virtualMember?.displayTitle || '',
+                    virtualOriginKey: virtualMember?.info?.seriesTitle?.trim() || '',
+                    virtualIndex: virtualMember?.index ?? -1,
+                    sectionMarks,
+                    duration: terminalNdDurations[card?.dataset.songUrl?.trim() || ''] || 0,
                     hasTranslation: !!wrap.querySelector('.mLyricsToggle')
                 };
             }).filter(song => song.title !== '');
@@ -13112,6 +13608,448 @@ usort($cats, 'customStrCmp');
                 return left.length - right.length || (left < right ? -1 : left > right ? 1 : 0);
             }).map(song => ({ ...song, code: song.url.toUpperCase() }));
             const songCards = songsByUrl;
+            const terminalNd = document.querySelector('#mTerminalNd .mTerminalNdWorld');
+            const terminalNdHead = document.getElementById('mTerminalNdHead');
+            const terminalNdHash = (value, seed) => {
+                let hash = 2166136261 ^ seed;
+                for (const character of value) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
+                hash ^= hash >>> 16;
+                hash = Math.imul(hash, 0x85ebca6b);
+                hash ^= hash >>> 13;
+                hash = Math.imul(hash, 0xc2b2ae35);
+                hash ^= hash >>> 16;
+                return (hash >>> 0) / 4294967296;
+            };
+            const terminalNdCell = index => {
+                let x = 0;
+                let y = 0;
+                for (let scale = 1; scale < 64; scale *= 2) {
+                    const right = 1 & (index >> 1);
+                    const up = 1 & (index ^ right);
+                    if (up === 0) {
+                        if (right === 1) {
+                            x = scale - 1 - x;
+                            y = scale - 1 - y;
+                        }
+                        [x, y] = [y, x];
+                    }
+                    x += scale * right;
+                    y += scale * up;
+                    index >>= 2;
+                }
+                return { x, y };
+            };
+            const terminalNdLocalPoint = (index, spacing) => {
+                const angle = (index + 1) * 2.399963229728653;
+                const radius = spacing * Math.sqrt(index + 1);
+                return { x: Math.round(Math.cos(angle) * radius), y: Math.round(Math.sin(angle) * radius) };
+            };
+            const terminalNdCategoryPoints = <?= json_encode($ndCategoryPositions, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;
+            const terminalNdCategoryPoint = category => {
+                if (!Object.prototype.hasOwnProperty.call(terminalNdCategoryPoints, category)) {
+                    throw new Error('Missing ND category position');
+                }
+                return terminalNdCategoryPoints[category];
+            };
+            const terminalNdSongPoint = (category, code) => {
+                const codeIndex = /^[A-Z0-9]{1,2}$/.test(code) ? Number.parseInt(code, 36) :
+                    Math.floor(terminalNdHash(code, 23) * 4096);
+                const cell = terminalNdCell((codeIndex * 2053) % 4096);
+                const origin = terminalNdCategoryPoint(category);
+                return {
+                    x: Math.round(origin.x + (cell.x - 31.5) * 70 + (terminalNdHash(code, 29) - .5) * 24),
+                    y: Math.round(origin.y + (cell.y - 31.5) * 70 + (terminalNdHash(code, 31) - .5) * 24)
+                };
+            };
+            const terminalNdPoints = new Map();
+            const terminalNdElements = new Map();
+            const terminalNdSongs = new Map(songCards.map(song => [song.code, song]));
+            const terminalNdRouteDraft = terminalNd.querySelector('[data-nd-route="draft"]');
+            const terminalNdRouteActive = terminalNd.querySelector('[data-nd-route="active"]');
+            const terminalNdSvgNamespace = 'http://www.w3.org/2000/svg';
+            const addTerminalNdNode = (fragment, label, point, duration) => {
+                terminalNdPoints.set(label, point);
+                const node = document.createElement('span');
+                node.className = 'mTerminalNdNode';
+                node.style.left = `calc(50% + ${point.x}px)`;
+                node.style.top = `calc(50% + ${point.y}px)`;
+                const star = document.createElementNS(terminalNdSvgNamespace, 'svg');
+                star.classList.add('mTerminalNdStar');
+                star.setAttribute('viewBox', '0 0 20 20');
+                const outline = document.createElementNS(terminalNdSvgNamespace, 'path');
+                outline.setAttribute('d', 'M10 0 L12 8 L20 10 L12 12 L10 20 L8 12 L0 10 L8 8 Z');
+                star.append(outline);
+                const code = document.createElement('span');
+                code.className = 'mTerminalNdCode';
+                code.textContent = label;
+                if (Number.isFinite(duration) && duration > 0) {
+                    const seconds = document.createElement('span');
+                    seconds.className = 'mTerminalNdDuration';
+                    seconds.textContent = String(Math.round(duration));
+                    code.append(seconds);
+                }
+                const eta = document.createElement('span');
+                eta.className = 'mTerminalNdEta';
+                eta.hidden = true;
+                code.append(eta);
+                node.append(star, code);
+                terminalNdElements.set(label, node);
+                fragment.append(node);
+            };
+            const terminalNdSectionWindow = song => {
+                const personal = persistedSongSettings[song.id]?.sectionWindow;
+                const global = persistedGlobalSettings.sectionWindow;
+                return Number(personal !== undefined && personal !== '' ? personal :
+                    global !== '' ? global : window.__npTerminalManualSectionWindow?.() ?? 0);
+            };
+            const rebuildTerminalNdNodes = () => {
+                terminalNd.querySelectorAll('.mTerminalNdNode').forEach(node => node.remove());
+                terminalNdPoints.clear();
+                terminalNdElements.clear();
+                const fragment = document.createDocumentFragment();
+                songCards.forEach(song => {
+                    const origin = terminalNdSongPoint(song.category, song.virtualOriginKey || song.code);
+                    if (song.virtualOriginKey) {
+                        song.ndSections = [];
+                        const offset = terminalNdLocalPoint(song.virtualIndex, 48);
+                        addTerminalNdNode(fragment, song.code, { x: origin.x + offset.x, y: origin.y + offset.y }, song.duration);
+                        return;
+                    }
+                    const threshold = terminalNdSectionWindow(song);
+                    song.ndSections = song.sectionMarks.map((start, index) => ({
+                        start,
+                        end: index + 1 < song.sectionMarks.length ? song.sectionMarks[index + 1] : song.duration
+                    })).filter(section => Number.isFinite(section.end) && section.end - section.start > threshold);
+                    if (song.ndSections.length) {
+                        song.ndSections.forEach((_, index) => {
+                            const offset = terminalNdLocalPoint(index, 34);
+                            addTerminalNdNode(fragment, `${song.code}/${index + 1}`, {
+                                x: origin.x + offset.x, y: origin.y + offset.y
+                            }, song.duration);
+                        });
+                    } else addTerminalNdNode(fragment, song.code, origin, song.duration);
+                });
+                terminalNd.append(fragment);
+                terminalNdActiveLabel = '';
+                renderTerminalNdRoutes();
+                if (terminalNdActiveAudio) moveTerminalNdHead(terminalNdActiveAudio);
+            };
+            const terminalNdLegLabel = leg => {
+                const code = String(leg?.songCode || '').trim().toUpperCase();
+                const song = terminalNdSongs.get(code);
+                if (!song) return '';
+                if (!song.ndSections?.length) return code;
+                const section = Number(leg.section) || Number(/^\d{1,2}\//.exec(String(leg.time || ''))?.[0].slice(0, -1)) || 1;
+                return `${code}/${section}`;
+            };
+            const terminalNdLegPoint = leg => terminalNdPoints.get(terminalNdLegLabel(leg));
+            const terminalNdLegSeconds = leg => {
+                if (Number.isFinite(Number(leg?.seconds))) return Number(leg.seconds);
+                const match = /^\d{1,2}\/(\d{1,3})\.(\d{1,2})$/.exec(String(leg?.time || ''));
+                return match ? Math.max(0, (Number(match[1]) - 1) * 60 + Number(match[2]) - 1) : 0;
+            };
+            const terminalNdEntryPoint = (leg, nextLeg, eligible) => {
+                const star = terminalNdLegPoint(leg);
+                if (!star || !eligible || !nextLeg) return star;
+                const song = terminalNdSongs.get(String(leg.songCode || '').toUpperCase());
+                const next = terminalNdLegPoint(nextLeg);
+                const seconds = terminalNdLegSeconds(leg);
+                if (!song || song.ndSections?.length || !next || !(seconds > 0) || !(song.duration > seconds)) return star;
+                const fraction = seconds / song.duration;
+                return {
+                    x: star.x + (next.x - star.x) * fraction,
+                    y: star.y + (next.y - star.y) * fraction
+                };
+            };
+            const terminalNdSegmentPoints = (from, to, star) => {
+                if (!from || !to) return [];
+                if (!star || Math.hypot(to.x - star.x, to.y - star.y) < .01) return [from, to];
+                const incoming = Math.hypot(from.x - star.x, from.y - star.y);
+                const outgoing = Math.hypot(to.x - star.x, to.y - star.y);
+                if (incoming < .01 || outgoing < .01) return [from, to];
+                const inbound = { x: (star.x - from.x) / incoming, y: (star.y - from.y) / incoming };
+                const before = {
+                    x: star.x - inbound.x * incoming * .55,
+                    y: star.y - inbound.y * incoming * .55
+                };
+                const points = [from, before];
+                for (let index = 1; index <= 24; index++) {
+                    const amount = index / 24;
+                    const inverse = 1 - amount;
+                    points.push({
+                        x: inverse * inverse * before.x + 2 * inverse * amount * star.x + amount * amount * to.x,
+                        y: inverse * inverse * before.y + 2 * inverse * amount * star.y + amount * amount * to.y
+                    });
+                }
+                return points;
+            };
+            const terminalNdHoldPoints = (star, next) => {
+                const angle = next ? Math.atan2(next.y - star.y, next.x - star.x) : 0;
+                const cosine = Math.cos(angle);
+                const sine = Math.sin(angle);
+                const a = 24;
+                const b = 12;
+                const local = (x, y) => ({ x: star.x + x * cosine - y * sine, y: star.y + x * sine + y * cosine });
+                const points = [star, local(-a, -b), local(a, -b)];
+                for (let index = 1; index <= 16; index++) {
+                    const turn = -Math.PI / 2 + Math.PI * index / 16;
+                    points.push(local(a + b * Math.cos(turn), b * Math.sin(turn)));
+                }
+                points.push(local(-a, b));
+                for (let index = 1; index <= 16; index++) {
+                    const turn = Math.PI / 2 + Math.PI * index / 16;
+                    points.push(local(-a + b * Math.cos(turn), b * Math.sin(turn)));
+                }
+                points.push(star);
+                return points;
+            };
+            const terminalNdPointOnPath = (points, fraction) => {
+                if (!points.length) return null;
+                if (points.length === 1) return points[0];
+                const lengths = [];
+                let total = 0;
+                for (let index = 1; index < points.length; index++) {
+                    const length = Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
+                    lengths.push(length);
+                    total += length;
+                }
+                let target = Math.max(0, Math.min(1, fraction)) * total;
+                for (let index = 1; index < points.length; index++) {
+                    const length = lengths[index - 1];
+                    if (target <= length || index === points.length - 1) {
+                        const amount = length ? target / length : 0;
+                        return {
+                            x: points[index - 1].x + (points[index].x - points[index - 1].x) * amount,
+                            y: points[index - 1].y + (points[index].y - points[index - 1].y) * amount
+                        };
+                    }
+                    target -= length;
+                }
+                return points[points.length - 1];
+            };
+            const terminalNdPathText = points => points.map((point, index) =>
+                `${index ? 'L' : 'M'}${800 + point.x} ${475 + point.y}`).join('');
+            const terminalNdDraftRoute = active => {
+                let draftRoute = legsDraft;
+                if (active.length && !draftOriginActive && legsActivatedPlanText && JSON.stringify(legsDraft) === legsActivatedPlanText) {
+                    return [];
+                }
+                if (draftOriginActive) {
+                    const history = (window.__npTerminalLegsHistory?.() || []).slice(draftHistoryIndex);
+                    let offset = 0;
+                    history.forEach(leg => {
+                        if (terminalNdLegLabel(draftRoute[offset]) !== terminalNdLegLabel(leg)) return;
+                        offset++;
+                        while (draftRoute[offset]?.type === 'hold') offset++;
+                    });
+                    draftRoute = draftRoute.slice(offset);
+                }
+                return draftRoute;
+            };
+            const renderTerminalNdEta = () => {
+                const values = new Map();
+                for (const row of window.__npTerminalLegsEtaRows?.() || []) {
+                    const label = terminalNdLegLabel(row.leg);
+                    if (label && !values.has(label)) values.set(label, row.seconds);
+                }
+                terminalNdElements.forEach((node, label) => {
+                    const eta = node.querySelector('.mTerminalNdEta');
+                    const seconds = values.get(label);
+                    eta.hidden = !terminalNdEtaOn || !node.classList.contains('is-route-leg') || !Number.isFinite(seconds);
+                    if (!eta.hidden) eta.textContent = String(Math.ceil(seconds));
+                    node.classList.toggle('is-eta-on', terminalNdEtaOn);
+                });
+            };
+            const renderTerminalNdRoutes = () => {
+                terminalNdRouteDraft.replaceChildren();
+                terminalNdRouteActive.replaceChildren();
+                const draftLabels = new Set();
+                const activeLabels = new Set();
+                const addRoute = (plan, group, labels, color, dashed) => {
+                    const segments = [[]];
+                    plan.forEach(leg => {
+                        if (!leg || leg.type === 'then') {
+                            if (segments[segments.length - 1].length) segments.push([]);
+                        } else if (leg.type === 'hold') {
+                            const previous = segments[segments.length - 1].at(-1);
+                            if (previous) previous.hold += Math.max(0, Number(leg.times) || 0);
+                        } else {
+                            segments[segments.length - 1].push({ leg, star: terminalNdLegPoint(leg), hold: 0 });
+                        }
+                    });
+                    let pathText = '';
+                    segments.forEach(segment => {
+                        segment.forEach((entry, index) => {
+                            if (!entry.star) return;
+                            labels.add(terminalNdLegLabel(entry.leg));
+                            entry.point = terminalNdEntryPoint(entry.leg, segment[index + 1]?.leg,
+                                index < segment.length - 1);
+                        });
+                        segment.forEach((entry, index) => {
+                            if (!entry.star) return;
+                            const next = segment[index + 1];
+                            if (entry.hold > 0) pathText += terminalNdPathText(terminalNdHoldPoints(entry.star, next?.point));
+                            if (next?.star && entry.point && next.point) {
+                                pathText += terminalNdPathText(terminalNdSegmentPoints(entry.point, next.point, next.star));
+                            }
+                        });
+                    });
+                    if (!pathText) return;
+                    const path = document.createElementNS(terminalNdSvgNamespace, 'path');
+                    path.setAttribute('d', pathText);
+                    path.setAttribute('stroke', color);
+                    path.setAttribute('stroke-width', String(2 * terminalNdRanges[terminalNdRangeIndex]));
+                    if (dashed) path.setAttribute('stroke-dasharray', `${6 * terminalNdRanges[terminalNdRangeIndex]} ${4 * terminalNdRanges[terminalNdRangeIndex]}`);
+                    group.append(path);
+                };
+                const active = window.__npTerminalLegsActive?.() ? window.__npTerminalActiveLegs?.() || [] : [];
+                const draftRoute = terminalNdDraftRoute(active);
+                addRoute(draftRoute, terminalNdRouteDraft, draftLabels, '#fff', true);
+                addRoute(active, terminalNdRouteActive, activeLabels, '#d665ff', false);
+                const journey = window.__npTerminalLegsJourney?.();
+                const highlighted = new Set();
+                if (journey) {
+                    highlighted.add(terminalNdLegLabel(journey.current));
+                    highlighted.add(terminalNdLegLabel(journey.following));
+                }
+                terminalNdElements.forEach((node, label) => {
+                    node.classList.toggle('is-route-leg', activeLabels.has(label));
+                    node.classList.toggle('is-active-leg', activeLabels.has(label) && highlighted.has(label));
+                    node.classList.toggle('is-draft-leg', !activeLabels.has(label) && draftLabels.has(label));
+                    node.hidden = !terminalNdDataOn && !activeLabels.has(label) && !draftLabels.has(label) &&
+                        label !== terminalNdLegLabel(journey?.current) && (journey || label !== terminalNdActiveLabel);
+                });
+                renderTerminalNdEta();
+            };
+            let terminalNdActiveAudio = null;
+            let terminalNdActiveLabel = '';
+            const terminalNdRanges = [1, 5, 10, 20, 50];
+            let terminalNdRangeIndex = 0;
+            let terminalNdStepIndex = -1;
+            let terminalNdCurrentPoint = null;
+            let terminalNdHeading = null;
+            let terminalNdEtaOn = true;
+            let terminalNdDataOn = true;
+            let terminalNdRotateOn = false;
+            const terminalNdCompass = document.querySelector('#mTerminalNd .mTerminalNdCompass');
+            const terminalNdInnerRangeLabel = document.querySelector('[data-nd-range-label="inner"]');
+            const terminalNdOuterRangeLabel = document.querySelector('[data-nd-range-label="outer"]');
+            const terminalNdStepTargets = () => {
+                const active = window.__npTerminalLegsActive?.() ? window.__npTerminalActiveLegs?.() || [] : [];
+                return [...active, ...terminalNdDraftRoute(active)]
+                    .filter(leg => leg?.type === 'song')
+                    .map(terminalNdLegPoint)
+                    .filter(Boolean);
+            };
+            const renderTerminalNdCamera = () => {
+                const selectedLeg = folio.kind === 'legs' && !activeLegsPlan() ? displayedLegs()[legsSel] : null;
+                const stepPoint = folio.kind === 'kontrols' ? terminalNdStepTargets()[terminalNdStepIndex] : null;
+                const point = (selectedLeg && legHasData(selectedLeg) ? terminalNdLegPoint(selectedLeg) : null) || stepPoint ||
+                    terminalNdCurrentPoint || { x: 0, y: 0 };
+                const range = terminalNdRanges[terminalNdRangeIndex];
+                const scale = 1 / range;
+                terminalNdInnerRangeLabel.textContent = `${range / 2}X`;
+                terminalNdOuterRangeLabel.textContent = `${range}X`;
+                const rotation = terminalNdRotateOn && Number.isFinite(terminalNdHeading) ?
+                    -90 - terminalNdHeading * 180 / Math.PI : 0;
+                terminalNd.style.setProperty('--nd-range', String(range));
+                terminalNd.style.setProperty('--nd-label-rotation', `${-rotation}deg`);
+                terminalNd.style.transform = `translate(-50%, -50%) rotate(${rotation}deg) translate(${-point.x * scale}px, ${-point.y * scale}px) scale(${scale})`;
+                terminalNdCompass.style.transform = `rotate(${rotation}deg)`;
+            };
+            const terminalNdPathHeading = (points, fraction) => {
+                const before = terminalNdPointOnPath(points, Math.max(0, fraction - .002));
+                const after = terminalNdPointOnPath(points, Math.min(1, fraction + .002));
+                const dx = after.x - before.x;
+                const dy = after.y - before.y;
+                return Math.hypot(dx, dy) > .0001 ? Math.atan2(dy, dx) : null;
+            };
+            const setTerminalNdHeadPoint = (point, heading = null) => {
+                terminalNdCurrentPoint = point;
+                if (heading !== null) terminalNdHeading = heading;
+                terminalNdHead.style.left = `calc(50% + ${point.x}px)`;
+                terminalNdHead.style.top = `calc(50% + ${point.y}px)`;
+                terminalNdHead.hidden = false;
+                renderTerminalNdCamera();
+            };
+            const moveTerminalNdHead = audio => {
+                const journey = window.__npTerminalLegsJourney?.();
+                if (journey) {
+                    const star = terminalNdLegPoint(journey.current);
+                    if (star) {
+                        if (journey.holdRepeat) {
+                            const followingStar = journey.following ? terminalNdLegPoint(journey.following) : null;
+                            const followingEntry = terminalNdEntryPoint(journey.following, journey.afterFollowing,
+                                !!journey.afterFollowing);
+                            const points = terminalNdHoldPoints(star, followingStar);
+                            if (journey.lastRepeat && followingEntry && followingStar) {
+                                points.push(...terminalNdSegmentPoints(star, followingEntry, followingStar).slice(1));
+                            }
+                            setTerminalNdHeadPoint(terminalNdPointOnPath(points, journey.fraction),
+                                terminalNdPathHeading(points, journey.fraction));
+                            return;
+                        }
+                        if (journey.repeatPending) {
+                            setTerminalNdHeadPoint(star);
+                            return;
+                        }
+                        const start = terminalNdEntryPoint(journey.current, journey.following,
+                            !!journey.following);
+                        const nextStar = journey.next ? terminalNdLegPoint(journey.next) : null;
+                        const next = terminalNdEntryPoint(journey.next, journey.afterFollowing,
+                            !!journey.afterFollowing);
+                        const points = next && nextStar ? terminalNdSegmentPoints(start, next, nextStar) : [star];
+                        setTerminalNdHeadPoint(terminalNdPointOnPath(points, journey.fraction),
+                            terminalNdPathHeading(points, journey.fraction));
+                        return;
+                    }
+                }
+                const memberCard = audio?.__virtualSong?.members[audio.__virtualIndex]?.card;
+                const code = (memberCard || audio?.closest('.card'))?.dataset.songUrl?.trim().toUpperCase();
+                const song = terminalNdSongs.get(code);
+                if (!song) return;
+                let label = code;
+                if (!song.virtualOriginKey && song.ndSections?.length) {
+                    let section = 1;
+                    for (let index = 1; index < song.ndSections.length; index++) {
+                        if (audio.currentTime < song.ndSections[index].start) break;
+                        section = index + 1;
+                    }
+                    label = `${code}/${section}`;
+                }
+                const point = terminalNdPoints.get(label);
+                if (!point) return;
+                if (label === terminalNdActiveLabel) {
+                    if (terminalNdHeading !== null) {
+                        terminalNdHeading = null;
+                        renderTerminalNdCamera();
+                    }
+                    return;
+                }
+                terminalNdActiveLabel = label;
+                terminalNdHeading = null;
+                setTerminalNdHeadPoint(point);
+                if (!terminalNdDataOn) renderTerminalNdRoutes();
+            };
+            let terminalNdFrame = 0;
+            const tickTerminalNd = () => {
+                terminalNdFrame = 0;
+                if (!terminalNdActiveAudio || terminalNdActiveAudio.paused) return;
+                moveTerminalNdHead(terminalNdActiveAudio);
+                terminalNdFrame = requestAnimationFrame(tickTerminalNd);
+            };
+            document.addEventListener('playing', event => {
+                if (event.target?.tagName !== 'AUDIO') return;
+                terminalNdActiveAudio = event.target;
+                moveTerminalNdHead(event.target);
+                if (!terminalNdFrame) terminalNdFrame = requestAnimationFrame(tickTerminalNd);
+            }, true);
+            document.addEventListener('timeupdate', event => {
+                if (event.target === terminalNdActiveAudio) moveTerminalNdHead(event.target);
+            }, true);
+            document.addEventListener('seeked', event => {
+                if (event.target === terminalNdActiveAudio) moveTerminalNdHead(event.target);
+            }, true);
             const categories = [...new Set(songCards.map(song => song.category).filter(Boolean))].sort(compareTerminalText);
             const songLetters = [...new Set(songCards.map(song =>
                 (asciiMaker(song.sortTitle).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean))].sort(compareTerminalText);
@@ -13132,6 +14070,36 @@ usort($cats, 'customStrCmp');
             let legsDraftPages = 1;
             let persistedLegsPages = 1;
             let legsProgress = { active: false };
+            let activePlanFingerprint = '';
+            let legsActivatedPlanText = '';
+            let draftOriginActive = false;
+            let draftHistoryIndex = 0;
+            let legsSel = null;
+            const legsPerPage = 4;
+            let savedLegSlots = Array.from({ length: 4 }, () => null);
+            let saveLegOverride = null;
+            let saveLegEdit = null;
+            let testGeneration = 0;
+            let testRunning = false;
+            let testState = { phase: 'grid', inverted: false, column: 0, style: 0 };
+            let archiveInfo = null;
+            let archiveRequest = 0;
+            let archiveCheckResult = null;
+            let archiveInstallCalled = false;
+            const testColors = ['white', 'amber', 'green', 'cyan', 'magenta', 'red', 'gray'];
+            const testSweepStyleCount = testColors.length * 8;
+            const testSweepColumns = Array(terminalColumns).fill(null);
+            const forEachTestGridCell = visit => {
+                for (let row = 0; row <= 10; row++) {
+                    for (let column = 0; column < terminalColumns; column++) {
+                        if (row === 10 && column >= 19) continue;
+                        if (row === 5 && column >= 8 && column < 16) continue;
+                        const block = Math.floor(row / 3) * Math.ceil(terminalColumns / 5) + Math.floor(column / 5);
+                        visit(row, column, testColors[block % testColors.length]);
+                    }
+                }
+            };
+            const testSoundIds = [35554678, 373840423, 943407323, 413617446, 393724110, 357507397, 344407285, 421103543, 310788122, 1057591814];
             const limitTerminalText = (value, maximum) => {
                 const text = asciiMaker(value).toUpperCase();
                 if (text.length <= maximum) return text;
@@ -13287,17 +14255,33 @@ usort($cats, 'customStrCmp');
                     request.onsuccess = () => resolve(request.result || {});
                     request.onerror = () => reject(request.error);
                 });
-                const [global, songs, legs] = await Promise.all([read('settings'), read('song-settings'), read('legs-plan')]);
+                const [global, songs, legs, slots] = await Promise.all([read('settings'), read('song-settings'), read('legs-plan'), read('legs-saves')]);
                 database.close();
-                return { global, songs, legs };
+                return { global, songs, legs, slots };
             };
-            const saveTerminalSettings = async () => {
+            const saveTerminalSettings = async (scope, songId = '') => {
                 const database = await globalDatabase();
                 const transaction = database.transaction('global', 'readwrite');
                 const store = transaction.objectStore('global');
-                store.put({ ...globalSettings }, 'settings');
-                store.put(JSON.parse(JSON.stringify(songSettings)), 'song-settings');
-                store.put({ legs: JSON.parse(JSON.stringify(legsDraft)), pages: legsDraftPages }, 'legs-plan');
+                if (scope === 'global') store.put({ ...globalSettings }, 'settings');
+                if (scope === 'song') {
+                    const saved = JSON.parse(JSON.stringify(persistedSongSettings));
+                    if (songSettings[songId]) saved[songId] = JSON.parse(JSON.stringify(songSettings[songId]));
+                    else delete saved[songId];
+                    store.put(saved, 'song-settings');
+                }
+                if (scope === 'legs') store.put({ legs: JSON.parse(JSON.stringify(legsDraft)), pages: legsDraftPages }, 'legs-plan');
+                await new Promise((resolve, reject) => {
+                    transaction.oncomplete = resolve;
+                    transaction.onerror = () => reject(transaction.error);
+                    transaction.onabort = () => reject(transaction.error);
+                });
+                database.close();
+            };
+            const saveLegSlots = async () => {
+                const database = await globalDatabase();
+                const transaction = database.transaction('global', 'readwrite');
+                transaction.objectStore('global').put(JSON.parse(JSON.stringify(savedLegSlots)), 'legs-saves');
                 await new Promise((resolve, reject) => {
                     transaction.oncomplete = resolve;
                     transaction.onerror = () => reject(transaction.error);
@@ -13319,13 +14303,47 @@ usort($cats, 'customStrCmp');
                     actionEntry('', '<GLOBAL', { kind: 'folio', folio: { kind: 'global', page: 1 } }, '1L'),
                     actionEntry('', '<PER SONG', { kind: 'folio', folio: { kind: 'per-song', page: 1 } }, '2L'),
                     actionEntry('', '<LEGS', { kind: 'folio', folio: { kind: 'legs', page: 1 } }, '3L'),
-                    actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '1R')
+                    actionEntry('', '<ARCHIVE', { kind: 'folio', folio: { kind: 'archive', page: 1 } }, '4L'),
+                    actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '1R'),
+                    actionEntry('', 'PLUG>', { kind: 'folio', folio: { kind: 'plug', page: 1 } }, '2R'),
+                    actionEntry('', 'KONTROLS>', { kind: 'folio', folio: { kind: 'kontrols', page: 1 } }, '3R'),
+                    actionEntry('', 'TEST>', { kind: 'run-test' }, '5R')
                 ]
             });
+            const kontrolsFolio = () => {
+                let column = 0;
+                const valueRuns = [];
+                const toggleRuns = active => [
+                    { column: 0, text: 'ON', color: active ? 'green' : 'gray', size: active ? 'large' : 'small' },
+                    { column: 3, text: '<>', color: 'white', size: 'small' },
+                    { column: 6, text: 'OFF', color: active ? 'gray' : 'green', size: active ? 'small' : 'large' }
+                ];
+                terminalNdRanges.forEach((range, index) => {
+                    if (index) {
+                        valueRuns.push({ column, text: '<>', color: 'white', size: 'small' });
+                        column += 2;
+                    }
+                    const text = `${range}X`;
+                    valueRuns.push({ column, text, color: index === terminalNdRangeIndex ? 'green' : 'gray', size: index === terminalNdRangeIndex ? 'large' : 'small' });
+                    column += text.length;
+                });
+                return {
+                    name: 'KONTROLS',
+                    entries: [
+                        { title: 'RANGE', value: '', field: '1L', ndRange: -1, valueRuns },
+                        { title: '', value: '', field: '1R', ndRange: 1 },
+                        { title: 'ETA', value: '', field: '2L', ndToggle: 'eta', valueRuns: toggleRuns(terminalNdEtaOn) },
+                        { title: 'DATA', value: '', field: '3L', ndToggle: 'data', valueRuns: toggleRuns(terminalNdDataOn) },
+                        { title: 'ROTATE', value: '', field: '4L', ndToggle: 'rotate', valueRuns: toggleRuns(terminalNdRotateOn) },
+                        actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '2R'),
+                        actionEntry('', 'STEP>', { kind: 'nd-step' }, '3R')
+                    ]
+                };
+            };
             const perSongFolio = () => ({
                 name: 'PER SONG',
                 entries: [
-                    dashedTitleEntry('TYPE', '< KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1L'),
+                    dashedTitleEntry('TYPE', '<KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1 } }, '1L'),
                     actionEntry('', 'NAME>', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1 } }, '1R'),
                     actionEntry('', '<1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1 } }, '2L'),
                     dashedTitleEntry('CODE', selectedCode || '----', { kind: 'code' }, '3L'),
@@ -13335,21 +14353,21 @@ usort($cats, 'customStrCmp');
             const legsSongSearchFolio = () => ({
                 name: 'PER SONG',
                 entries: [
-                    dashedTitleEntry('TYPE', '< KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1, legIndex: folio.legIndex } }, '1L'),
-                    actionEntry('', 'NAME>', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1, legIndex: folio.legIndex } }, '1R'),
-                    actionEntry('', '<1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1, legIndex: folio.legIndex } }, '2L')
+                    dashedTitleEntry('TYPE', '<KATEGORIE', { kind: 'folio', folio: { kind: 'categories', page: 1, legIndex: folio.legIndex, legTarget: folio.legTarget } }, '1L'),
+                    actionEntry('', 'NAME>', { kind: 'folio', folio: { kind: 'songs', source: 'name', page: 1, legIndex: folio.legIndex, legTarget: folio.legTarget } }, '1R'),
+                    actionEntry('', '<1ST LETTER', { kind: 'folio', folio: { kind: 'letters', page: 1, legIndex: folio.legIndex, legTarget: folio.legTarget } }, '2L')
                 ]
             });
             const categoriesFolio = () => ({
                 name: 'PER KATEGORIE',
                 entries: pageItems(categories, pageNumber(categories, folio.page)).map(category =>
-                    actionEntry('', terminalCategoryName(category), { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1, legIndex: folio.legIndex } }))
+                    actionEntry('', terminalCategoryName(category), { kind: 'folio', folio: { kind: 'songs', source: 'category', category, page: 1, legIndex: folio.legIndex, legTarget: folio.legTarget } }))
             });
             const lettersFolio = () => {
                 return {
                     name: 'PER 1ST LETTER',
                     entries: pageItems(songLetters, pageNumber(songLetters, folio.page)).map(letter =>
-                        actionEntry('', letter, { kind: 'folio', folio: { kind: 'songs', source: 'letter', letter, page: 1, legIndex: folio.legIndex } }))
+                        actionEntry('', letter, { kind: 'folio', folio: { kind: 'songs', source: 'letter', letter, page: 1, legIndex: folio.legIndex, legTarget: folio.legTarget } }))
                 };
             };
             const songsForFolio = () => {
@@ -13365,7 +14383,10 @@ usort($cats, 'customStrCmp');
                     name: folio.source === 'category' ? terminalCategoryName(folio.category) : folio.source === 'letter' ? folio.letter : 'PER NAME',
                     entries: pageItems(songs, page).map(song => {
                         const title = terminalSongTitle(song);
-                        return actionEntry(title.text, song.code, { kind: 'copy-code', code: song.code, legIndex: folio.legIndex }, '', title.accent);
+                        const action = Number.isInteger(folio.legIndex) ?
+                            { kind: 'copy-code', code: song.code, legIndex: folio.legIndex, legTarget: folio.legTarget } :
+                            { kind: 'folio', folio: { kind: 'song', songId: song.id, code: song.code, page: 1 } };
+                        return actionEntry(title.text, song.code, action, '', title.accent);
                     })
                 };
             };
@@ -13397,47 +14418,89 @@ usort($cats, 'customStrCmp');
                     ]
                 };
             };
-            const legHasData = leg => !!leg && (leg.type === 'hold' ? true : !!(leg.songCode || leg.advance || leg.time));
+            const legHasData = leg => !!leg && (leg.type === 'hold' || leg.type === 'then' ? true : !!(leg.songCode || leg.advance || leg.time));
             const legComplete = (leg, index) => {
                 if (!legHasData(leg)) return false;
+                if (leg.type === 'then') return index > 0;
                 if (leg.type === 'hold') return index > 0 && /^\d+$/.test(String(leg.times)) && Number(leg.times) > 0;
                 return songsByUrl.some(song => song.code === leg.songCode) && (leg.advance === 'Y' || leg.advance === 'N') && !!parseTerminalTime(leg.time, true);
             };
-            const trimmedLegs = () => {
-                const copy = JSON.parse(JSON.stringify(legsDraft));
+            const trimmedLegs = (legs = legsDraft) => {
+                const copy = JSON.parse(JSON.stringify(legs));
                 while (copy.length && !legHasData(copy[copy.length - 1])) copy.pop();
                 return copy;
             };
-            const validateLegs = () => {
-                const plan = trimmedLegs();
+            const validateLegs = (legs = legsDraft) => {
+                const plan = trimmedLegs(legs);
                 if (!plan.length) return null;
                 let playable = false;
                 for (let index = 0; index < plan.length; index++) {
                     const leg = plan[index];
                     if (!legHasData(leg) || !legComplete(leg, index)) return null;
-                    if (leg.type === 'hold') {
+                    if (leg.type === 'hold' || leg.type === 'then') {
                         if (!playable) return null;
                     } else playable = true;
                 }
                 return plan;
             };
             const executableLegs = plan => plan.map(leg => {
-                if (leg.type === 'hold') return { ...leg };
+                if (leg.type === 'hold' || leg.type === 'then') return { ...leg };
                 const song = songsByUrl.find(candidate => candidate.code === leg.songCode);
                 const settings = song ? effectiveSongSettings(song.id) : {};
                 const rate = Number(settings.speed) || liveValues().speed;
                 const sectionWindow = settings.sectionWindow !== '' ? Number(settings.sectionWindow) : liveValues().sectionWindow;
-                return { ...leg, rate, sectionWindow };
+                const time = parseTerminalTime(leg.time, true);
+                return { ...leg, section: time?.section || 0, seconds: time?.seconds || 0, rate, sectionWindow };
             });
+            const terminalPlanFingerprint = () => JSON.stringify({
+                global: globalSettings,
+                songs: songSettings,
+                legs: legsDraft,
+                pages: legsDraftPages
+            });
+            const activeLegsPlan = () => window.__npTerminalLegsActive?.() && !draftOriginActive &&
+                !!legsActivatedPlanText && JSON.stringify(legsDraft) === legsActivatedPlanText;
+            const activeLegs = () => activeLegsPlan() ? window.__npTerminalActiveLegs?.() || [] : null;
+            const editingLegs = () => folio.kind === 'adjust-save' && saveLegEdit ? saveLegEdit.legs : legsDraft;
+            const displayedLegs = () => folio.kind === 'adjust-save' && saveLegEdit ? saveLegEdit.legs : activeLegs() || legsDraft;
+            const displayedLegPages = () => {
+                if (folio.kind === 'adjust-save' && saveLegEdit) {
+                    let filled = 0;
+                    const display = saveLegEdit.legs || [];
+                    while (filled < display.length && legHasData(display[filled])) filled++;
+                    return Math.floor(filled / legsPerPage) + 1;
+                }
+                const legs = activeLegs();
+                if (legs) return Math.max(1, Math.ceil(legs.length / legsPerPage));
+                let totalFilled = 0;
+                while (totalFilled < legsDraft.length && legHasData(legsDraft[totalFilled])) totalFilled++;
+                return Math.floor(totalFilled / legsPerPage) + 1;
+            };
             const legEntry = (index, side) => {
-                const leg = legsDraft[index] || { type: 'song', songCode: '', advance: '', time: '' };
-                const row = index % 4 + 1;
-                if (side === 'L') return {
-                    title: `SONG ${index + 1}`,
-                    value: leg.type === 'hold' ? 'HOLD' : leg.songCode || '----',
-                    field: `${row}L`,
-                    legSong: true,
-                    legIndex: index
+                const leg = displayedLegs()[index] || { type: 'song', songCode: '', advance: '', time: '' };
+                const row = index % legsPerPage + 1;
+                if (side === 'L') {
+                    const selected = legsSel === index && folio.kind === 'legs';
+                    const songText = leg.type === 'hold' ? 'HOLD' : leg.songCode || '□□';
+                    const entry = {
+                        title: leg.type === 'then' ? 'THEN' : `SONG ${index + 1}`,
+                        value: selected ? '' : songText,
+                        field: `${row}L`,
+                        legSong: true,
+                        legIndex: index
+                    };
+                    if (displayedLegs()[index - 1]?.type === 'then') {
+                        entry.title = '';
+                        entry.titleRuns = [{ column: 0, text: '--------ADD KONN--------', color: 'white', size: 'large' }];
+                    }
+                    if (selected) entry.valueRuns = [
+                        { column: 0, text: songText, color: 'white', size: 'large' },
+                        { column: 6, text: '<SEL>', color: 'white', size: 'large' }
+                    ];
+                    return entry;
+                }
+                if (leg.type === 'then') return {
+                    title: '', value: '', field: `${row}R`, legIndex: index
                 };
                 if (leg.type === 'hold') return {
                     title: '',
@@ -13454,7 +14517,7 @@ usort($cats, 'customStrCmp');
                     field: `${row}R`,
                     legRight: true,
                     legIndex: index,
-                    titleRuns: [
+                    titleRuns: displayedLegs()[index - 1]?.type === 'then' ? [] : [
                         { column: 12, text: 'A', color: 'white', size: 'small' },
                         { column: 17, text: 'TIME', color: 'white', size: 'small' }
                     ],
@@ -13465,24 +14528,187 @@ usort($cats, 'customStrCmp');
                 };
             };
             const legsFolio = () => {
-                const page = Math.max(1, Math.min(legsDraftPages, folio.page || 1));
-                const start = (page - 1) * 4;
+                const active = activeLegsPlan();
+                const pages = displayedLegPages();
+                const page = Math.max(1, Math.min(pages, folio.page || 1));
+                const start = (page - 1) * legsPerPage;
                 const entries = [];
-                for (let offset = 0; offset < 4; offset++) {
+                const display = displayedLegs();
+                const lastFilled = display.slice(start, start + legsPerPage).reduce((last, leg, offset) =>
+                    legHasData(leg) ? offset : last, -1);
+                let totalFilled = 0;
+                while (totalFilled < display.length && legHasData(display[totalFilled])) totalFilled++;
+                const visibleRows = Math.max(0, Math.min(legsPerPage, totalFilled - start + 1));
+                for (let offset = 0; offset < visibleRows; offset++) {
                     entries.push(legEntry(start + offset, 'L'), legEntry(start + offset, 'R'));
                 }
-                const pageComplete = Array.from({ length: 4 }, (_, offset) => legComplete(legsDraft[start + offset], start + offset)).every(Boolean);
-                if (page === legsDraftPages) {
+                const pageComplete = Array.from({ length: legsPerPage }, (_, offset) => legComplete(display[start + offset], start + offset)).every(Boolean);
+                entries.push(actionEntry('', '<KONTROLS', { kind: 'folio', folio: { kind: 'kontrols', page: 1 } }, '5L'));
+                if (!active) entries.push(actionEntry('', 'AKTIVATE>', { kind: 'activate-legs' }, '5R'));
+                if (page === pages) {
                     if (pageComplete) entries.push(actionEntry('', 'PAGE>', { kind: 'legs-page', page: page + 1 }, '6R'));
-                    else if (!window.__npTerminalLegsActive?.() && validateLegs()) entries.push(actionEntry('', 'AKTIVATE>', { kind: 'activate-legs' }, '6R'));
+                    else entries.push(actionEntry('', 'SAVE>', { kind: 'folio', folio: { kind: 'save-legs', page: 1 } }, '6R'));
                 }
-                return { name: window.__npTerminalLegsActive?.() ? 'AKTV LEGS' : 'LEGS', entries };
+                return { name: active ? 'AKTV LEGS' : 'LEGS', entries };
+            };
+            const savedLegName = slot => slot?.name || '----';
+            const savedLegDate = slot => slot?.date || '--------';
+            const savedLegRow = slot => `${savedLegName(slot).padEnd(6, ' ')}   ${savedLegDate(slot)}`;
+            const savedLegEntry = (slot, index, action) => ({
+                title: '',
+                value: '',
+                field: `${index % 4 + 1}L`,
+                action,
+                valueRuns: [{
+                    column: 0,
+                    text: savedLegRow(slot),
+                    color: saveLegOverride?.index === index ? 'amber' : 'white',
+                    size: 'large',
+                    flashing: saveLegOverride?.index === index
+                }]
+            });
+            const savedLegSelectEntry = (slot, index) => ({
+                title: '',
+                value: '',
+                field: `${index % 4 + 1}R`,
+                action: { kind: 'edit-save-slot', index },
+                valueRuns: [{ column: 20, text: 'SEL>', color: 'white', size: 'large' }]
+            });
+            const archiveGroup = path => {
+                const pathname = new URL(path, location.origin).pathname;
+                if (/\.(?:png|jpe?g|webp|gif|svg|ico|mp4|webm|mov|m4v)$/i.test(pathname)) return 'IMG';
+                if (/\.(?:mp3|wav|ogg|flac)$/i.test(pathname)) return 'MUSIK';
+                if (/\.(?:woff2?|ttf|otf)$/i.test(pathname)) return 'FONT';
+                return null;
+            };
+            const archiveFolio = () => {
+                if ((folio.page || 1) > 1) return {
+                    name: 'ARCHIVE INFO',
+                    entries: [
+                        ...(archiveCheckResult ? [{
+                            field: '1L',
+                            valueRuns: [{ column: 0, text: archiveCheckResult.complete ? 'ALL OK' : `MISSING ${archiveCheckResult.missing}`, color: archiveCheckResult.complete ? 'green' : 'red' }]
+                        }] : []),
+                        actionEntry('', 'CHECK>', { kind: 'archive-check' }, '1R'),
+                        ...(archiveInstallCalled ? [{
+                            field: '2L',
+                            valueRuns: [{ column: 0, text: 'KALLEN', color: 'white' }]
+                        }] : []),
+                        actionEntry('', 'INSTALL>', { kind: 'archive-install' }, '2R')
+                    ]
+                };
+                const archiveCount = group => archiveInfo?.client?.[group] === undefined || archiveInfo?.server?.[group] === undefined ?
+                    '□□/□□' : `${archiveInfo.client[group]}/${archiveInfo.server[group]}`;
+                return {
+                    name: 'ARCHIVE INFO',
+                    entries: [
+                        actionEntry('IMG', archiveCount('IMG'), null, '1L'),
+                        actionEntry('MUSIK', archiveCount('MUSIK'), null, '1R'),
+                        actionEntry('FONT', archiveCount('FONT'), null, '2R'),
+                        actionEntry('PAGE/MEDIA NO', `${window.m2Archive.pageVersion}/${window.m2Archive.version}`, null, '3L', '', maxTitleLength, true)
+                    ]
+                };
+            };
+            const refreshArchiveInfo = async () => {
+                const request = ++archiveRequest;
+                const archive = window.m2Archive;
+                const requiredKeys = new Set(archive.manifest().map(url => archive.assetKey(url)));
+                const count = paths => {
+                    const groups = { IMG: 0, MUSIK: 0, FONT: 0 };
+                    paths.forEach(path => {
+                        const group = archiveGroup(path);
+                        if (group) groups[group]++;
+                    });
+                    return groups;
+                };
+                const server = count(requiredKeys);
+                let client = null;
+                try {
+                    if ('caches' in window) {
+                        const cache = await caches.open(`m2-absolute-archive-${archive.version}`);
+                        const cachedKeys = new Set();
+                        for (const entry of await cache.keys()) {
+                            const key = archive.assetKey(entry.url);
+                            if (requiredKeys.has(key)) cachedKeys.add(key);
+                        }
+                        client = count(cachedKeys);
+                    }
+                } catch (error) {}
+                if (request !== archiveRequest) return;
+                archiveInfo = { client, server };
+                if (folio.kind === 'archive') renderFolio();
+            };
+            window.addEventListener('m2archivecomplete', () => {
+                if (folio.kind === 'archive') refreshArchiveInfo();
+            });
+            const testFolio = () => ({
+                name: 'TERMINAL',
+                entries: [actionEntry('', 'TEST>', null, '5R')]
+            });
+            const plugFolio = () => ({
+                name: 'PLUG',
+                entries: [
+                    actionEntry('', '<FLUSH', { kind: 'flush-videos', mode: 'current' }, '1L'),
+                    actionEntry('', '<FLUSH ALL', { kind: 'flush-videos', mode: 'all' }, '2L'),
+                    actionEntry('', '<FLUSH ALL Y', { kind: 'flush-videos', mode: 'yes' }, '1R'),
+                    actionEntry('', '<FLUSH ALL N', { kind: 'flush-videos', mode: 'no' }, '2R')
+                ]
+            });
+            const saveLegsFolio = () => ({
+                name: 'SAVE LEGS',
+                entries: [
+                    actionEntry('', '<SAVE CURR', { kind: 'folio', folio: { kind: 'save-curr', page: 1 } }, '1L'),
+                    actionEntry('', '<LOAD', { kind: 'folio', folio: { kind: 'load-legs', page: 1 } }, '2L')
+                ]
+            });
+            const saveCurrFolio = () => {
+                const start = ((folio.page || 1) - 1) * 4;
+                return {
+                    name: 'SAVE CURR',
+                    entries: [
+                        ...Array.from({ length: 4 }, (_, offset) => {
+                            const index = start + offset;
+                            const slot = savedLegSlots[index];
+                            return [savedLegEntry(slot, index, { kind: 'save-slot', index }), savedLegSelectEntry(slot, index)];
+                        }).flat(),
+                        ...(saveLegOverride && Math.floor(saveLegOverride.index / 4) === Math.floor(start / 4) ?
+                            [actionEntry('', 'OVERRIDE>', { kind: 'override-save-slot', index: saveLegOverride.index }, '5R')] : [])
+                    ]
+                };
+            };
+            const loadLegsFolio = () => {
+                const start = ((folio.page || 1) - 1) * 4;
+                return {
+                    name: 'LOAD LEGS',
+                    entries: Array.from({ length: 4 }, (_, offset) => {
+                        const index = start + offset;
+                        return savedLegEntry(savedLegSlots[index], index, { kind: 'load-save-slot', index });
+                    })
+                };
+            };
+            const adjustSaveFolio = () => {
+                const pages = displayedLegPages();
+                const page = Math.max(1, Math.min(pages, folio.page || 1));
+                const start = (page - 1) * legsPerPage;
+                const entries = [];
+                const display = displayedLegs();
+                const lastFilled = display.slice(start, start + legsPerPage).reduce((last, leg, offset) => legHasData(leg) ? offset : last, -1);
+                const visibleRows = lastFilled >= 0
+                    ? Math.min(legsPerPage, lastFilled + 2)
+                    : (start === 0 || Array.from({ length: start }, (_, i) => display[i]).every(leg => legHasData(leg))) ? 1 : 0;
+                for (let offset = 0; offset < visibleRows; offset++) entries.push(legEntry(start + offset, 'L'), legEntry(start + offset, 'R'));
+                const pageComplete = Array.from({ length: legsPerPage }, (_, offset) => legComplete(display[start + offset], start + offset)).every(Boolean);
+                if (page === pages) {
+                    if (pageComplete) entries.push(actionEntry('', 'PAGE>', { kind: 'adjust-save-page', page: page + 1 }, '6R'));
+                    else entries.push(actionEntry('', 'AFFIRM>', { kind: 'affirm-save-slot' }, '6R'));
+                }
+                return { name: `ADJUST ${saveLegEdit?.name || ''}`.trim(), entries };
             };
             const progressValue = value => value === null || value === undefined ? '□' : String(value);
             const progressTime = seconds => {
                 if (!Number.isFinite(seconds)) return '□';
-                const whole = Math.max(0, Math.ceil(seconds));
-                return `${Math.floor(whole / 60)}.${String(whole % 60).padStart(2, '0')}`;
+                const whole = Math.max(0, Math.floor(seconds));
+                return `${Math.floor(whole / 60)}.${String(whole % 60 + 1).padStart(2, '0')}`;
             };
             const passiveProg = () => {
                 const snapshot = window.__npTerminalProgSnapshot?.();
@@ -13513,19 +14739,23 @@ usort($cats, 'customStrCmp');
                 entries: (() => {
                     const progress = window.__npTerminalIsrAt?.('E') ? legsProgress : passiveProg();
                     const nextEta = progress.nextEta === '----' ? '----' : progressTime(progress.nextEta);
+                    const pcText = progress.percent === null || progress.percent === undefined ? '□' : String(progress.percent);
+                    const timeRmng = progressTime(progress.currentRemaining);
+                    const totalTime = progressTime(progress.totalRemaining);
                     return [
-                        actionEntry('CURR LEG', progressValue(progress.currentLeg), null, '1L'),
-                        actionEntry('TIME REMAINING', progressTime(progress.currentRemaining), null, '2L'),
-                        actionEntry('PC', progress.percent === null || progress.percent === undefined ? '□' : String(progress.percent), null, '1R'),
-                        actionEntry('CURRENT SECTION', progressValue(progress.currentSection), null, '3L'),
+                        actionEntry('KURR LEG', progressValue(progress.currentLeg), null, '1L'),
+                        { title: 'PC', value: '', action: null, field: '1R', valueRuns: [{ column: 24 - pcText.length, text: pcText, color: 'magenta', size: 'large' }] },
+                        { title: 'TIME RMNG', value: '', action: null, field: '2L', valueRuns: [{ column: 0, text: timeRmng, color: 'magenta', size: 'large' }] },
+                        actionEntry('KURR SEKT', progressValue(progress.currentSection), null, '3L'),
                         actionEntry('NEXT LEG', progressValue(progress.nextLeg), null, '4L'),
-                        actionEntry('ETA', nextEta, null, '5L'),
-                        actionEntry('TOTAL TIME', progressTime(progress.totalRemaining), null, '5R')
+                        { title: 'ETA', value: '', action: null, field: '5L', valueRuns: [{ column: 0, text: nextEta, color: 'magenta', size: 'large' }] },
+                        { title: 'TOTAL TIME', value: '', action: null, field: '5R', valueRuns: [{ column: 24 - totalTime.length, text: totalTime, color: 'magenta', size: 'large' }] }
                     ];
                 })()
             });
             const folioRegistry = {
                 index: indexFolio,
+                kontrols: kontrolsFolio,
                 global: globalFolio,
                 'per-song': perSongFolio,
                 'legs-song-search': legsSongSearchFolio,
@@ -13534,6 +14764,12 @@ usort($cats, 'customStrCmp');
                 songs: songsFolio,
                 song: songFolio,
                 legs: legsFolio,
+                plug: plugFolio,
+                archive: archiveFolio,
+                'save-legs': saveLegsFolio,
+                'save-curr': saveCurrFolio,
+                'load-legs': loadLegsFolio,
+                'adjust-save': adjustSaveFolio,
                 prog: progFolio
             };
             const currentFolio = () => (folioRegistry[folio.kind] || folioRegistry.index)();
@@ -13541,7 +14777,12 @@ usort($cats, 'customStrCmp');
                 if (folio.kind === 'categories') return Math.ceil(categories.length / pageSize) || 1;
                 if (folio.kind === 'letters') return Math.ceil(songLetters.length / pageSize) || 1;
                 if (folio.kind === 'songs') return Math.ceil(songsForFolio().length / pageSize) || 1;
-                if (folio.kind === 'legs') return legsDraftPages;
+                if (folio.kind === 'legs' || folio.kind === 'adjust-save') return displayedLegPages();
+                if (folio.kind === 'save-curr' || folio.kind === 'load-legs') {
+                    const last = savedLegSlots.reduce((index, slot, offset) => slot ? offset : index, -1);
+                    return folio.kind === 'save-curr' ? Math.floor((last + 1) / 4) + 1 : Math.max(1, Math.floor(last / 4) + 1);
+                }
+                if (folio.kind === 'archive') return 2;
                 return 1;
             };
             const renderScratchpad = () => {
@@ -13558,18 +14799,17 @@ usort($cats, 'customStrCmp');
                     renderScratchpad();
                 }, 2000);
             };
+            const currentSaveScope = () => folio.kind === 'global' ? 'global' : folio.kind === 'song' ? 'song' : folio.kind === 'legs' ? 'legs' : '';
             const renderSaveState = () => {
+                const scope = currentSaveScope();
+                settingsDirty = scope === 'global' ? Object.keys(globalSettings).some(key => globalSettings[key] !== persistedGlobalSettings[key]) :
+                    scope === 'song' ? JSON.stringify(songSettingValues(folio.songId)) !== JSON.stringify(persistedSongSettingValues(folio.songId)) :
+                    scope === 'legs' ? JSON.stringify(legsDraft) !== JSON.stringify(persistedLegsPlan) || legsDraftPages !== persistedLegsPages : false;
                 terminal.querySelector('[data-terminal-special="save"]')?.classList.toggle('is-saving', settingsDirty);
             };
-            const refreshSaveState = () => {
-                settingsDirty = Object.keys(globalSettings).some(key => globalSettings[key] !== persistedGlobalSettings[key]) ||
-                    JSON.stringify(songSettings) !== JSON.stringify(persistedSongSettings) ||
-                    JSON.stringify(legsDraft) !== JSON.stringify(persistedLegsPlan) ||
-                    legsDraftPages !== persistedLegsPages;
-                renderSaveState();
-            };
+            const refreshSaveState = () => renderSaveState();
             const renderFolio = () => {
-                const page = currentFolio();
+                const page = testRunning ? testFolio() : currentFolio();
                 const total = folioTotal();
                 const currentPage = Math.max(1, Math.min(total, folio.page || 1));
                 const entries = new Map();
@@ -13578,17 +14818,17 @@ usort($cats, 'customStrCmp');
                     const field = entry.field || entryFields[nextField++];
                     entries.set(field, entry);
                 });
-                entries.set('6L', folio.kind === 'index' ? null : currentPage > 1 ?
+                entries.set('6L', testRunning || folio.kind === 'index' ? null : currentPage > 1 ?
                     actionEntry('', '<PAGE', { kind: 'page', folio: { ...folio, page: currentPage - 1 } }) : folio.returnTarget ?
                     actionEntry('', folio.returnLabel || '<RE-TURN', { kind: 'back', folio: folio.returnTarget }) : null);
                 if (currentPage < total) {
-                    entries.set('6R', actionEntry('', 'PAGE >', {
+                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
                         kind: 'page', folio: { ...folio, page: currentPage + 1 }
                     }));
                 }
                 terminalFields.forEach(field => fieldActions.set(field, entries.get(field) || null));
                 clearTerminalScreen();
-                writeTerminalAligned(0, limitText(page.name), 'center');
+                if (!testRunning) writeTerminalAligned(0, limitText(page.name), 'center');
                 if (total > 1) writeTerminalAligned(0, `${currentPage}/${total}`, 'right', { size: 'small' });
                 const entryTitle = entry => entry?.titleLiteral ?
                     limitTerminalText(entry.title, entry.titleLimit || maxTitleLength) :
@@ -13634,20 +14874,317 @@ usort($cats, 'customStrCmp');
                 }
                 writeTerminalText(11, 0, '-'.repeat(terminalColumns), { size: 'large' });
                 writePair(12, entries.get('6L'), entries.get('6R'), 'value', 'large');
+                if (testRunning) {
+                    if (testState.phase === 'grid') {
+                        forEachTestGridCell((row, column, color) => {
+                            writeTerminalText(row, column, '0', { color, inverted: testState.inverted });
+                        });
+                    }
+                    if (testState.phase === 'sweep') {
+                        for (let column = 0; column < terminalColumns; column++) {
+                            const style = testSweepColumns[column];
+                            if (style === null) continue;
+                            const color = testColors[Math.floor(style / 8)];
+                            const variant = style % 8;
+                            for (let row = 0; row <= 10; row++) {
+                                if (row === 10 && column >= 19) continue;
+                                writeTerminalText(row, column, '0', {
+                                    color,
+                                    size: variant % 2 ? 'small' : 'large',
+                                    flashing: variant >= 2 && variant % 4 >= 2,
+                                    inverted: variant >= 4
+                                });
+                            }
+                        }
+                    }
+                    if (testState.phase !== 'sweep') writeTerminalAligned(5, 'TERMINAL', 'center');
+                }
                 renderTerminalScreen();
                 renderScratchpad();
+                renderSaveState();
+                renderTerminalNdRoutes();
+                renderTerminalNdCamera();
+            };
+            const waitForTest = duration => new Promise(resolve => window.setTimeout(resolve, duration));
+            const playTestSound = source => new Promise(resolve => {
+                const audio = new Audio(source);
+                audio.preload = 'auto';
+                let settled = false;
+                const finish = result => {
+                    if (settled) return;
+                    settled = true;
+                    window.clearTimeout(timeout);
+                    audio.onended = null;
+                    audio.onerror = null;
+                    resolve(result);
+                };
+                const timeout = window.setTimeout(() => finish(false), 10000);
+                audio.onended = () => finish(true);
+                audio.onerror = () => finish(false);
+                audio.play().catch(() => finish(false));
+            });
+            const startTerminalTest = async () => {
+                const generation = ++testGeneration;
+                const started = Date.now();
+                let checked = 0;
+                let required = 0;
+                const sweepRows = 11;
+                const sweepFlashVisible = Array.from({ length: sweepRows }, () => Array(terminalColumns).fill(false));
+                const sweepFlashHidden = Array.from({ length: sweepRows }, () => Array(terminalColumns).fill(false));
+                let sweepPathPassed = true;
+                let timedOut = false;
+                const running = () => {
+                    if (!testRunning || generation !== testGeneration) return false;
+                    if (Date.now() - started < 120000) return true;
+                    if (timedOut) return false;
+                    timedOut = true;
+                    testState = { phase: 'complete', inverted: false, column: 0, style: 0 };
+                    renderFolio();
+                    playTestSound('/m/img/terminal-test-fail.wav').then(() => {
+                        if (!testRunning || generation !== testGeneration) return;
+                        testRunning = false;
+                        renderFolio();
+                    });
+                    return false;
+                };
+                let soundTestComplete = false;
+                let soundResults = null;
+                const soundResultsPromise = (async () => {
+                    const results = [];
+                    for (let index = 0; index < testSoundIds.length; index++) {
+                        if (!running()) return null;
+                        const id = testSoundIds[index];
+                        results.push(await playTestSound(`/m/img/${id}.wav`));
+                        if (!running()) return null;
+                        if (index < testSoundIds.length - 1) await waitForTest(1000);
+                    }
+                    return results;
+                })().then(results => {
+                    soundResults = results;
+                    soundTestComplete = true;
+                    return results;
+                });
+                for (let cycle = 0; cycle < 6; cycle++) {
+                    for (const inverted of [false, true]) {
+                        if (!running()) return;
+                        testState = { phase: 'grid', inverted, column: 0, style: 0 };
+                        renderFolio();
+                        forEachTestGridCell((row, column, color) => {
+                            const at = terminalCellIndex(row, column);
+                            required++;
+                            if (terminalCells[at].textContent === '0' && terminalAttributeBuffer[at].color === color &&
+                                terminalCells[at].classList.contains('is-inverted') === inverted &&
+                                (color === 'white' || terminalCells[at].classList.contains(`is-${color}`))) checked++;
+                        });
+                        await waitForTest(1000);
+                    }
+                }
+                testSweepColumns.fill(null);
+                for (let step = 0; step < testSweepStyleCount + terminalColumns; step++) {
+                    if (!running()) return;
+                    testSweepColumns.copyWithin(1, 0, terminalColumns - 1);
+                    testSweepColumns[0] = step < testSweepStyleCount ? step : null;
+                    for (let column = 0; column < terminalColumns; column++) {
+                        const expectedStyle = step - column;
+                        const expected = expectedStyle >= 0 && expectedStyle < testSweepStyleCount ? expectedStyle : null;
+                        if (testSweepColumns[column] !== expected) sweepPathPassed = false;
+                    }
+                    testState = { phase: 'sweep', inverted: false, column: step % terminalColumns, style: step };
+                    renderFolio();
+                    for (let column = 0; column < terminalColumns; column++) {
+                        const style = testSweepColumns[column];
+                        if (style === null) continue;
+                        const flashing = style % 8 >= 2 && style % 4 >= 2;
+                        for (let row = 0; row < sweepRows; row++) {
+                            if ((row === 5 && column >= 8 && column < 16) || (row === 10 && column >= 19)) continue;
+                            const at = terminalCellIndex(row, column);
+                            const attributes = terminalAttributeBuffer[at];
+                            const expectedColor = testColors[Math.floor(style / 8)];
+                            const actualColor = testColors.find(color => color !== 'white' && terminalCells[at].classList.contains(`is-${color}`)) || 'white';
+                            required++;
+                            if (terminalCells[at].textContent === '0' && attributes.color === expectedColor && actualColor === expectedColor &&
+                                attributes.size === (style % 2 ? 'small' : 'large') && attributes.flashing === flashing &&
+                                attributes.inverted === (style % 8 >= 4) &&
+                                terminalCells[at].classList.contains('is-small') === !!(style % 2) &&
+                                terminalCells[at].classList.contains('is-flashing') === flashing &&
+                                terminalCells[at].classList.contains('is-inverted') === (style % 8 >= 4)) checked++;
+                            if (style % 8 === 2 || style % 8 === 3 || style % 8 === 6 || style % 8 === 7) {
+                                const visibility = getComputedStyle(terminalCells[at]).visibility;
+                                if (visibility === 'visible') sweepFlashVisible[row][column] = true;
+                                if (visibility === 'hidden') sweepFlashHidden[row][column] = true;
+                            }
+                        }
+                    }
+                    await waitForTest(140);
+                }
+                if (!running()) return;
+                testState = { phase: 'complete', inverted: false, column: 0, style: 0 };
+                renderFolio();
+                if (!running()) return;
+                let flashingBehaviorPassed = true;
+                for (let row = 0; row < sweepRows; row++) {
+                    for (let column = 0; column < terminalColumns; column++) {
+                        if ((row === 5 && column >= 8 && column < 16) || (row === 10 && column >= 19)) continue;
+                        if (!sweepFlashVisible[row][column] || !sweepFlashHidden[row][column]) flashingBehaviorPassed = false;
+                    }
+                }
+                sweepPathPassed = sweepPathPassed && testSweepColumns.every(style => style === null);
+                const passed = soundTestComplete && flashingBehaviorPassed && sweepPathPassed && checked === required && soundResults?.every(Boolean);
+                const resultSource = passed ? '/m/img/terminal-test-ok.wav' : '/m/img/terminal-test-fail.wav';
+                await playTestSound(resultSource);
+                if (!testRunning || generation !== testGeneration) return;
+                testRunning = false;
+                renderFolio();
+            };
+            const terminalDate = () => {
+                const date = new Date();
+                return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+            };
+            const copyLegs = legs => JSON.parse(JSON.stringify(legs));
+            const commitSavedLegSlot = (index, name) => {
+                savedLegSlots[index] = {
+                    name,
+                    date: savedLegSlots[index]?.date || terminalDate(),
+                    legs: copyLegs(legsDraft),
+                    pages: legsDraftPages
+                };
+                saveLegSlots().then(() => {
+                    saveLegOverride = null;
+                    scratchpad = '';
+                    deleteArmed = false;
+                    renderScratchpad();
+                    renderFolio();
+                }).catch(() => showScratchpadMessage('IN VALID'));
             };
             const dispatchAction = action => {
+                if (action.kind === 'nd-step') {
+                    const count = terminalNdStepTargets().length;
+                    terminalNdStepIndex = terminalNdStepIndex + 1 >= count ? -1 : terminalNdStepIndex + 1;
+                    renderTerminalNdCamera();
+                    return;
+                }
+                if (action.kind === 'run-test') {
+                    testRunning = true;
+                    renderFolio();
+                    startTerminalTest();
+                    return;
+                }
+                if (action.kind === 'archive-check' || action.kind === 'archive-install') {
+                    const operation = action.kind === 'archive-check' ? window.m2Archive?.check : window.m2Archive?.install;
+                    if (action.kind === 'archive-check') archiveCheckResult = null;
+                    else archiveInstallCalled = true;
+                    renderFolio();
+                    Promise.resolve().then(() => operation?.()).then(result => {
+                        if (action.kind === 'archive-check' && result) {
+                            archiveCheckResult = { complete: result.complete === true, missing: Number(result.missing) || 0 };
+                            renderFolio();
+                        }
+                        refreshArchiveInfo();
+                    }).catch(() => {
+                        showScratchpadMessage('IN VALID');
+                        refreshArchiveInfo();
+                    });
+                    return;
+                }
+                if (action.kind === 'flush-videos') {
+                    window.__npTerminalFlushVideos?.(action.mode);
+                    renderFolio();
+                    return;
+                }
+                if (action.kind === 'save-slot') {
+                    const name = limitText(scratchpad).trim() || savedLegSlots[action.index]?.name || '';
+                    if (!name || name.length > 6) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    if (savedLegSlots[action.index]) {
+                        saveLegOverride = { index: action.index, name };
+                        scratchpad = '';
+                        deleteArmed = false;
+                        renderScratchpad();
+                        renderFolio();
+                        return;
+                    }
+                    commitSavedLegSlot(action.index, name);
+                    return;
+                }
+                if (action.kind === 'override-save-slot') {
+                    commitSavedLegSlot(action.index, saveLegOverride?.name || savedLegSlots[action.index]?.name || '');
+                    return;
+                }
+                if (action.kind === 'edit-save-slot') {
+                    const slot = savedLegSlots[action.index];
+                    if (!slot) {
+                        showScratchpadMessage('IN VALID');
+                        return;
+                    }
+                    saveLegEdit = {
+                        index: action.index,
+                        name: slot.name,
+                        date: slot.date,
+                        legs: copyLegs(Array.isArray(slot.legs) ? slot.legs : []),
+                        pages: Math.max(1, Number(slot.pages) || Math.ceil((slot.legs || []).length / legsPerPage) || 1)
+                    };
+                    folio = { kind: 'adjust-save', page: 1, returnTarget: { ...folio }, returnLabel: '< RE-TURN' };
+                    renderFolio();
+                    return;
+                }
+                if (action.kind === 'adjust-save-page') {
+                    saveLegEdit.pages = Math.max(saveLegEdit.pages, action.page);
+                    folio = { ...folio, page: action.page };
+                    renderFolio();
+                    return;
+                }
+                if (action.kind === 'affirm-save-slot') {
+                    if (!saveLegEdit) return;
+                    savedLegSlots[saveLegEdit.index] = {
+                        name: saveLegEdit.name,
+                        date: saveLegEdit.date,
+                        legs: copyLegs(saveLegEdit.legs),
+                        pages: saveLegEdit.pages
+                    };
+                    saveLegSlots().then(() => {
+                        const returnTarget = folio.returnTarget || { kind: 'save-curr', page: 1 };
+                        saveLegEdit = null;
+                        folio = returnTarget;
+                        renderFolio();
+                    }).catch(() => showScratchpadMessage('IN VALID'));
+                    return;
+                }
+                if (action.kind === 'load-save-slot') {
+                    const slot = savedLegSlots[action.index];
+                    if (!slot) return;
+                    legsDraft = copyLegs(slot.legs || []);
+                    legsDraftPages = Math.max(1, Number(slot.pages) || Math.ceil(legsDraft.length / legsPerPage) || 1);
+                    activePlanFingerprint = '';
+                    legsActivatedPlanText = '';
+                    draftOriginActive = false;
+                    saveLegOverride = null;
+                    refreshSaveState();
+                    folio = { kind: 'legs', page: 1 };
+                    renderFolio();
+                    return;
+                }
                 if (action.kind === 'index') folio = { kind: 'index', page: 1 };
                 if (action.kind === 'folio') {
                     if (action.folio.kind === 'song') selectedCode = '';
-                    folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '< RE-TURN' };
+                    if (action.folio.kind === 'legs' || action.folio.kind === 'adjust-save') {
+                        legsSel = ((action.folio.page || 1) - 1) * legsPerPage;
+                    }
+                    folio = { ...action.folio, returnTarget: { ...folio }, returnLabel: '<RE-TURN' };
                 }
-                if (action.kind === 'page') folio = { ...action.folio };
+                if (action.kind === 'page') {
+                    folio = { ...action.folio };
+                    if (folio.kind === 'legs' || folio.kind === 'adjust-save') {
+                        legsSel = ((folio.page || 1) - 1) * legsPerPage;
+                    }
+                }
                 if (action.kind === 'back') folio = action.folio;
                 if (action.kind === 'legs-page') {
+                    detachActiveLegsDraft();
                     legsDraftPages = Math.max(legsDraftPages, action.page);
                     folio = { ...folio, page: action.page };
+                    legsSel = (action.page - 1) * legsPerPage;
                     refreshSaveState();
                 }
                 if (action.kind === 'activate-legs') {
@@ -13658,56 +15195,143 @@ usort($cats, 'customStrCmp');
                     }
                     window.__npTerminalActivateLegs(executableLegs(plan)).then(active => {
                         if (!active) showScratchpadMessage('IN VALID');
+                        else {
+                            activePlanFingerprint = terminalPlanFingerprint();
+                            legsActivatedPlanText = JSON.stringify(legsDraft);
+                            draftOriginActive = false;
+                            draftHistoryIndex = (window.__npTerminalLegsHistory?.() || []).length;
+                        }
                         renderFolio();
                     });
                 }
                 renderFolio();
-            };
-            const dispatchSpecial = action => {
-                if (action === 'first' && (folio.page || 1) !== 1) {
-                    folio = { ...folio, page: 1 };
+                if (action.kind === 'folio' && action.folio.kind === 'archive') refreshArchiveInfo();
+            };const dispatchSpecial = action => {
+            if (testRunning) return;
+            if (action === 'first' && (folio.page || 1) !== 1) {
+                folio = { ...folio, page: 1 };
+                renderFolio();
+            }
+            if (action === 'last') {
+                const lastPage = folioTotal();
+                if ((folio.page || 1) !== lastPage) {
+                    folio = { ...folio, page: lastPage };
                     renderFolio();
                 }
-                if (action === 'last') {
-                    const lastPage = folioTotal();
-                    if ((folio.page || 1) !== lastPage) {
-                        folio = { ...folio, page: lastPage };
-                        renderFolio();
+            }
+            if (action === 'index') dispatchAction({ kind: 'index' });
+            if (action === 'song') dispatchAction({ kind: 'folio', folio: { kind: 'per-song', page: 1 } });
+            if (action === 'legs') dispatchAction({ kind: 'folio', folio: { kind: 'legs', page: 1 } });
+            if (action === 'direct') {
+                scratchpad = limitText(scratchpad + 'DCT');
+                deleteArmed = false;
+                renderScratchpad();
+            }
+            if (action === 'clear') {
+                    if (!scratchpad && !deleteArmed && !scratchpadMessage) {
+                        if (window.__npTerminalLegsActive?.() && !(folio.kind === 'legs' && activeLegsPlan())) {
+                            legsDraft = window.__npTerminalActiveLegs?.() || [];
+                            legsDraftPages = Math.max(1, Math.ceil(legsDraft.length / legsPerPage) || 1);
+                            activePlanFingerprint = terminalPlanFingerprint();
+                            legsActivatedPlanText = JSON.stringify(legsDraft);
+                            draftOriginActive = false;
+                            draftHistoryIndex = (window.__npTerminalLegsHistory?.() || []).length;
+                            refreshSaveState();
+                            folio = { kind: 'legs', page: 1 };
+                            legsSel = 0;
+                            renderFolio();
+                            return;
+                        }
                     }
-                }
-                if (action === 'index') dispatchAction({ kind: 'index' });
-                if (action === 'song') dispatchAction({ kind: 'folio', folio: { kind: 'per-song', page: 1 } });
-                if (action === 'legs') dispatchAction({ kind: 'folio', folio: { kind: 'legs', page: 1 } });
-                if (action === 'direct') {
-                    scratchpad = limitText(scratchpad + 'DCT');
-                    deleteArmed = false;
-                    renderScratchpad();
-                }
-                if (action === 'clear') {
                     clearTimeout(scratchpadMessageTimer);
                     scratchpadMessage = '';
                     scratchpad = '';
                     deleteArmed = false;
                     renderScratchpad();
                 }
-                if (action === 'save') {
-                    if (legsDraft.some(legHasData) && !validateLegs()) {
-                        showScratchpadMessage('IN VALID');
+                if (action === 'skip') {
+                    if (folio.kind === 'legs') {
+                        const display = displayedLegs();
+                        let totalFilled = 0;
+                        while (totalFilled < display.length && legHasData(display[totalFilled])) totalFilled++;
+                        
+                        if (legsSel === null || legsSel >= totalFilled || !legHasData(display[legsSel])) {
+                            renderFolio();
+                            return;
+                        }
+                        
+                        detachActiveLegsDraft();
+                        legsDraft.splice(legsSel, 1);
+                        while (legsDraft.length && !legHasData(legsDraft[legsDraft.length - 1])) legsDraft.pop();
+                        let filled = 0;
+                        while (filled < legsDraft.length && legHasData(legsDraft[filled])) filled++;
+                        if (filled > 0 && legsSel >= filled) legsSel = filled - 1;
+                        refreshSaveState();
+                        renderFolio();
                         return;
                     }
-                    saveTerminalSettings().then(() => {
-                        Object.assign(persistedGlobalSettings, globalSettings);
-                        Object.keys(persistedSongSettings).forEach(songId => delete persistedSongSettings[songId]);
-                        Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
+                    if (window.__npTerminalLegsActive?.()) {
+                        window.__npTerminalLegsSkip?.();
+                        renderFolio();
+                        return;
+                    }
+                    if (currentAudio && !currentAudio.paused) {
+                        nextBtn.click();
+                        return;
+                    }
+                }
+            if (action === 'putin' && folio.kind === 'legs') {
+                const display = displayedLegs();
+                if (legsSel === null || !legHasData(display[legsSel]) || display[legsSel]?.type === 'then') {
+                    showScratchpadMessage('IN VALID');
+                    return;
+                }
+                detachActiveLegsDraft();
+                legsDraft.splice(legsSel + 1, 0, { type: 'then' });
+                legsDraftPages = Math.max(legsDraftPages, Math.ceil(legsDraft.length / legsPerPage));
+                legsSel++;
+                folio = { ...folio, page: Math.floor(legsSel / legsPerPage) + 1 };
+                refreshSaveState();
+                renderFolio();
+                return;
+            }
+            if (action === 'step' && folio.kind === 'legs') {
+                    const display = displayedLegs();
+                    let totalFilled = 0;
+                    while (totalFilled < display.length && legHasData(display[totalFilled])) totalFilled++;
+                    const positions = totalFilled + 1;
+                    legsSel = (legsSel === null || legsSel >= positions - 1) ? 0 : legsSel + 1;
+                    const targetPage = Math.floor(legsSel / legsPerPage) + 1;
+                    const pages = displayedLegPages();
+                    if (targetPage <= pages && (folio.page || 1) !== targetPage) {
+                        folio = { ...folio, page: targetPage };
+                    }
+                    renderFolio();
+                }
+            if (action === 'save') {
+                const scope = currentSaveScope();
+                if (!scope) return;
+                if (scope === 'legs' && legsDraft.some(legHasData) && !validateLegs()) {
+                    showScratchpadMessage('IN VALID');
+                    return;
+                }
+                const songId = scope === 'song' ? folio.songId : '';
+                saveTerminalSettings(scope, songId).then(() => {
+                    if (scope === 'global') Object.assign(persistedGlobalSettings, globalSettings);
+                    if (scope === 'song') {
+                        if (songSettings[songId]) persistedSongSettings[songId] = JSON.parse(JSON.stringify(songSettings[songId]));
+                        else delete persistedSongSettings[songId];
+                        if (songId === activeSongId()) applySettings(effectiveSongSettings(songId), songId);
+                    }
+                    if (scope === 'legs') {
                         persistedLegsPlan = JSON.parse(JSON.stringify(legsDraft));
                         persistedLegsPages = legsDraftPages;
-                        if (folio.kind === 'song' && folio.songId === activeSongId()) {
-                            applySettings(effectiveSongSettings(folio.songId), folio.songId);
-                        }
-                        refreshSaveState();
-                    }).catch(() => {});
-                }
-            };
+                    }
+                    if (scope === 'global' || scope === 'song') rebuildTerminalNdNodes();
+                    refreshSaveState();
+                }).catch(() => {});
+            }
+        };
             const dispatchKey = value => {
                 if (scratchpadMessage) return;
                 if (value === 'DL') deleteArmed = true;
@@ -13724,25 +15348,49 @@ usort($cats, 'customStrCmp');
                 }
                 globalSettings[entry.setting] = value;
             };
+            const detachActiveLegsDraft = () => {
+                if (!window.__npTerminalLegsActive?.() || draftOriginActive ||
+                    !legsActivatedPlanText || JSON.stringify(legsDraft) !== legsActivatedPlanText) return false;
+                legsDraft = copyLegs(window.__npTerminalActiveLegs?.() || []);
+                legsDraftPages = Math.max(1, Math.ceil(legsDraft.length / legsPerPage) || 1);
+                draftOriginActive = true;
+                draftHistoryIndex = (window.__npTerminalLegsHistory?.() || []).length;
+                activePlanFingerprint = '';
+                return true;
+            };
             const updateLeg = (index, value) => {
-                while (legsDraft.length <= index) legsDraft.push({ type: 'song', songCode: '', advance: '', time: '' });
-                legsDraft[index] = value;
-                while (legsDraft.length && !legHasData(legsDraft[legsDraft.length - 1])) legsDraft.pop();
-                const validPlan = validateLegs();
-                if (validPlan && window.__npTerminalLegsActive?.()) window.__npTerminalUpdateActiveLegs(executableLegs(validPlan));
-                refreshSaveState();
+                if (folio.kind !== 'adjust-save') detachActiveLegsDraft();
+                const legs = editingLegs();
+                while (legs.length <= index) legs.push({ type: 'song', songCode: '', advance: '', time: '' });
+                legs[index] = value;
+                while (legs.length && !legHasData(legs[legs.length - 1])) legs.pop();
+                if (folio.kind === 'adjust-save' && saveLegEdit) saveLegEdit.legs = legs;
+                else refreshSaveState();
                 renderFolio();
             };
             const writeLegSong = entry => {
                 const text = scratchpad.toUpperCase().trim();
+                const fullRow = /^([A-Z0-9]+)\s+([YN])\s+(.+)$/.exec(text);
+                if (fullRow) {
+                    const song = songsByUrl.find(candidate => candidate.code === fullRow[1]);
+                    const time = parseTerminalTime(fullRow[3], true);
+                    if (!song || !time) return false;
+                    updateLeg(entry.legIndex, {
+                        type: 'song',
+                        songCode: song.code,
+                        advance: fullRow[2],
+                        time: time.text
+                    });
+                    return true;
+                }
                 if (text === 'HOLD') {
-                    if (entry.legIndex < 1 || !legHasData(legsDraft[entry.legIndex - 1])) return false;
+                    if (entry.legIndex < 1 || !legHasData(displayedLegs()[entry.legIndex - 1]) || displayedLegs()[entry.legIndex - 1]?.type === 'then') return false;
                     updateLeg(entry.legIndex, { type: 'hold', times: '' });
                     return true;
                 }
                 const song = songsByUrl.find(candidate => candidate.code === text);
                 if (!song) return false;
-                const existing = legsDraft[entry.legIndex];
+                const existing = displayedLegs()[entry.legIndex];
                 updateLeg(entry.legIndex, {
                     type: 'song',
                     songCode: song.code,
@@ -13752,7 +15400,7 @@ usort($cats, 'customStrCmp');
                 return true;
             };
             const writeLegRight = entry => {
-                const leg = legsDraft[entry.legIndex] || { type: 'song', songCode: '', advance: '', time: '' };
+                const leg = displayedLegs()[entry.legIndex] || { type: 'song', songCode: '', advance: '', time: '' };
                 const text = scratchpad.toUpperCase().trim();
                 if (leg.type === 'hold') {
                     if (!/^\d+$/.test(text) || Number(text) < 1) return false;
@@ -13775,6 +15423,11 @@ usort($cats, 'customStrCmp');
                 }
                 updateLeg(entry.legIndex, { type: 'song', songCode: leg.songCode || '', advance, time });
                 return true;
+            };
+            const legScratchpadText = leg => {
+                if (leg.type === 'hold') return `HOLD ${String(leg.times || '')}`.trim();
+                const time = leg.time === '00/001.01' ? 'DCT' : leg.time || '';
+                return [leg.songCode || '', leg.advance || '', time].filter(Boolean).join(' ');
             };
             const dispatchSelector = field => {
                 if (scratchpadMessage) return;
@@ -13815,7 +15468,7 @@ usort($cats, 'customStrCmp');
                     }
                     scratchpad = entry.action.code;
                     if (Number.isInteger(entry.action.legIndex)) {
-                        folio = { kind: 'legs', page: Math.floor(entry.action.legIndex / 4) + 1 };
+                        folio = { kind: entry.action.legTarget || 'legs', page: Math.floor(entry.action.legIndex / legsPerPage) + 1 };
                         renderFolio();
                     }
                     renderScratchpad();
@@ -13852,24 +15505,54 @@ usort($cats, 'customStrCmp');
                     renderFolio();
                     return;
                 }
+                if (entry.ndRange) {
+                    terminalNdRangeIndex = (terminalNdRangeIndex + entry.ndRange + terminalNdRanges.length) % terminalNdRanges.length;
+                    renderTerminalNdCamera();
+                    renderTerminalNdRoutes();
+                    if (terminalNdActiveAudio) moveTerminalNdHead(terminalNdActiveAudio);
+                    renderFolio();
+                    return;
+                }
+                if (entry.ndToggle) {
+                    if (entry.ndToggle === 'eta') terminalNdEtaOn = !terminalNdEtaOn;
+                    if (entry.ndToggle === 'data') terminalNdDataOn = !terminalNdDataOn;
+                    if (entry.ndToggle === 'rotate') terminalNdRotateOn = !terminalNdRotateOn;
+                    renderTerminalNdRoutes();
+                    renderTerminalNdCamera();
+                    renderFolio();
+                    return;
+                }
                 if (entry.legSong || entry.legRight) {
+                    if (entry.legSong && scratchpad.trim().toUpperCase() === 'DCT' && folio.kind === 'legs' && activeLegsPlan()) {
+                        window.__npTerminalLegsDivert(entry.legIndex).then(started => {
+                            if (!started) {
+                                showScratchpadMessage('IN VALID');
+                                return;
+                            }
+                            scratchpad = '';
+                            legsSel = 0;
+                            folio = { ...folio, page: 1 };
+                            renderFolio();
+                        });
+                        return;
+                    }
                     if (deleteArmed) {
                         updateLeg(entry.legIndex, entry.legSong ? { type: 'song', songCode: '', advance: '', time: '' } :
-                            legsDraft[entry.legIndex]?.type === 'hold' ? { type: 'hold', times: '' } :
-                            { ...(legsDraft[entry.legIndex] || { type: 'song', songCode: '' }), advance: '', time: '' });
+                            displayedLegs()[entry.legIndex]?.type === 'hold' ? { type: 'hold', times: '' } :
+                            { ...(displayedLegs()[entry.legIndex] || { type: 'song', songCode: '' }), advance: '', time: '' });
                         deleteArmed = false;
                         renderScratchpad();
                         return;
                     }
                     if (!scratchpad) {
-                        const leg = legsDraft[entry.legIndex];
+                        const leg = displayedLegs()[entry.legIndex];
                         if (!legHasData(leg)) {
                             if (entry.legSong) {
-                                dispatchAction({ kind: 'folio', folio: { kind: 'legs-song-search', page: 1, legIndex: entry.legIndex } });
+                                dispatchAction({ kind: 'folio', folio: { kind: 'legs-song-search', page: 1, legIndex: entry.legIndex, legTarget: folio.kind === 'adjust-save' ? 'adjust-save' : 'legs' } });
                             }
                             return;
                         }
-                        scratchpad = entry.legSong ? leg.type === 'hold' ? 'HOLD' : leg.songCode :
+                        scratchpad = entry.legSong ? legScratchpadText(leg) :
                             leg.type === 'hold' ? String(leg.times || '') : `${leg.advance || ''}${leg.advance && leg.time ? ' ' : ''}${leg.time || ''}`;
                         renderScratchpad();
                         return;
@@ -13929,21 +15612,48 @@ usort($cats, 'customStrCmp');
                 document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalLsk' }));
                 dispatchSelector(selector.dataset.terminalField);
             });
+            let settingsSongId = '';
             document.addEventListener('m2songchange', event => {
                 const songId = event.detail?.dataset.songId || visibleCardFor(event.detail?.closest('.card'))?.id;
-                if (songId) applySettings(effectiveSongSettings(songId), songId);
+                if (songId && songId !== settingsSongId) {
+                    settingsSongId = songId;
+                    applySettings(effectiveSongSettings(songId), songId);
+                }
             });
             document.addEventListener('m2legsprogress', event => {
                 legsProgress = event.detail || { active: false };
+                renderTerminalNdEta();
                 if (folio.kind === 'prog') renderFolio();
             });
             document.addEventListener('m2legsstate', event => {
+                const hadActivePlan = !!activePlanFingerprint;
                 legsProgress = event.detail || { active: false };
+                
+                if (hadActivePlan && !legsProgress.active) {
+                    legsDraft = [];
+                    legsDraftPages = 1;
+                    activePlanFingerprint = '';
+                    legsActivatedPlanText = '';
+                    draftOriginActive = false;
+                    draftHistoryIndex = 0;
+                    legsSel = 0;
+                    saveTerminalSettings().then(() => {
+                        persistedLegsPlan = [];
+                        persistedLegsPages = 1;
+                        refreshSaveState();
+                    }).catch(() => {});
+                }
+                
+                renderTerminalNdRoutes();
+                if (terminalNdActiveAudio) moveTerminalNdHead(terminalNdActiveAudio);
                 if (folio.kind === 'prog' || folio.kind === 'legs') renderFolio();
             });
+            document.addEventListener('m2manualsectionwindowchange', rebuildTerminalNdNodes);
             window.setInterval(() => {
                 if (folio.kind === 'prog' && !window.__npTerminalIsrAt?.('E')) renderFolio();
             }, 1000);
+            renderTerminalNdCamera();
+            rebuildTerminalNdNodes();
             renderFolio();
             loadTerminalSettings().then(stored => {
                 Object.keys(globalSettings).forEach(key => {
@@ -13960,14 +15670,26 @@ usort($cats, 'customStrCmp');
                     if (Object.values(normalized).some(Boolean)) songSettings[songId] = normalized;
                 });
                 legsDraft = Array.isArray(stored.legs?.legs) ? stored.legs.legs : [];
-                legsDraftPages = Math.max(1, Number(stored.legs?.pages) || Math.ceil(legsDraft.length / 4) || 1);
+                legsDraftPages = Math.max(1, Number(stored.legs?.pages) || Math.ceil(legsDraft.length / legsPerPage) || 1);
+                savedLegSlots = Array.from({ length: Math.max(4, Array.isArray(stored.slots) ? stored.slots.length : 0) }, (_, index) => {
+                    const slot = Array.isArray(stored.slots) ? stored.slots[index] : null;
+                    if (!slot || typeof slot.name !== 'string' || !Array.isArray(slot.legs)) return null;
+                    return {
+                        name: limitText(slot.name).trim().slice(0, 6),
+                        date: /^\d{8}$/.test(String(slot.date || '')) ? String(slot.date) : '--------',
+                        legs: slot.legs,
+                        pages: Math.max(1, Number(slot.pages) || Math.ceil(slot.legs.length / legsPerPage) || 1)
+                    };
+                });
                 Object.assign(persistedGlobalSettings, globalSettings);
                 Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
                 persistedLegsPlan = JSON.parse(JSON.stringify(legsDraft));
                 persistedLegsPages = legsDraftPages;
                 applySettings(persistedGlobalSettings, '', 'manual');
                 applyCurrentSettings();
+                settingsSongId = activeSongId();
                 refreshSaveState();
+                rebuildTerminalNdNodes();
                 renderFolio();
             }).catch(() => {});
         })();
