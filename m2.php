@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '121';
+const M2_PAGE_CODE_VERSION = '128';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -2633,10 +2633,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             padding: 8px 4px 5px;
             border: 1px solid #fff;
             background: #000;
+            display:flex;
         }
 
 #mCircuitBreakerBoard>.mCircuitBreakerGroup {
-    width: 50%;
+    width: 100%;
     display: flex;
     box-sizing: border-box;
 }
@@ -2789,6 +2790,12 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             overflow: hidden;
             user-select: none;
             -webkit-user-select: none;
+        }
+
+        #mTerminal[data-powered="false"] #mTerminalScreen .mTerminalCell,
+        #mTerminal[data-powered="false"] .mTerminalSaveLight,
+        #mTerminalNd[data-powered="false"] > * {
+            visibility: hidden;
         }
 
         #mTerminalNd,
@@ -3966,9 +3973,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 id: 'playbackBreaker',
                                 designation: 'A2',
                                 name: 'PLAYBACK CONTROLLER',
-                                members: [
-                                    'playbackSystemsLoad',
-                                    'playbackActivityLoad',
+                                 members: [
+                                     'playbackSystemsLoad',
+                                     'planComputerLoad',
+                                     'playbackActivityLoad',
                                     'PLAYBACK_PL',
                                     'PLAYBACK_ISR_OFF',
                                     'PLAYBACK_ISR_R',
@@ -4019,6 +4027,36 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                             ]
                                         }
                                     ]
+                                },
+                                {
+                                    busbar: 'TERMINAL BUS',
+                                    circuits: [
+                                        {
+                                            id: 'terminalBusBreaker',
+                                            designation: 'TERMINAL BUS',
+                                            name: 'TERMINAL BUS',
+                                            members: ['terminalTextDisplayLoad', 'terminalKeyScannerLoad', 'ndDisplayLoad', 'ndGraphicsControllerLoad']
+                                        }
+                                    ],
+                                    rows: [[
+                                        {
+                                            busbar: 'TERMINAL BUSBAR',
+                                            circuits: [
+                                                {
+                                                    id: 'terminalKontrollerBreaker',
+                                                    designation: 'A8',
+                                                    name: 'TERMINAL KONTROLLER',
+                                                    members: ['terminalTextDisplayLoad', 'terminalKeyScannerLoad']
+                                                },
+                                                {
+                                                    id: 'dysPlayKontrollerBreaker',
+                                                    designation: 'A9',
+                                                    name: 'DYS PLAY KONTROLLER',
+                                                    members: ['ndDisplayLoad', 'ndGraphicsControllerLoad']
+                                                }
+                                            ]
+                                        }
+                                    ]]
                                 }
                             ]
                         ]
@@ -6365,6 +6403,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
         function playAudio(audio, reason = 'play') {
             if (!audio) return Promise.resolve(false);
+            if (!playbackElektroniksPower.closed) {
+                playbackCircuit?.dropPl();
+                if (!audio.paused) audio.pause();
+                return Promise.resolve(false);
+            }
             if (playbackCircuit && isrAt('E') && !legsExecutor?.active) return Promise.resolve(false);
             if (!soundCircuit.powerContact.closed) {
                 playbackCircuit?.dropPl();
@@ -8597,7 +8640,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (member && currentAudio?.__virtualSong === member.info && member.info.activeIndex !== member.index) return;
                 if (replacement.dataset.sync === 'true') {
                     if (replacement === activeMediaForCard(currentAudio?.closest('.card'))) syncVideoToAudio(currentAudio, !currentAudio.paused);
-                } else if (replacement.autoplay) {
+                } else if (replacement.autoplay && playbackElektroniksPower.closed) {
                     replacement.play().catch(() => {});
                 }
             });
@@ -8622,7 +8665,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     } catch (error) {}
                 }
                 video.playbackRate = soundCircuit.playbackRate;
-                if (playVideo && !audio.paused && soundCircuit.powerContact.closed) {
+                if (playVideo && !audio.paused && playbackElektroniksPower.closed && soundCircuit.powerContact.closed) {
                     const videoPlay = video.play();
                     if (videoPlay?.catch) videoPlay.catch(() => {});
                 }
@@ -8974,6 +9017,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
 
             async activate(plan) {
+                if (!playbackElektroniksPower.closed) return false;
+                const activationGeneration = this.generation;
                 const snapshot = JSON.parse(JSON.stringify(plan));
                 const proposedCommands = this.compile(snapshot);
                 const currentIndex = this.active && this.current ? proposedCommands.findIndex(command =>
@@ -8988,9 +9033,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     if (command.leg.type === 'then') continue;
                     const card = this.cardForCode(command.leg.songCode);
                     if (!card) return false;
-                    const audio = await this.readyAudio(card, null);
-                    if (!audio || !this.bounds(audio, command.leg)) return false;
+                    const audio = await this.readyAudio(card, activationGeneration);
+                    if (!playbackElektroniksPower.closed || activationGeneration !== this.generation ||
+                        !audio || !this.bounds(audio, command.leg)) return false;
                 }
+                if (!playbackElektroniksPower.closed || activationGeneration !== this.generation) return false;
                 if (currentIndex >= 0) {
                     return this.update(remaining);
                 }
@@ -9040,7 +9087,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
 
             async runCurrent(generation = this.generation) {
-                if (!this.active || generation !== this.generation) return false;
+                if (!this.active || generation !== this.generation || !playbackElektroniksPower.closed) return false;
                 const command = this.commands[this.commandIndex];
                 if (!command || command.leg.type === 'then') return this.finish();
                 if (command.repeats < 1) return this.advance();
@@ -9048,7 +9095,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (!card) return this.fail();
                 this.transitioning = true;
                 const audio = await this.readyAudio(card, generation);
-                if (!audio || !this.active || generation !== this.generation) return false;
+                if (!audio || !this.active || generation !== this.generation || !playbackElektroniksPower.closed) return false;
                 const bounds = this.bounds(audio, command.leg);
                 if (!bounds) return this.fail();
                 this.current = { ...bounds, audio, command };
@@ -9066,6 +9113,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 this.current.audio = target;
                 this.transitioning = false;
                 const played = await playAudio(target, 'legs');
+                if (!this.active || generation !== this.generation || !playbackElektroniksPower.closed) return false;
+                if (!played && !soundCircuit.powerContact.closed) return false;
                 if (!played) return this.fail();
                 this.dispatchState();
                 return true;
@@ -9250,6 +9299,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
 
             playCallout(id) {
+                if (!playbackElektroniksPower.closed || !soundCircuit.powerContact.closed) return;
                 const audio = new Audio(`/m/img/${id}.wav`);
                 this.calloutAudio.add(audio);
                 const done = () => this.calloutAudio.delete(audio);
@@ -9300,6 +9350,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 return false;
             }
 
+            stopCallouts() {
+                for (const audio of this.calloutAudio) audio.pause();
+                this.calloutAudio.clear();
+            }
+
             cancel() {
                 if (!this.active && !this.current) return false;
                 this.active = false;
@@ -9307,8 +9362,23 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 this.transitioning = false;
                 this.selecting = false;
                 this.generation++;
+                this.stopCallouts();
                 this.dispatchState();
                 return true;
+            }
+
+            powerOff() {
+                this.cancel();
+                this.generation++;
+                this.plan = [];
+                this.commands = [];
+                this.commandIndex = 0;
+                this.iteration = 0;
+                this.completedLegs = 0;
+                this.completedHistory = [];
+                this.lastCalloutRemaining = null;
+                this.calloutsPlayed.clear();
+                this.stopCallouts();
             }
         }
         legsExecutor = new LegsExecutor();
@@ -9340,19 +9410,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 percent: Math.max(0, Math.min(100, Math.round(model.activePercent)))
             };
         };
-        let playbackPowerRecovery = null;
         const applyPlaybackCircuitPower = () => {
             const powered = playbackElektroniksPower.closed;
             if (!powered) {
-                legsExecutor.cancel();
+                legsExecutor.powerOff();
                 const audio = currentAudio;
                 const media = audio ? activeMediaForCard(audio.closest('.card')) : null;
                 const video = media?.matches('video[data-sync="true"]') ? media : null;
-                playbackPowerRecovery = audio ? {
-                    audio,
-                    time: playbackTime(audio),
-                    wasPlaying: !audio.paused
-                } : null;
                 playbackCircuit.dropPl();
                 playbackCircuit.clearActivity();
                 clearKrSectionLoop();
@@ -9362,41 +9426,19 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     video.__m2SyncPending = false;
                     video.load();
                 }
-                return;
             }
-            const recovery = playbackPowerRecovery;
-            playbackPowerRecovery = null;
-            if (!recovery?.audio || recovery.audio !== currentAudio) return;
-            const audio = recovery.audio;
-            let restored = false;
-            const restore = () => {
-                if (restored || !playbackElektroniksPower.closed || audio !== currentAudio) return;
-                restored = true;
-                audio.removeEventListener('loadedmetadata', restore);
-                seekPlayback(audio, recovery.time, false);
-                syncVideoToAudio(audio, recovery.wasPlaying);
-                if (recovery.wasPlaying && soundElektroniksPower.closed) {
-                    playAudio(audio, 'A2 breaker reset');
-                }
-            };
-            loadAudio(audio);
-            audio.addEventListener('loadedmetadata', restore, { once: true });
-            audio.preload = 'auto';
-            audio.load();
-            queueMicrotask(() => {
-                if (audio.readyState >= HTMLMediaElement.HAVE_METADATA) restore();
-            });
         };
         playbackElektroniksPower.addEventListener('change', applyPlaybackCircuitPower);
         applyPlaybackCircuitPower();
         const applySoundCircuitPower = () => {
             const powered = soundCircuit.powerContact.closed;
+            document.dispatchEvent(new CustomEvent('m2soundpower', { detail: { powered } }));
             if (masterGain && audioCtx) {
                 masterGain.gain.cancelScheduledValues(audioCtx.currentTime);
                 masterGain.gain.setValueAtTime(powered ? 1 : 0, audioCtx.currentTime);
             }
             if (powered) return;
-            legsExecutor.cancel();
+            legsExecutor.stopCallouts();
             panelSoundBank.stopElectrical();
             playbackCircuit.dropPl();
             playbackCircuit.clearActivity();
@@ -10904,6 +10946,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         };
 
         (function() {
+            const PROVISIONAL_DC_WIRE_OHMS_PER_METER = 0.053;
+            const PROVISIONAL_DC_WIRE_LENGTH_METERS = 0.2;
+            const PROVISIONAL_DC_TRUNK_LENGTH_METERS = 0.5;
+            const PROVISIONAL_DC_CONTACT_RESISTANCE_OHMS = 0.01;
+
             class ElectricalTerminal {
                 constructor(owner, designation) {
                     this.owner = owner;
@@ -10914,7 +10961,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
 
             class DcSource {
-                constructor(name, nominalVoltage = 28, currentLimit = 2) {
+                constructor(name, nominalVoltage = 28, currentLimit = 3.6) {
                     this.name = name;
                     this.nominalVoltage = nominalVoltage;
                     this.currentLimit = currentLimit;
@@ -10941,7 +10988,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             class ElectricalConductor extends EventTarget {
                 #connected = true;
 
-                constructor(name, from, to) {
+                constructor(name, from, to,
+                    lengthMeters = PROVISIONAL_DC_WIRE_LENGTH_METERS,
+                    ohmsPerMeter = PROVISIONAL_DC_WIRE_OHMS_PER_METER) {
                     super();
                     if (!(from instanceof ElectricalTerminal) || !(to instanceof ElectricalTerminal)) {
                         throw new TypeError(name + ' requires two electrical terminals');
@@ -10949,6 +10998,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.name = name;
                     this.from = from;
                     this.to = to;
+                    this.lengthMeters = lengthMeters;
+                    this.resistance = lengthMeters * ohmsPerMeter;
                 }
 
                 get connected() {
@@ -10980,13 +11031,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #closed;
                 #authority;
 
-                constructor(name, closed = false, authority = null) {
+                constructor(name, closed = false, authority = null,
+                    resistance = PROVISIONAL_DC_CONTACT_RESISTANCE_OHMS) {
                     super();
                     this.name = name;
                     this.line = new ElectricalTerminal(this, 'LINE');
                     this.load = new ElectricalTerminal(this, 'LOAD');
                     this.#closed = !!closed;
                     this.#authority = authority;
+                    this.resistance = resistance;
                     Object.defineProperties(this, {
                         closed: {
                             enumerable: true,
@@ -11143,7 +11196,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #transactionDepth = 0;
                 #names = new Set();
 
-                constructor(name, nominalVoltage = 28, currentLimit = 2) {
+                constructor(name, nominalVoltage = 28, currentLimit = 3.6) {
                     super();
                     this.name = name;
                     this.source = new DcSource(name + ' SOURCE', nominalVoltage, currentLimit);
@@ -11152,6 +11205,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.coils = [];
                     this.loads = [];
                     this.fault = null;
+                    this.potentials = new Map();
                 }
 
                 register(device, collection) {
@@ -11195,8 +11249,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     return load;
                 }
 
-                wire(name, from, to) {
-                    return this.addConductor(new ElectricalConductor(name, from, to));
+                wire(name, from, to, lengthMeters = PROVISIONAL_DC_WIRE_LENGTH_METERS) {
+                    return this.addConductor(new ElectricalConductor(name, from, to, lengthMeters));
+                }
+
+                voltageBetween(positive, negative) {
+                    return (this.potentials.get(positive) || 0) -
+                        (this.potentials.get(negative) || 0);
                 }
 
                 installJumper(name, from, to) {
@@ -11229,73 +11288,115 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 throw new Error(this.name + ' failed to reach an electrical steady state');
                             }
 
-                            const terminals = new Set([this.source.positive, this.source.negative]);
-                            this.conductors.forEach(device => {
-                                terminals.add(device.from);
-                                terminals.add(device.to);
-                            });
-                            this.contacts.forEach(device => {
-                                terminals.add(device.line);
-                                terminals.add(device.load);
-                            });
-                            this.loads.forEach(load => {
-                                terminals.add(load.a1);
-                                terminals.add(load.a2);
-                            });
-
-                            const parent = new Map([...terminals].map(terminal => [terminal, terminal]));
-                            const find = terminal => {
-                                let root = terminal;
-                                while (parent.get(root) !== root) root = parent.get(root);
-                                let cursor = terminal;
-                                while (parent.get(cursor) !== cursor) {
-                                    const next = parent.get(cursor);
-                                    parent.set(cursor, root);
-                                    cursor = next;
-                                }
-                                return root;
-                            };
-                            const union = (left, right) => {
-                                const leftRoot = find(left);
-                                const rightRoot = find(right);
-                                if (leftRoot !== rightRoot) parent.set(leftRoot, rightRoot);
-                            };
-
-                            this.conductors.forEach(conductor => {
-                                if (conductor.conductive) union(conductor.from, conductor.to);
-                            });
-                            this.contacts.forEach(contact => {
-                                if (contact.conductive) union(contact.line, contact.load);
-                            });
-
-                            const positiveRoot = find(this.source.positive);
-                            const negativeRoot = find(this.source.negative);
-                            if (positiveRoot === negativeRoot) {
-                                this.source.trip('direct short circuit between L+ and L-');
-                            }
-
                             if (this.source.tripped) {
                                 this.fault = this.source.tripReason;
                                 this.source.current = 0;
+                                this.potentials = new Map();
                                 this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
                                 continue;
                             }
 
-                            const potential = terminal => {
-                                const root = find(terminal);
-                                if (root === positiveRoot) return this.source.nominalVoltage;
-                                if (root === negativeRoot) return 0;
-                                return null;
-                            };
-                            let sourceCurrent = 0;
-                            this.loads.forEach(load => {
-                                const a1 = potential(load.a1);
-                                const a2 = potential(load.a2);
-                                const voltage = a1 === null || a2 === null ? 0 : a1 - a2;
-                                load.applyVoltage(voltage, DC_SOLVER_AUTHORITY);
-                                sourceCurrent += Math.abs(load.current);
+                            const edges = [];
+                            this.conductors.forEach(device => {
+                                if (device.conductive) edges.push([device.from, device.to, device.resistance]);
                             });
-                            this.source.current = sourceCurrent;
+                            this.contacts.forEach(device => {
+                                if (device.conductive) edges.push([device.line, device.load, device.resistance]);
+                            });
+                            this.loads.forEach(device => {
+                                edges.push([device.a1, device.a2, device.resistance]);
+                            });
+                            const adjacent = new Map();
+                            edges.forEach(([from, to, resistance]) => {
+                                if (!Number.isFinite(resistance) || resistance <= 0) {
+                                    throw new Error(this.name + ' has invalid resistance');
+                                }
+                                if (!adjacent.has(from)) adjacent.set(from, []);
+                                if (!adjacent.has(to)) adjacent.set(to, []);
+                                const conductance = 1 / resistance;
+                                adjacent.get(from).push([to, conductance]);
+                                adjacent.get(to).push([from, conductance]);
+                            });
+                            const fixed = new Map([
+                                [this.source.positive, this.source.nominalVoltage],
+                                [this.source.negative, 0]
+                            ]);
+                            const reachable = new Set(fixed.keys());
+                            const queue = [...fixed.keys()];
+                            for (let index = 0; index < queue.length; index++) {
+                                (adjacent.get(queue[index]) || []).forEach(([neighbor]) => {
+                                    if (reachable.has(neighbor)) return;
+                                    reachable.add(neighbor);
+                                    queue.push(neighbor);
+                                });
+                            }
+                            const unknown = [...reachable].filter(node => !fixed.has(node));
+                            const positions = new Map(unknown.map((node, index) => [node, index]));
+                            const diagonal = new Float64Array(unknown.length);
+                            const rhs = new Float64Array(unknown.length);
+                            const rows = unknown.map(() => []);
+                            unknown.forEach((node, index) => {
+                                (adjacent.get(node) || []).forEach(([neighbor, conductance]) => {
+                                    diagonal[index] += conductance;
+                                    if (fixed.has(neighbor)) rhs[index] += conductance * fixed.get(neighbor);
+                                    else rows[index].push([positions.get(neighbor), conductance]);
+                                });
+                            });
+                            const voltage = new Float64Array(unknown.length);
+                            const residual = rhs.slice();
+                            const direction = new Float64Array(unknown.length);
+                            let residualDot = 0;
+                            let rhsNorm = 0;
+                            for (let index = 0; index < unknown.length; index++) {
+                                direction[index] = residual[index] / diagonal[index];
+                                residualDot += residual[index] * direction[index];
+                                rhsNorm += rhs[index] * rhs[index];
+                            }
+                            const tolerance = 1e-10 * Math.max(1, Math.sqrt(rhsNorm));
+                            for (let step = 0; step < Math.max(unknown.length * 8, 1); step++) {
+                                let norm = 0;
+                                for (let index = 0; index < unknown.length; index++) {
+                                    norm += residual[index] * residual[index];
+                                }
+                                if (Math.sqrt(norm) <= tolerance) break;
+                                const product = new Float64Array(unknown.length);
+                                let denominator = 0;
+                                for (let index = 0; index < unknown.length; index++) {
+                                    let value = diagonal[index] * direction[index];
+                                    rows[index].forEach(([neighbor, conductance]) => {
+                                        value -= conductance * direction[neighbor];
+                                    });
+                                    product[index] = value;
+                                    denominator += direction[index] * value;
+                                }
+                                if (!(denominator > 0)) throw new Error(this.name + ' DC matrix is singular');
+                                const alpha = residualDot / denominator;
+                                let nextDot = 0;
+                                for (let index = 0; index < unknown.length; index++) {
+                                    voltage[index] += alpha * direction[index];
+                                    residual[index] -= alpha * product[index];
+                                    nextDot += residual[index] * residual[index] / diagonal[index];
+                                }
+                                const beta = nextDot / residualDot;
+                                for (let index = 0; index < unknown.length; index++) {
+                                    direction[index] = residual[index] / diagonal[index] + beta * direction[index];
+                                }
+                                residualDot = nextDot;
+                                if (step === unknown.length * 8 - 1) {
+                                    throw new Error(this.name + ' DC solver did not converge');
+                                }
+                            }
+                            this.potentials = new Map(fixed);
+                            unknown.forEach((node, index) => this.potentials.set(node, voltage[index]));
+                            this.loads.forEach(load => {
+                                load.applyVoltage(this.voltageBetween(load.a1, load.a2), DC_SOLVER_AUTHORITY);
+                            });
+                            let sourceCurrent = 0;
+                            (adjacent.get(this.source.positive) || []).forEach(([neighbor, conductance]) => {
+                                sourceCurrent += conductance *
+                                    (this.source.nominalVoltage - (this.potentials.get(neighbor) || 0));
+                            });
+                            this.source.current = Math.max(0, sourceCurrent);
 
                             if (sourceCurrent > this.source.currentLimit) {
                                 this.source.trip(
@@ -11885,7 +11986,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.readPanelState = readPanelState;
                     this.flashRate = 40;
                     this.cycleDuration = 60000 / this.flashRate;
-                    this.safeCurrentLimit = 1.6;
+                    this.safeCurrentLimit = 3.2;
                     this.pattern = Object.freeze({
                         bitOrder: Object.freeze(['PL', 'ISR2', 'ISR1', 'ISR0', 'K', 'KR', 'M1', 'M0', 'L']),
                         shortPulse: 24,
@@ -11966,7 +12067,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.#cycleNumber++;
                     const panelState = this.readPanelState();
                     this.#panelWord = this.#encodePanelWord(panelState);
-                    this.#warning = this.circuit.source.current > this.safeCurrentLimit;
+                    this.#warning = this.circuit.source.current >= this.safeCurrentLimit;
                     const evenCycle = this.#cycleNumber % 2 === 0;
                     this.#schedule(0, () => {
                         this.strobes.left.flash(44);
@@ -12275,7 +12376,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #timeBusContactAuthority = Symbol('TIME BUS PL AUXILIARY CONTACT');
 
                 constructor(work) {
-                    this.circuit = new DcControlCircuit('PAGE CONTROL BUS', 28, 2);
+                    this.circuit = new DcControlCircuit('PAGE CONTROL BUS', 28, 3.6);
                     const circuit = this.circuit;
 
                     this.pagePower = circuit.addContact(new ElectricalContact(
@@ -12360,8 +12461,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     ]);
 
                     const wires = {};
-                    const wire = (key, name, from, to) => {
-                        const conductor = circuit.wire(name, from, to);
+                    const wire = (key, name, from, to,
+                        lengthMeters = PROVISIONAL_DC_WIRE_LENGTH_METERS) => {
+                        const conductor = circuit.wire(name, from, to, lengthMeters);
                         wires[key] = conductor;
                         return conductor;
                     };
@@ -12373,6 +12475,27 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         from,
                         to
                     );
+                    const supplyBusbarOwner = { name: 'DC DISTRIBUTION BUSBAR' };
+                    const supplyBusbar = Object.freeze({
+                        positive: new ElectricalTerminal(supplyBusbarOwner, 'L+'),
+                        negative: new ElectricalTerminal(supplyBusbarOwner, 'L-')
+                    });
+                    const pageBusbarOwner = { name: 'PAGE CONTROL BUSBAR' };
+                    const pageBusbar = Object.freeze({
+                        positive: new ElectricalTerminal(pageBusbarOwner, 'L+'),
+                        negative: new ElectricalTerminal(pageBusbarOwner, 'L-')
+                    });
+                    wire('sourceFeed', 'W000 SOURCE L+ TO DC DISTRIBUTION L+',
+                        circuit.source.positive, supplyBusbar.positive,
+                        PROVISIONAL_DC_TRUNK_LENGTH_METERS);
+                    wire('sourceReturn', 'W000R DC DISTRIBUTION L- TO SOURCE L-',
+                        supplyBusbar.negative, circuit.source.negative,
+                        PROVISIONAL_DC_TRUNK_LENGTH_METERS);
+                    const terminalBusbarOwner = { name: 'TERMINAL BUSBAR' };
+                    const terminalBusbar = Object.freeze({
+                        positive: new ElectricalTerminal(terminalBusbarOwner, 'L+'),
+                        negative: new ElectricalTerminal(terminalBusbarOwner, 'L-')
+                    });
                     const branchBreakers = {
                         pageControl: new DcBranchCircuitBreaker(
                             'CB-P0 PAGE CONTROL', circuit, ['control']
@@ -12397,54 +12520,83 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         ),
                         time: new DcBranchCircuitBreaker(
                             'CB-TIME TIME BUS', circuit, ['time']
+                        ),
+                        terminalBus: new DcBranchCircuitBreaker(
+                            'CB-TERMINAL TERMINAL BUS', circuit, ['main']
+                        ),
+                        terminalKontroller: new DcBranchCircuitBreaker(
+                            'CB-A8 TERMINAL KONTROLLER', circuit, ['main']
+                        ),
+                        dysPlayKontroller: new DcBranchCircuitBreaker(
+                            'CB-A9 DYS PLAY KONTROLLER', circuit, ['main']
                         )
                     };
                     const breakerSupplies = {
                         pageControl: branchBreakers.pageControl.connectPole(
-                            'control', circuit.source.positive, circuit.source.negative, breakerWire
+                            'control', supplyBusbar.positive, supplyBusbar.negative, breakerWire
                         ),
                         mainSense: branchBreakers.mainSense.connectPole(
-                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                            'main', mainSystemsContact.load, supplyBusbar.negative, breakerWire
                         ),
                         panel: branchBreakers.panel.connectPole(
-                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                            'main', mainSystemsContact.load, supplyBusbar.negative, breakerWire
                         ),
                         playback: branchBreakers.playback.connectPole(
-                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                            'main', mainSystemsContact.load, supplyBusbar.negative, breakerWire
                         ),
                         playbackR3: branchBreakers.playback.connectPole(
-                            'r3', kR3Contact.load, circuit.source.negative, breakerWire
+                            'r3', kR3Contact.load, supplyBusbar.negative, breakerWire
                         ),
                         sound: branchBreakers.sound.connectPole(
-                            'main', mainSystemsContact.load, circuit.source.negative, breakerWire
+                            'main', mainSystemsContact.load, supplyBusbar.negative, breakerWire
                         ),
                         archive: branchBreakers.archive.connectPole(
-                            'control', this.pagePower.load, circuit.source.negative, breakerWire
+                            'control', pageBusbar.positive, supplyBusbar.negative, breakerWire
                         ),
                         lightingControl: branchBreakers.lighting.connectPole(
-                            'control', this.pagePower.load, circuit.source.negative, breakerWire
+                            'control', pageBusbar.positive, supplyBusbar.negative, breakerWire
                         ),
                         lightingL: branchBreakers.lighting.connectPole(
-                            'l', lightingTierContacts.load.load, circuit.source.negative, breakerWire
+                            'l', lightingTierContacts.load.load, supplyBusbar.negative, breakerWire
                         ),
                         lightingObs: branchBreakers.lighting.connectPole(
-                            'obs', lightingTierContacts.observe.load, circuit.source.negative, breakerWire
+                            'obs', lightingTierContacts.observe.load, supplyBusbar.negative, breakerWire
                         ),
                         time: branchBreakers.time.connectPole(
-                            'time', timeBusContact.load, circuit.source.negative, breakerWire
+                            'time', timeBusContact.load, supplyBusbar.negative, breakerWire
+                        ),
+                        terminalBus: branchBreakers.terminalBus.connectPole(
+                            'main', mainSystemsContact.load, supplyBusbar.negative, breakerWire
+                        ),
+                        terminalKontroller: branchBreakers.terminalKontroller.connectPole(
+                            'main', terminalBusbar.positive, terminalBusbar.negative, breakerWire
+                        ),
+                        dysPlayKontroller: branchBreakers.dysPlayKontroller.connectPole(
+                            'main', terminalBusbar.positive, terminalBusbar.negative, breakerWire
                         )
                     };
+                    wire('terminalBusbarFeed', 'W508 CB-TERMINAL TO TERMINAL BUSBAR L+',
+                        breakerSupplies.terminalBus, terminalBusbar.positive);
+                    wire('terminalBusbarReturn', 'W509 TERMINAL BUSBAR L- TO RETURN',
+                        terminalBusbar.negative, supplyBusbar.negative);
 
                     wire('sourceToMaster', 'W001 SOURCE L+ TO S0 LINE',
                         breakerSupplies.pageControl, this.pagePower.line);
+                    wire('pageBusbarFeed', 'W002 S0 LOAD TO PAGE CONTROL BUSBAR L+',
+                        this.pagePower.load, pageBusbar.positive,
+                        PROVISIONAL_DC_TRUNK_LENGTH_METERS);
+                    wire('pageBusbarReturn', 'W003 PAGE CONTROL BUSBAR L- TO RETURN',
+                        pageBusbar.negative, supplyBusbar.negative,
+                        PROVISIONAL_DC_TRUNK_LENGTH_METERS);
+                    this.pageBusbar = pageBusbar;
 
                     wire('masterToTier1', 'W101 S0 LOAD TO K1 A1',
-                        this.pagePower.load, coils.tier1.a1);
+                        pageBusbar.positive, coils.tier1.a1);
                     wire('tier1Return', 'W102 K1 A2 TO RETURN',
-                        coils.tier1.a2, circuit.source.negative);
+                        coils.tier1.a2, pageBusbar.negative);
 
                     wire('masterToTier1Ready', 'W201 S0 LOAD TO K1 READY LINE',
-                        this.pagePower.load, this.tier1.readyContact.line);
+                        pageBusbar.positive, this.tier1.readyContact.line);
                     wire('tier1ReadyToLoadCam', 'W202 K1 READY LOAD TO S1 L CAM LINE',
                         this.tier1.readyContact.load, this.loadCommand.line);
                     wire('loadCamToTier2', 'W203 S1 L CAM LOAD TO K2 A1',
@@ -12454,10 +12606,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     wire('tier2SealToTier2', 'W205 K2-A LOAD TO K2 A1',
                         sealInContacts.tier2.load, coils.tier2.a1);
                     wire('tier2Return', 'W206 K2 A2 TO RETURN',
-                        coils.tier2.a2, circuit.source.negative);
+                        coils.tier2.a2, pageBusbar.negative);
 
                     wire('masterToTier2Ready', 'W301 S0 LOAD TO K2 READY LINE',
-                        this.pagePower.load, this.tier2.readyContact.line);
+                        pageBusbar.positive, this.tier2.readyContact.line);
                     wire('tier2ReadyToObserveCam', 'W302 K2 READY LOAD TO S1 OBS CAM LINE',
                         this.tier2.readyContact.load, this.observeCommand.line);
                     wire('observeCamToTier3', 'W303 S1 OBS CAM LOAD TO K3 A1',
@@ -12467,24 +12619,24 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     wire('tier3SealToTier3', 'W305 K3-A LOAD TO K3 A1',
                         sealInContacts.tier3.load, coils.tier3.a1);
                     wire('tier3Return', 'W306 K3 A2 TO RETURN',
-                        coils.tier3.a2, circuit.source.negative);
+                        coils.tier3.a2, pageBusbar.negative);
 
                     wire('masterToTier3Ready', 'W401 S0 LOAD TO K3 READY LINE',
-                        this.pagePower.load, this.tier3.readyContact.line);
+                        pageBusbar.positive, this.tier3.readyContact.line);
                     wire('tier3ReadyToTier4', 'W402 K3 READY LOAD TO K4 A1',
                         this.tier3.readyContact.load, coils.tier4.a1);
                     wire('tier4Return', 'W403 K4 A2 TO RETURN',
-                        coils.tier4.a2, circuit.source.negative);
+                        coils.tier4.a2, pageBusbar.negative);
                     wire('sourceToMainSystemsContact', 'W501 SOURCE L+ TO K4-A LINE',
-                        circuit.source.positive, mainSystemsContact.line);
+                        supplyBusbar.positive, mainSystemsContact.line);
                     wire('mainSystemsToKR3Contact', 'W502 MAIN BUS TO K-R3 LINE',
                         mainSystemsContact.load, kR3Contact.line);
                     wire('mainSystemsToTimeBusContact', 'W503 MAIN BUS TO PL-T TIME BUS LINE',
                         mainSystemsContact.load, timeBusContact.line);
                     wire('masterToLLightingContact', 'W510 S0 LOAD TO K2-B L LIGHTING LINE',
-                        this.pagePower.load, lightingTierContacts.load.line);
+                        pageBusbar.positive, lightingTierContacts.load.line);
                     wire('masterToObsLightingContact', 'W511 S0 LOAD TO K3-B OBS LIGHTING LINE',
-                        this.pagePower.load, lightingTierContacts.observe.line);
+                        pageBusbar.positive, lightingTierContacts.observe.line);
                     wire('tier1ReadyToReadieCam', 'W601 TIER 1 READY TO STR READIE CAM',
                         this.tier1.readyContact.load, readieContacts.tier1.line);
                     wire('tier1ReadieCamToLamp', 'W602 STR READIE CAM TO H1',
@@ -12498,7 +12650,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     wire('mainReadieCamToLamp', 'W606 OBS READIE CAM TO H1',
                         readieContacts.main.load, readieLamp.a1);
                     wire('readieLampReturn', 'W607 H1 TO RETURN',
-                        readieLamp.a2, circuit.source.negative);
+                        readieLamp.a2, pageBusbar.negative);
 
                     const netlist = new DcNetlist(circuit, dcDeviceRegistry, {
                         supplies: {
@@ -12511,9 +12663,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             lightingL: breakerSupplies.lightingL,
                             lightingObs: breakerSupplies.lightingObs,
                             k: breakerSupplies.playbackR3,
-                            time: breakerSupplies.time
+                            time: breakerSupplies.time,
+                            terminalKontroller: breakerSupplies.terminalKontroller,
+                            dysPlayKontroller: breakerSupplies.dysPlayKontroller
                         },
-                        returns: { dc: circuit.source.negative },
+                        returns: { dc: supplyBusbar.negative, page: pageBusbar.negative, terminal: terminalBusbar.negative },
                         protectedSupplies: [
                             'mainSense',
                             'panel',
@@ -12524,16 +12678,25 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             'lightingL',
                             'lightingObs',
                             'k',
-                            'time'
+                            'time',
+                            'terminalKontroller',
+                            'dysPlayKontroller'
                         ]
                     });
                     const equipmentLoads = netlist.install([
                         { id: 'mainSystemsLoad', type: 'elektroniks-unit', name: 'A0 MAIN ELEKTRONIKS BUS SENSE', supply: 'mainSense', return: 'dc', resistance: 28000 },
                         { id: 'panelSystemsLoad', type: 'elektroniks-unit', name: 'A1 PANEL CONTROLLER', supply: 'panel', return: 'dc', resistance: 560 },
                         { id: 'playbackSystemsLoad', type: 'elektroniks-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'playback', return: 'dc', resistance: 560 },
+                        { id: 'planComputerLoad', type: 'elektroniks-unit', name: 'A2 PLAN COMPUTER AND STORAGE', supply: 'playback', return: 'dc', resistance: 28 / 0.7 },
                         { id: 'soundSystemsLoad', type: 'elektroniks-unit', name: 'A3 SOUND CONTROLLER', supply: 'sound', return: 'dc', resistance: 280 },
-                        { id: 'archiveSystemsLoad', type: 'elektroniks-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'dc', resistance: 1120 },
-                        { id: 'lightingSystemsLoad', type: 'elektroniks-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'dc', resistance: 1120 }
+                        { id: 'archiveSystemsLoad', type: 'elektroniks-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'page', resistance: 1120 },
+                        { id: 'lightingSystemsLoad', type: 'elektroniks-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'page', resistance: 1120 }
+                    ]);
+                    const terminalLoads = netlist.install([
+                        { id: 'terminalTextDisplayLoad', type: 'elektroniks-unit', name: 'A8 TEXT LCD AND BACKLIGHT', supply: 'terminalKontroller', return: 'terminal', resistance: 28 / 0.4 },
+                        { id: 'terminalKeyScannerLoad', type: 'elektroniks-unit', name: 'A8 KEY SCANNER', supply: 'terminalKontroller', return: 'terminal', resistance: 28 / 0.1 },
+                        { id: 'ndDisplayLoad', type: 'elektroniks-unit', name: 'A9 ND LCD AND BACKLIGHT', supply: 'dysPlayKontroller', return: 'terminal', resistance: 28 / 0.4 },
+                        { id: 'ndGraphicsControllerLoad', type: 'elektroniks-unit', name: 'A9 GRAPHICS CONTROLLER', supply: 'dysPlayKontroller', return: 'terminal', resistance: 28 / 0.2 }
                     ]);
                     const activityLoads = netlist.install([
                         { id: 'playbackActivityLoad', type: 'switched-load', name: 'A2-L PLAYBACK MEDIA LOAD', supply: 'playback', return: 'dc', resistance: 560 },
@@ -12565,11 +12728,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         setInput: timeBusLoads.setInput
                     });
                     const lightingLoads = netlist.install([
-                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'lightingControl', return: 'dc', resistance: 5600 },
-                        { id: 'leftPlaybackStrobe', type: 'switched-load', name: 'H3 LEFT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 },
-                        { id: 'rightPlaybackStrobe', type: 'switched-load', name: 'H4 RIGHT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 },
-                        { id: 'bottomLeftCurrentStrobe', type: 'switched-load', name: 'H5 BOTTOM LEFT CURRENT GREEN STROBE POWER SUPPLY', supply: 'lightingL', return: 'dc', resistance: 5600 },
-                        { id: 'bottomRightPanelStrobe', type: 'switched-load', name: 'H6 BOTTOM RIGHT PANEL CODE RED STROBE POWER SUPPLY', supply: 'lightingObs', return: 'dc', resistance: 5600 }
+                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'lightingControl', return: 'page', resistance: 5600 },
+                        { id: 'leftPlaybackStrobe', type: 'switched-load', name: 'H3 LEFT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 5600 },
+                        { id: 'rightPlaybackStrobe', type: 'switched-load', name: 'H4 RIGHT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 5600 },
+                        { id: 'bottomLeftCurrentStrobe', type: 'switched-load', name: 'H5 BOTTOM LEFT CURRENT GREEN STROBE POWER SUPPLY', supply: 'lightingL', return: 'page', resistance: 5600 },
+                        { id: 'bottomRightPanelStrobe', type: 'switched-load', name: 'H6 BOTTOM RIGHT PANEL CODE RED STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 5600 }
                     ]);
                     const powerBridges = [
                         [equipmentLoads.mainSystemsLoad, pageMainSystemsPower],
@@ -12615,7 +12778,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     m2ExpansionBoard.connectElectricalNetlist(netlist, {
                         prefix: 'ARCHIVE',
                         supply: 'archive',
-                        return: 'dc',
+                        return: 'page',
                         inputResistance: 28000
                     });
                     netlist.attachSelector('SOUND_L_COUPLING', soundCircuit.coupling, {
@@ -12671,7 +12834,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         soundBreaker: branchBreakers.sound,
                         archiveBreaker: branchBreakers.archive,
                         lightingBreaker: branchBreakers.lighting,
-                        timeBreaker: branchBreakers.time
+                        timeBreaker: branchBreakers.time,
+                        terminalBusBreaker: branchBreakers.terminalBus,
+                        terminalKontrollerBreaker: branchBreakers.terminalKontroller,
+                        dysPlayKontrollerBreaker: branchBreakers.dysPlayKontroller
                     });
                     Object.entries(circuitBreakerBindings).forEach(([id, breaker]) => {
                         const control = m2CircuitBreakerPanel.getBreaker(id);
@@ -12703,6 +12869,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         sealInContacts: Object.freeze(sealInContacts),
                         lightingTierContacts: Object.freeze(lightingTierContacts),
                         mainSystemsContact,
+                        terminalBusbar,
                         kR3Contact,
                         timeBus: Object.freeze({
                             contact: timeBusContact,
@@ -12711,6 +12878,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         }),
                         mainSystemsLoad: equipmentLoads.mainSystemsLoad,
                         equipmentLoads: Object.freeze(equipmentLoads),
+                        terminalLoads: Object.freeze(terminalLoads),
                         activityLoads: Object.freeze(activityLoads),
                         lightingLoads: Object.freeze(lightingLoads),
                         lightingController,
@@ -12744,6 +12912,21 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 )
                             ));
                         },
+                        get terminal() {
+                            const loads = Object.fromEntries(Object.entries(terminalLoads).map(([id, load]) => [id, {
+                                voltage: load.voltage,
+                                current: load.current,
+                                energized: load.energized
+                            }]));
+                            return freezeTelemetry({
+                                dataPowered: terminalLoads.terminalTextDisplayLoad.energized,
+                                ndPowered: terminalLoads.terminalTextDisplayLoad.energized && terminalLoads.ndGraphicsControllerLoad.energized,
+                                planComputerPowered: equipmentLoads.planComputerLoad.energized,
+                                planComputerCurrent: equipmentLoads.planComputerLoad.current,
+                                current: Object.values(loads).reduce((sum, load) => sum + Math.abs(load.current), 0),
+                                loads
+                            });
+                        },
                         get timeBus() {
                             const loads = Object.fromEntries(Object.entries(timeBusLoads).map(([id, device]) => [id, {
                                 state: device.state || (device.energized ? 'POWERED' : 'OPEN'),
@@ -12770,6 +12953,22 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     });
                     this.telemetry = electricalTelemetry;
                     publishReadOnlyWindow('m2Electrical', electricalTelemetry);
+                    let lastTerminalPower = '';
+                    let lastPlanPower = null;
+                    const synchronizeTerminalPower = () => {
+                        const plan = equipmentLoads.planComputerLoad.energized;
+                        if (plan !== lastPlanPower) {
+                            lastPlanPower = plan;
+                            document.dispatchEvent(new CustomEvent('m2planpower', { detail: { powered: plan } }));
+                        }
+                        const data = terminalLoads.terminalTextDisplayLoad.energized;
+                        const nd = data && terminalLoads.ndGraphicsControllerLoad.energized;
+                        const signature = `${data}:${nd}`;
+                        if (signature === lastTerminalPower) return;
+                        lastTerminalPower = signature;
+                        document.dispatchEvent(new CustomEvent('m2terminalpower', { detail: { data, nd } }));
+                    };
+                    circuit.addEventListener('solved', synchronizeTerminalPower);
                     circuit.solve();
                 }
 
@@ -12999,7 +13198,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     const values = {
                         dcAmps: controlPowerAvailable ? this.sampledSourceCurrent.toFixed(3) : '0.000',
                         archivePercent: this.archive.state === 'fault' ? 'FAULT' : archivePercent,
-                        dcVolts: controlPowerAvailable ? source.nominalVoltage.toFixed(1) : '0.0',
+                        dcVolts: controlPowerAvailable ? this.bus.circuit.voltageBetween(
+                            this.bus.pageBusbar.positive,
+                            this.bus.pageBusbar.negative
+                        ).toFixed(1) : '0.0',
                         archiveCompleted: String(archiveCompleted),
                         archiveTotal: String(archiveTotal)
                     };
@@ -13464,6 +13666,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         (() => {
             const terminal = document.getElementById('mTerminal');
             const terminalScreen = document.getElementById('mTerminalScreen');
+            const terminalNdDisplay = document.getElementById('mTerminalNd');
+            let terminalInputPowered = false;
+            terminal.dataset.powered = 'false';
+            terminalNdDisplay.dataset.powered = 'false';
+            document.addEventListener('m2terminalpower', event => {
+                terminalInputPowered = !!event.detail?.data;
+                terminal.dataset.powered = String(terminalInputPowered);
+                terminalNdDisplay.dataset.powered = String(!!event.detail?.nd);
+            });
             const terminalColumns = 24;
             const terminalRows = 14;
             const terminalCells = Array.from({ length: terminalColumns * terminalRows }, (_, index) => {
@@ -14055,6 +14266,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 (asciiMaker(song.sortTitle).match(/[A-Za-z0-9]/) || [''])[0].toUpperCase()).filter(Boolean))].sort(compareTerminalText);
             const fieldActions = new Map();
             let folio = { kind: 'index', page: 1 };
+            let terminalInterfaceGeneration = 0;
             let scratchpad = '';
             let selectedCode = '';
             let scratchpadMessage = '';
@@ -14069,6 +14281,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let persistedLegsPlan = [];
             let legsDraftPages = 1;
             let persistedLegsPages = 1;
+            let planComputerPowered = false;
+            let planMemoryGeneration = 0;
             let legsProgress = { active: false };
             let activePlanFingerprint = '';
             let legsActivatedPlanText = '';
@@ -14081,7 +14295,33 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let saveLegEdit = null;
             let testGeneration = 0;
             let testRunning = false;
+            let testSoundPowerFailed = false;
             let testState = { phase: 'grid', inverted: false, column: 0, style: 0 };
+            const activeTestSounds = new Set();
+            let terminalSoundPowered = false;
+            document.addEventListener('m2soundpower', event => {
+                terminalSoundPowered = !!event.detail?.powered;
+                if (terminalSoundPowered) return;
+                if (testRunning) testSoundPowerFailed = true;
+                [...activeTestSounds].forEach(stop => stop());
+            });
+            let hadTerminalPower = false;
+            document.addEventListener('m2terminalpower', event => {
+                const powered = !!event.detail?.data;
+                if (powered) {
+                    hadTerminalPower = true;
+                    return;
+                }
+                const wasRunning = testRunning;
+                if (testRunning) {
+                    testRunning = false;
+                    testGeneration++;
+                }
+                [...activeTestSounds].forEach(stop => stop());
+                if (hadTerminalPower) resetTerminalInterface();
+                else if (wasRunning) renderFolio();
+                hadTerminalPower = false;
+            });
             let archiveInfo = null;
             let archiveRequest = 0;
             let archiveCheckResult = null;
@@ -14240,6 +14480,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 applySettings(songId ? effectiveSongSettings(songId) : persistedGlobalSettings, songId);
             };
             window.__npTerminalResetGlobal = () => applySettings(persistedGlobalSettings, '', 'manual');
+            const pendingTerminalWrites = new Set();
             const globalDatabase = () => new Promise((resolve, reject) => {
                 const request = indexedDB.open('mTerminal', 1);
                 request.onupgradeneeded = () => request.result.createObjectStore('global');
@@ -14260,8 +14501,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 return { global, songs, legs, slots };
             };
             const saveTerminalSettings = async (scope, songId = '') => {
+                if (!planComputerPowered) throw new Error('Plan computer unpowered');
+                const generation = planMemoryGeneration;
                 const database = await globalDatabase();
+                if (!planComputerPowered || generation !== planMemoryGeneration) {
+                    database.close();
+                    throw new Error('Plan computer unpowered');
+                }
                 const transaction = database.transaction('global', 'readwrite');
+                pendingTerminalWrites.add(transaction);
                 const store = transaction.objectStore('global');
                 if (scope === 'global') store.put({ ...globalSettings }, 'settings');
                 if (scope === 'song') {
@@ -14271,23 +14519,38 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     store.put(saved, 'song-settings');
                 }
                 if (scope === 'legs') store.put({ legs: JSON.parse(JSON.stringify(legsDraft)), pages: legsDraftPages }, 'legs-plan');
-                await new Promise((resolve, reject) => {
-                    transaction.oncomplete = resolve;
-                    transaction.onerror = () => reject(transaction.error);
-                    transaction.onabort = () => reject(transaction.error);
-                });
-                database.close();
+                try {
+                    await new Promise((resolve, reject) => {
+                        transaction.oncomplete = resolve;
+                        transaction.onerror = () => reject(transaction.error);
+                        transaction.onabort = () => reject(transaction.error);
+                    });
+                } finally {
+                    pendingTerminalWrites.delete(transaction);
+                    database.close();
+                }
             };
             const saveLegSlots = async () => {
+                if (!planComputerPowered) throw new Error('Plan computer unpowered');
+                const generation = planMemoryGeneration;
                 const database = await globalDatabase();
+                if (!planComputerPowered || generation !== planMemoryGeneration) {
+                    database.close();
+                    throw new Error('Plan computer unpowered');
+                }
                 const transaction = database.transaction('global', 'readwrite');
+                pendingTerminalWrites.add(transaction);
                 transaction.objectStore('global').put(JSON.parse(JSON.stringify(savedLegSlots)), 'legs-saves');
-                await new Promise((resolve, reject) => {
-                    transaction.oncomplete = resolve;
-                    transaction.onerror = () => reject(transaction.error);
-                    transaction.onabort = () => reject(transaction.error);
-                });
-                database.close();
+                try {
+                    await new Promise((resolve, reject) => {
+                        transaction.oncomplete = resolve;
+                        transaction.onerror = () => reject(transaction.error);
+                        transaction.onabort = () => reject(transaction.error);
+                    });
+                } finally {
+                    pendingTerminalWrites.delete(transaction);
+                    database.close();
+                }
             };
             const globalFolio = () => ({
                 name: 'GLOBAL',
@@ -14905,8 +15168,33 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 renderTerminalNdRoutes();
                 renderTerminalNdCamera();
             };
+            const resetTerminalInterface = () => {
+                terminalInterfaceGeneration++;
+                folio = { kind: 'index', page: 1 };
+                scratchpad = '';
+                selectedCode = '';
+                scratchpadMessage = '';
+                window.clearTimeout(scratchpadMessageTimer);
+                scratchpadMessageTimer = 0;
+                deleteArmed = false;
+                saveLegOverride = null;
+                saveLegEdit = null;
+                legsSel = null;
+                terminalNdRangeIndex = 0;
+                terminalNdStepIndex = -1;
+                terminalNdEtaOn = true;
+                terminalNdDataOn = true;
+                terminalNdRotateOn = false;
+                archiveCheckResult = null;
+                archiveInstallCalled = false;
+                renderFolio();
+            };
             const waitForTest = duration => new Promise(resolve => window.setTimeout(resolve, duration));
             const playTestSound = source => new Promise(resolve => {
+                if (!terminalInputPowered || !terminalSoundPowered) {
+                    resolve(false);
+                    return;
+                }
                 const audio = new Audio(source);
                 audio.preload = 'auto';
                 let settled = false;
@@ -14916,8 +15204,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     window.clearTimeout(timeout);
                     audio.onended = null;
                     audio.onerror = null;
+                    if (!result) audio.pause();
+                    activeTestSounds.delete(stop);
                     resolve(result);
                 };
+                const stop = () => {
+                    finish(false);
+                };
+                activeTestSounds.add(stop);
                 const timeout = window.setTimeout(() => finish(false), 10000);
                 audio.onended = () => finish(true);
                 audio.onerror = () => finish(false);
@@ -15029,7 +15323,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
                 }
                 sweepPathPassed = sweepPathPassed && testSweepColumns.every(style => style === null);
-                const passed = soundTestComplete && flashingBehaviorPassed && sweepPathPassed && checked === required && soundResults?.every(Boolean);
+                const passed = soundTestComplete && !testSoundPowerFailed && flashingBehaviorPassed && sweepPathPassed && checked === required && soundResults?.every(Boolean);
                 const resultSource = passed ? '/m/img/terminal-test-ok.wav' : '/m/img/terminal-test-fail.wav';
                 await playTestSound(resultSource);
                 if (!testRunning || generation !== testGeneration) return;
@@ -15042,6 +15336,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             const copyLegs = legs => JSON.parse(JSON.stringify(legs));
             const commitSavedLegSlot = (index, name) => {
+                const interfaceGeneration = terminalInterfaceGeneration;
+                const planGeneration = planMemoryGeneration;
                 savedLegSlots[index] = {
                     name,
                     date: savedLegSlots[index]?.date || terminalDate(),
@@ -15049,14 +15345,18 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     pages: legsDraftPages
                 };
                 saveLegSlots().then(() => {
+                    if (interfaceGeneration !== terminalInterfaceGeneration || planGeneration !== planMemoryGeneration) return;
                     saveLegOverride = null;
                     scratchpad = '';
                     deleteArmed = false;
                     renderScratchpad();
                     renderFolio();
-                }).catch(() => showScratchpadMessage('IN VALID'));
+                }).catch(() => {
+                    if (interfaceGeneration === terminalInterfaceGeneration && planGeneration === planMemoryGeneration) showScratchpadMessage('IN VALID');
+                });
             };
             const dispatchAction = action => {
+                if (!planComputerPowered && new Set(['save-slot', 'override-save-slot', 'edit-save-slot', 'adjust-save-page', 'affirm-save-slot', 'load-save-slot', 'legs-page', 'activate-legs']).has(action.kind)) return;
                 if (action.kind === 'nd-step') {
                     const count = terminalNdStepTargets().length;
                     terminalNdStepIndex = terminalNdStepIndex + 1 >= count ? -1 : terminalNdStepIndex + 1;
@@ -15065,22 +15365,26 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 if (action.kind === 'run-test') {
                     testRunning = true;
+                    testSoundPowerFailed = false;
                     renderFolio();
                     startTerminalTest();
                     return;
                 }
                 if (action.kind === 'archive-check' || action.kind === 'archive-install') {
+                    const interfaceGeneration = terminalInterfaceGeneration;
                     const operation = action.kind === 'archive-check' ? window.m2Archive?.check : window.m2Archive?.install;
                     if (action.kind === 'archive-check') archiveCheckResult = null;
                     else archiveInstallCalled = true;
                     renderFolio();
                     Promise.resolve().then(() => operation?.()).then(result => {
+                        if (interfaceGeneration !== terminalInterfaceGeneration) return;
                         if (action.kind === 'archive-check' && result) {
                             archiveCheckResult = { complete: result.complete === true, missing: Number(result.missing) || 0 };
                             renderFolio();
                         }
                         refreshArchiveInfo();
                     }).catch(() => {
+                        if (interfaceGeneration !== terminalInterfaceGeneration) return;
                         showScratchpadMessage('IN VALID');
                         refreshArchiveInfo();
                     });
@@ -15137,6 +15441,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 if (action.kind === 'affirm-save-slot') {
                     if (!saveLegEdit) return;
+                    const interfaceGeneration = terminalInterfaceGeneration;
+                    const planGeneration = planMemoryGeneration;
                     savedLegSlots[saveLegEdit.index] = {
                         name: saveLegEdit.name,
                         date: saveLegEdit.date,
@@ -15144,11 +15450,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         pages: saveLegEdit.pages
                     };
                     saveLegSlots().then(() => {
+                        if (interfaceGeneration !== terminalInterfaceGeneration || planGeneration !== planMemoryGeneration) return;
                         const returnTarget = folio.returnTarget || { kind: 'save-curr', page: 1 };
                         saveLegEdit = null;
                         folio = returnTarget;
                         renderFolio();
-                    }).catch(() => showScratchpadMessage('IN VALID'));
+                    }).catch(() => {
+                        if (interfaceGeneration === terminalInterfaceGeneration && planGeneration === planMemoryGeneration) showScratchpadMessage('IN VALID');
+                    });
                     return;
                 }
                 if (action.kind === 'load-save-slot') {
@@ -15188,20 +15497,24 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     refreshSaveState();
                 }
                 if (action.kind === 'activate-legs') {
+                    const interfaceGeneration = terminalInterfaceGeneration;
+                    const planGeneration = planMemoryGeneration;
                     const plan = validateLegs();
                     if (!plan) {
                         showScratchpadMessage('IN VALID');
                         return;
                     }
                     window.__npTerminalActivateLegs(executableLegs(plan)).then(active => {
-                        if (!active) showScratchpadMessage('IN VALID');
-                        else {
+                        if (planGeneration !== planMemoryGeneration) return;
+                        if (!active) {
+                            if (interfaceGeneration === terminalInterfaceGeneration) showScratchpadMessage('IN VALID');
+                        } else {
                             activePlanFingerprint = terminalPlanFingerprint();
                             legsActivatedPlanText = JSON.stringify(legsDraft);
                             draftOriginActive = false;
                             draftHistoryIndex = (window.__npTerminalLegsHistory?.() || []).length;
                         }
-                        renderFolio();
+                        if (interfaceGeneration === terminalInterfaceGeneration) renderFolio();
                     });
                 }
                 renderFolio();
@@ -15249,8 +15562,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     deleteArmed = false;
                     renderScratchpad();
                 }
-                if (action === 'skip') {
+            if (action === 'skip') {
                     if (folio.kind === 'legs') {
+                        if (!planComputerPowered) return;
                         const display = displayedLegs();
                         let totalFilled = 0;
                         while (totalFilled < display.length && legHasData(display[totalFilled])) totalFilled++;
@@ -15281,6 +15595,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
                 }
             if (action === 'putin' && folio.kind === 'legs') {
+                if (!planComputerPowered) return;
                 const display = displayedLegs();
                 if (legsSel === null || !legHasData(display[legsSel]) || display[legsSel]?.type === 'then') {
                     showScratchpadMessage('IN VALID');
@@ -15296,6 +15611,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 return;
             }
             if (action === 'step' && folio.kind === 'legs') {
+                    if (!planComputerPowered) return;
                     const display = displayedLegs();
                     let totalFilled = 0;
                     while (totalFilled < display.length && legHasData(display[totalFilled])) totalFilled++;
@@ -15310,13 +15626,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             if (action === 'save') {
                 const scope = currentSaveScope();
-                if (!scope) return;
+                if (!scope || !planComputerPowered) return;
+                const planGeneration = planMemoryGeneration;
                 if (scope === 'legs' && legsDraft.some(legHasData) && !validateLegs()) {
                     showScratchpadMessage('IN VALID');
                     return;
                 }
                 const songId = scope === 'song' ? folio.songId : '';
                 saveTerminalSettings(scope, songId).then(() => {
+                    if (planGeneration !== planMemoryGeneration) return;
                     if (scope === 'global') Object.assign(persistedGlobalSettings, globalSettings);
                     if (scope === 'song') {
                         if (songSettings[songId]) persistedSongSettings[songId] = JSON.parse(JSON.stringify(songSettings[songId]));
@@ -15479,6 +15797,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     return;
                 }
                 if (entry.lyrMode) {
+                    if (!planComputerPowered) return;
                     if (deleteArmed) {
                         setEntrySetting({ setting: 'lyrMode', scope: 'song', songId: entry.songId }, '');
                         deleteArmed = false;
@@ -15523,8 +15842,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     return;
                 }
                 if (entry.legSong || entry.legRight) {
+                    if (!planComputerPowered) return;
                     if (entry.legSong && scratchpad.trim().toUpperCase() === 'DCT' && folio.kind === 'legs' && activeLegsPlan()) {
+                        const interfaceGeneration = terminalInterfaceGeneration;
                         window.__npTerminalLegsDivert(entry.legIndex).then(started => {
+                            if (interfaceGeneration !== terminalInterfaceGeneration) return;
                             if (!started) {
                                 showScratchpadMessage('IN VALID');
                                 return;
@@ -15568,6 +15890,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 if (deleteArmed) {
                     if (entry.setting) {
+                        if (!planComputerPowered) return;
                         setEntrySetting(entry, '');
                         refreshSaveState();
                         renderFolio();
@@ -15577,6 +15900,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     return;
                 }
                 if (entry.setting) {
+                    if (!planComputerPowered) return;
                     if (scratchpad) {
                         const value = normalizeGlobalSetting(entry.setting, scratchpad);
                         if (!value) {
@@ -15595,6 +15919,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             };
             terminal.addEventListener('click', event => {
+                if (!terminalInputPowered) return;
                 const special = event.target.closest('[data-terminal-special]');
                 if (special && terminal.contains(special)) {
                     document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalKey' }));
@@ -15626,6 +15951,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (folio.kind === 'prog') renderFolio();
             });
             document.addEventListener('m2legsstate', event => {
+                if (!window.m2Electrical?.terminal?.planComputerPowered) return;
                 const hadActivePlan = !!activePlanFingerprint;
                 legsProgress = event.detail || { active: false };
                 
@@ -15637,7 +15963,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     draftOriginActive = false;
                     draftHistoryIndex = 0;
                     legsSel = 0;
-                    saveTerminalSettings().then(() => {
+                    const planGeneration = planMemoryGeneration;
+                    saveTerminalSettings('legs').then(() => {
+                        if (planGeneration !== planMemoryGeneration) return;
                         persistedLegsPlan = [];
                         persistedLegsPages = 1;
                         refreshSaveState();
@@ -15652,46 +15980,78 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             window.setInterval(() => {
                 if (folio.kind === 'prog' && !window.__npTerminalIsrAt?.('E')) renderFolio();
             }, 1000);
+            document.addEventListener('m2planpower', event => {
+                const powered = !!event.detail?.powered;
+                if (powered === planComputerPowered) return;
+                planComputerPowered = powered;
+                const generation = ++planMemoryGeneration;
+                if (!powered) {
+                    for (const transaction of pendingTerminalWrites) {
+                        try { transaction.abort(); } catch (error) {}
+                    }
+                    Object.assign(globalSettings, persistedGlobalSettings);
+                    Object.keys(songSettings).forEach(songId => delete songSettings[songId]);
+                    Object.assign(songSettings, JSON.parse(JSON.stringify(persistedSongSettings)));
+                    legsDraft = [];
+                    persistedLegsPlan = [];
+                    legsDraftPages = 1;
+                    persistedLegsPages = 1;
+                    savedLegSlots = Array.from({ length: 4 }, () => null);
+                    activePlanFingerprint = '';
+                    legsActivatedPlanText = '';
+                    draftOriginActive = false;
+                    draftHistoryIndex = 0;
+                    legsSel = 0;
+                    saveLegOverride = null;
+                    saveLegEdit = null;
+                    legsProgress = { active: false };
+                    renderFolio();
+                    return;
+                }
+                loadTerminalSettings().then(stored => {
+                    if (!planComputerPowered || generation !== planMemoryGeneration) return;
+                    Object.keys(globalSettings).forEach(key => {
+                        globalSettings[key] = normalizeGlobalSetting(key, stored.global?.[key] || '');
+                    });
+                    Object.keys(songSettings).forEach(songId => delete songSettings[songId]);
+                    Object.entries(stored.songs || {}).forEach(([songId, values]) => {
+                        const normalized = {
+                            speed: normalizeGlobalSetting('speed', values?.speed || ''),
+                            sectionWindow: normalizeGlobalSetting('sectionWindow', values?.sectionWindow || ''),
+                            standby: normalizeGlobalSetting('standby', values?.standby || ''),
+                            volume: normalizeGlobalSetting('volume', values?.volume || ''),
+                            lyrMode: normalizeGlobalSetting('lyrMode', values?.lyrMode || '')
+                        };
+                        if (Object.values(normalized).some(Boolean)) songSettings[songId] = normalized;
+                    });
+                    Object.assign(persistedGlobalSettings, globalSettings);
+                    Object.keys(persistedSongSettings).forEach(songId => delete persistedSongSettings[songId]);
+                    Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
+                    legsDraft = Array.isArray(stored.legs?.legs) ? stored.legs.legs : [];
+                    legsDraftPages = Math.max(1, Number(stored.legs?.pages) || Math.ceil(legsDraft.length / legsPerPage) || 1);
+                    savedLegSlots = Array.from({ length: Math.max(4, Array.isArray(stored.slots) ? stored.slots.length : 0) }, (_, index) => {
+                        const slot = Array.isArray(stored.slots) ? stored.slots[index] : null;
+                        if (!slot || typeof slot.name !== 'string' || !Array.isArray(slot.legs)) return null;
+                        return {
+                            name: limitText(slot.name).trim().slice(0, 6),
+                            date: /^\d{8}$/.test(String(slot.date || '')) ? String(slot.date) : '--------',
+                            legs: slot.legs,
+                            pages: Math.max(1, Number(slot.pages) || Math.ceil(slot.legs.length / legsPerPage) || 1)
+                        };
+                    });
+                    persistedLegsPlan = JSON.parse(JSON.stringify(legsDraft));
+                    persistedLegsPages = legsDraftPages;
+                    applySettings(persistedGlobalSettings, '', 'manual');
+                    applyCurrentSettings();
+                    settingsSongId = activeSongId();
+                    refreshSaveState();
+                    rebuildTerminalNdNodes();
+                    renderFolio();
+                }).catch(() => {});
+            });
             renderTerminalNdCamera();
             rebuildTerminalNdNodes();
             renderFolio();
-            loadTerminalSettings().then(stored => {
-                Object.keys(globalSettings).forEach(key => {
-                    globalSettings[key] = normalizeGlobalSetting(key, stored.global?.[key] || '');
-                });
-                Object.entries(stored.songs || {}).forEach(([songId, values]) => {
-                    const normalized = {
-                        speed: normalizeGlobalSetting('speed', values?.speed || ''),
-                        sectionWindow: normalizeGlobalSetting('sectionWindow', values?.sectionWindow || ''),
-                        standby: normalizeGlobalSetting('standby', values?.standby || ''),
-                        volume: normalizeGlobalSetting('volume', values?.volume || ''),
-                        lyrMode: normalizeGlobalSetting('lyrMode', values?.lyrMode || '')
-                    };
-                    if (Object.values(normalized).some(Boolean)) songSettings[songId] = normalized;
-                });
-                legsDraft = Array.isArray(stored.legs?.legs) ? stored.legs.legs : [];
-                legsDraftPages = Math.max(1, Number(stored.legs?.pages) || Math.ceil(legsDraft.length / legsPerPage) || 1);
-                savedLegSlots = Array.from({ length: Math.max(4, Array.isArray(stored.slots) ? stored.slots.length : 0) }, (_, index) => {
-                    const slot = Array.isArray(stored.slots) ? stored.slots[index] : null;
-                    if (!slot || typeof slot.name !== 'string' || !Array.isArray(slot.legs)) return null;
-                    return {
-                        name: limitText(slot.name).trim().slice(0, 6),
-                        date: /^\d{8}$/.test(String(slot.date || '')) ? String(slot.date) : '--------',
-                        legs: slot.legs,
-                        pages: Math.max(1, Number(slot.pages) || Math.ceil(slot.legs.length / legsPerPage) || 1)
-                    };
-                });
-                Object.assign(persistedGlobalSettings, globalSettings);
-                Object.assign(persistedSongSettings, JSON.parse(JSON.stringify(songSettings)));
-                persistedLegsPlan = JSON.parse(JSON.stringify(legsDraft));
-                persistedLegsPages = legsDraftPages;
-                applySettings(persistedGlobalSettings, '', 'manual');
-                applyCurrentSettings();
-                settingsSongId = activeSongId();
-                refreshSaveState();
-                rebuildTerminalNdNodes();
-                renderFolio();
-            }).catch(() => {});
         })();
     </script>
 </body>
