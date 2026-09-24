@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '132';
+const M2_PAGE_CODE_VERSION = '134';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -10978,27 +10978,240 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
 
            // delete not — Parameters match the physical MEAN WELL DDR-120A-24 power supply unit used in this circuit.
-            const DDR120A24_LOAD_REGULATION_OHMS = (28.0 * 0.005) / 3.6;
-            const DDR120A24_OVERLOAD_ONSET_FACTOR = 1.05;
-            const DDR120A24_CC_LIMIT_FACTOR = 1.20;
-            const DDR120A24_OVERLOAD_CEILING_FACTOR = 1.35;
+            const DDR120A24_SPEC = Object.freeze({
+                model: 'DDR-120A-24',
+                series: 'DDR-120',
+                inputType: 'A',
+                caseNo: '221',
+                dimensionsMm: Object.freeze([32.0, 125.2, 102.0]),
+                weightGrams: 510,
+                dinRail: Object.freeze(['TS-35/7.5', 'TS-35/15']),
+                terminalTorqueLbIn: 6.0,
+                isolationWithstandKvDc: 4.4,
+                isolationResistanceMOhm: 9999,
+                fgContinuityMilliohm: 10.0,
+                switchingFrequencyHz: 65000,
+                referenceAmbientC: 5.0,
+                factoryVoltage: 24.00,
+                commissionedVoltage: 28.00,
+                trimRangeSpec: Object.freeze([24.00, 28.00]),
+                trimRangeMeasured: Object.freeze([23.46, 28.64]),
+                ratedCurrent24V: 4.20,
+                ratedPowerW: 100.80,
+                peakCurrent24V: 6.30,
+                peakPowerW: 150.00,
+                peakDurationMs: 3000,
+                loadRegulationSpecPct: 1.0,
+                loadRegulationMeasuredPct: 0.105,
+                lineRegulationSpecPct: 0.5,
+                lineRegulationMeasuredPct: 0.012,
+                tempCoeffSpecPctPerC: 0.03,
+                tempCoeffMeasuredPctPerC: 0.0061,
+                turnOnOvershootPct: 2.9,
+                rippleSpecMvPp: 50.0,
+                rippleLfMeasuredMvPp: 16.0,
+                rippleHfMeasuredMvPp: 11.0,
+                dynamicTransient120HzMvPp: 1690.0,
+                dynamicTransient1kHzMvPp: 1370.0,
+                inputNominalV: 12.00,
+                inputRangeSpecV: Object.freeze([9.00, 18.00]),
+                inputRangeMeasuredV: Object.freeze([8.64, 18.00]),
+                inputCyclicStressV: 21.00,
+                uvloTurnOnV: 9.00,
+                uvloTurnOffSpecV: 8.50,
+                uvloTurnOffBenchV: 8.64,
+                uvloHysteresisV: 0.50,
+                lowVinStepThresholdV: 10.80,
+                lowVinDeratingFactor: 0.85,
+                tempDeratingKneeC: 55.0,
+                tempDeratingMaxC: 70.0,
+                tempDeratingMinC: -45.0,
+                tempSlopeContinuousPerC: 0.040,
+                tempSlopePeakPerC: 0.054,
+                altitudeDeratingBaseM: 2000,
+                altitudeDeratingMaxM: 5000,
+                altitudeTempPenaltyCPer1000M: 3.5,
+                olpOnsetFactor: 1.05,
+                olpCeilingFactor: 1.35,
+                olpMeasuredFactor12V: 1.2476,
+                olpMeasuredFactor9V18V: 1.2490,
+                ovpSpecRangeV: Object.freeze([28.80, 33.60]),
+                ovpMeasuredTripV: 30.90,
+                shortCircuitFoldbackV: 4.50,
+                ccShutdownMs: 6000,
+                autoRecoveryMs: 1500,
+                startup: Object.freeze({
+                    inrushClampCurrentA: 3.6875,
+                    inrushClampDurationMs: 36.0,
+                    setupTimeMs: 136.0,
+                    icInitIdleCurrentA: 0.40,
+                    powerStartSpikeCurrentA: 23.5000,
+                    powerStartSpikeDurationMs: 8.0,
+                    riseTimeMs: 6.1,
+                    overshootSettleMs: 7.9,
+                    dcOkThresholdRatio: 0.90
+                }),
+                peakDutyProfiles: Object.freeze({
+                    profile1: Object.freeze({ baseLoadRatio: 1.00, recoverySec: 100.0, peakRatio: 1.50, peakSec: 3.0, dutyPct: 2.913, avgPowerW: 102.23, rmsCurrent24VA: 4.276 }),
+                    profile2: Object.freeze({ baseLoadRatio: 0.40, recoverySec: 10.0, peakRatio: 1.50, peakSec: 3.0, dutyPct: 23.077, avgPowerW: 65.63, rmsCurrent24VA: 3.367 })
+                }),
+                upstreamPcieHarness: Object.freeze({
+                    psuModel: 'Seasonic FOCUS GX-1000 ATX 3.1 (V4)',
+                    nominalRailV: 12.00,
+                    railMaxCurrentA: 83.0,
+                    cableLengthMeters: 0.75,
+                    positiveConductorsAwg16: 3,
+                    returnConductorsAwg16: 5,
+                    awg16OhmsPerMeter20C: 0.01318,
+                    copperTempCoeffPerC: 0.00393,
+                    inputFuses: '2x Conquer MST 10A 250V Time-Lag',
+                    fuseAndQ1ResistanceOhms: 0.0077
+                }),
+                holdupCurve: Object.freeze([
+                    Object.freeze([10.00, 42.89]),
+                    Object.freeze([20.00, 21.37]),
+                    Object.freeze([31.15, 14.42]),
+                    Object.freeze([41.15, 10.58]),
+                    Object.freeze([43.45, 10.00]),
+                    Object.freeze([50.36, 8.26]),
+                    Object.freeze([60.38, 6.95]),
+                    Object.freeze([70.00, 5.74]),
+                    Object.freeze([80.00, 5.05]),
+                    Object.freeze([90.00, 4.42]),
+                    Object.freeze([100.00, 3.66])
+                ]),
+                efficiencySurface: Object.freeze({
+                    loadsPct: Object.freeze([10, 20, 30, 40, 50, 60, 70, 80, 90, 100]),
+                    spec10v8: Object.freeze([83.79, 87.12, 89.92, 90.83, 91.21, 91.06, 90.76, 90.83, 90.38, 89.70]),
+                    spec12v0: Object.freeze([82.12, 86.74, 89.09, 90.53, 90.98, 90.00, 91.29, 90.38, 90.68, 90.38]),
+                    spec15v6: Object.freeze([79.09, 85.61, 87.42, 89.39, 90.30, 90.61, 91.14, 90.76, 90.91, 90.76]),
+                    bench12v0: Object.freeze([82.13, 85.51, 87.19, 89.55, 89.21, 89.78, 89.66, 90.67, 90.00, 89.78]),
+                    idleLossWatts: 0.85,
+                    fullLoadBenchLossWatts: 11.64
+                }),
+                voltageStressNodes: Object.freeze([
+                    Object.freeze({ id: 'Q5', role: 'PRI PWM MOSFET Vds', limitV: 60.0, dcOnOffV: 46.5, shortMinV: 42.1, contV: 46.5, olpOvpV: 46.5 }),
+                    Object.freeze({ id: 'Q6', role: 'PRI CLAMP MOSFET Vds', limitV: 100.0, dcOnOffV: 28.9, shortMinV: 24.1, contV: 28.9, olpOvpV: 28.9 }),
+                    Object.freeze({ id: 'Q100', role: 'SEC SYNC RECT 1 Vds', limitV: 200.0, dcOnOffV: 148.0, shortMinV: 51.3, contV: 50.5, olpOvpV: 148.0 }),
+                    Object.freeze({ id: 'Q101', role: 'SEC SYNC RECT 2 Vds', limitV: 200.0, dcOnOffV: 120.0, shortMinV: 110.0, contV: 118.0, olpOvpV: 120.0 }),
+                    Object.freeze({ id: 'C5', role: 'IN BULK CAP 1500uF', limitV: 35.0, dcOnOffV: 23.6, shortMinV: 23.2, contV: 20.8, olpOvpV: 21.6 }),
+                    Object.freeze({ id: 'U1', role: 'PWM CTRL IC Vcc', limitV: 16.0, dcOnOffV: 14.4, shortMinV: 14.2, contV: 14.4, olpOvpV: 14.4 })
+                ]),
+                thermocoupleNodes: Object.freeze([
+                    Object.freeze({ id: 'LF1', role: 'IN EMI CHOKE 1', dTRoomK: 60.1, dTHighK: 51.2, tauSec: 160 }),
+                    Object.freeze({ id: 'LF2', role: 'IN EMI CHOKE 2', dTRoomK: 47.0, dTHighK: 46.5, tauSec: 160 }),
+                    Object.freeze({ id: 'LF100', role: 'OUT EMI CHOKE', dTRoomK: 42.5, dTHighK: 43.2, tauSec: 150 }),
+                    Object.freeze({ id: 'T1', role: 'MAIN XFMR 1', dTRoomK: 52.0, dTHighK: 54.5, tauSec: 210 }),
+                    Object.freeze({ id: 'T2', role: 'MAIN XFMR 2 HOT', dTRoomK: 53.2, dTHighK: 55.1, tauSec: 210 }),
+                    Object.freeze({ id: 'Q1', role: 'REV POL MOSFET', dTRoomK: 51.4, dTHighK: 35.0, tauSec: 45 }),
+                    Object.freeze({ id: 'Q5', role: 'PRI PWM MOSFET', dTRoomK: 47.6, dTHighK: 34.5, tauSec: 40 }),
+                    Object.freeze({ id: 'Q100', role: 'SEC RECT MOS 1', dTRoomK: 40.4, dTHighK: 37.7, tauSec: 45 }),
+                    Object.freeze({ id: 'Q101', role: 'SEC RECT MOS 2', dTRoomK: 38.6, dTHighK: 36.7, tauSec: 45 }),
+                    Object.freeze({ id: 'L100', role: 'OUT FILTER IND', dTRoomK: 54.1, dTHighK: 40.4, tauSec: 170 }),
+                    Object.freeze({ id: 'C1', role: 'IN FILTER CAP', dTRoomK: 48.3, dTHighK: 40.4, tauSec: 110 }),
+                    Object.freeze({ id: 'C5', role: 'BULK CAP 1500uF', dTRoomK: 43.6, dTHighK: 36.9, tauSec: 125 }),
+                    Object.freeze({ id: 'C6', role: 'PRI DECPL CAP 1', dTRoomK: 43.6, dTHighK: 36.1, tauSec: 115 }),
+                    Object.freeze({ id: 'C7', role: 'PRI DECPL CAP 2', dTRoomK: 47.2, dTHighK: 37.3, tauSec: 115 }),
+                    Object.freeze({ id: 'C8', role: 'PRI DECPL CAP 3', dTRoomK: 48.6, dTHighK: 40.9, tauSec: 115 }),
+                    Object.freeze({ id: 'C101', role: 'OUT FILTER CAP 1', dTRoomK: 44.0, dTHighK: 37.8, tauSec: 120 }),
+                    Object.freeze({ id: 'C102', role: 'OUT FILTER CAP 2', dTRoomK: 45.2, dTHighK: 38.6, tauSec: 120 })
+                ])
+            });
+            const DDR120A24_LOAD_REGULATION_OHMS = (DDR120A24_SPEC.commissionedVoltage * (DDR120A24_SPEC.loadRegulationMeasuredPct / 100)) / 3.60;
+            const DDR120A24_OVERLOAD_ONSET_FACTOR = DDR120A24_SPEC.olpOnsetFactor;
+            const DDR120A24_CC_LIMIT_FACTOR = DDR120A24_SPEC.olpMeasuredFactor12V;
+            const DDR120A24_OVERLOAD_CEILING_FACTOR = DDR120A24_SPEC.olpCeilingFactor;
             const DDR120A24_PEAK_LOAD_FACTOR = 1.50;
-            const DDR120A24_PEAK_DURATION_MS = 3000;
-            const DDR120A24_CC_SHUTDOWN_MS = 6000;
-            const DDR120A24_AUTO_RECOVERY_MS = 1500;
-            const DDR120A24_SHORT_CIRCUIT_VOLTS = 4.5;
+            const DDR120A24_PEAK_DURATION_MS = DDR120A24_SPEC.peakDurationMs;
+            const DDR120A24_CC_SHUTDOWN_MS = DDR120A24_SPEC.ccShutdownMs;
+            const DDR120A24_AUTO_RECOVERY_MS = DDR120A24_SPEC.autoRecoveryMs;
+            const DDR120A24_SHORT_CIRCUIT_VOLTS = DDR120A24_SPEC.shortCircuitFoldbackV;
+
+            function interpolateDdr120Piecewise(xs, ys, x) {
+                if (x <= xs[0]) return ys[0];
+                const last = xs.length - 1;
+                if (x >= xs[last]) return ys[last];
+                for (let i = 0; i < last; i++) {
+                    if (x >= xs[i] && x <= xs[i + 1]) {
+                        const t = (x - xs[i]) / Math.max(1e-9, xs[i + 1] - xs[i]);
+                        return ys[i] + t * (ys[i + 1] - ys[i]);
+                    }
+                }
+                return ys[last];
+            }
+
+            function evaluateDdr120Efficiency(loadPct, vin) {
+                const surf = DDR120A24_SPEC.efficiencySurface;
+                const clampedPct = Math.max(10, Math.min(100, Number(loadPct) || 10));
+                const effBench12 = interpolateDdr120Piecewise(surf.loadsPct, surf.bench12v0, clampedPct);
+                const effSpec12 = interpolateDdr120Piecewise(surf.loadsPct, surf.spec12v0, clampedPct);
+                const effSpec10v8 = interpolateDdr120Piecewise(surf.loadsPct, surf.spec10v8, clampedPct);
+                const effSpec15v6 = interpolateDdr120Piecewise(surf.loadsPct, surf.spec15v6, clampedPct);
+                const delta10v8 = effSpec10v8 - effSpec12;
+                const delta15v6 = effSpec15v6 - effSpec12;
+                let vinOffset = 0;
+                if (vin <= 12.0) {
+                    const t = Math.max(0, Math.min(1.5, (12.0 - vin) / 1.2));
+                    vinOffset = t * delta10v8;
+                } else {
+                    const t = Math.max(0, Math.min(1.5, (vin - 12.0) / 3.6));
+                    vinOffset = t * delta15v6;
+                }
+                const pct = Math.max(68.0, Math.min(93.0, effBench12 + vinOffset));
+                return pct / 100;
+            }
+
+            function evaluateDdr120HoldupMs(loadPct) {
+                const pts = DDR120A24_SPEC.holdupCurve;
+                const xs = pts.map(p => p[0]);
+                const ys = pts.map(p => p[1]);
+                if (loadPct <= 1.0) return 65.0;
+                return interpolateDdr120Piecewise(xs, ys, Math.max(10, Math.min(100, loadPct)));
+            }
 
             class DcSource {
                 constructor(name, nominalVoltage = 28, currentLimit = 3.6) {
                     this.name = name;
+                    this.model = DDR120A24_SPEC.model;
+                    this.spec = DDR120A24_SPEC;
+                    this.trimVoltage = Math.max(
+                        DDR120A24_SPEC.trimRangeMeasured[0],
+                        Math.min(DDR120A24_SPEC.trimRangeMeasured[1], nominalVoltage)
+                    );
+                    this.ambientTempC = DDR120A24_SPEC.referenceAmbientC;
+                    this.altitudeMeters = 0;
+                    this.effectiveAmbientC = this.ambientTempC;
+                    this.upstreamSupplyVoltage = DDR120A24_SPEC.upstreamPcieHarness.nominalRailV;
+                    this.inputTerminalVoltage = this.upstreamSupplyVoltage;
+                    this.inputCurrent = 0;
+                    this.inputPowerW = 0;
+                    this.outputPowerW = 0;
+                    this.powerLossW = 0;
+                    this.loadPct = 0;
+                    this.efficiencyPct = 89.78;
+                    this.harnessDropV = 0;
+                    this.perPinPositiveCurrentA = 0;
+                    this.perPinReturnCurrentA = 0;
+                    this.perPinNegativeCurrentA = 0;
+                    this.uvloActive = false;
+                    this.reversePolarity = false;
+                    this.ovpLatched = false;
+                    this.dcOk = false;
                     this.nominalVoltage = nominalVoltage;
-                    this.outputVoltage = nominalVoltage;
+                    this.outputVoltage = 0;
+                    this.baseCurrentLimit = currentLimit;
                     this.currentLimit = currentLimit;
+                    this.effectiveRatedCurrent = currentLimit;
+                    this.deratingFactor = 1.0;
+                    this.peakDeratingFactor = 1.0;
+                    this.tempDeratingFactor = 1.0;
+                    this.vinDeratingFactor = 1.0;
                     this.outputResistance = DDR120A24_LOAD_REGULATION_OHMS;
                     this.overloadOnsetCurrent = currentLimit * DDR120A24_OVERLOAD_ONSET_FACTOR;
                     this.constantCurrentLimit = currentLimit * DDR120A24_CC_LIMIT_FACTOR;
                     this.overloadCeilingCurrent = currentLimit * DDR120A24_OVERLOAD_CEILING_FACTOR;
-                    this.peakCurrentLimit = currentLimit * DDR120A24_PEAK_LOAD_FACTOR;
+                    this.peakCurrentLimit = Math.min(DDR120A24_SPEC.peakCurrent24V, DDR120A24_SPEC.peakPowerW / this.trimVoltage);
+                    this.effectivePeakCurrent = this.peakCurrentLimit;
                     this.peakDurationMs = DDR120A24_PEAK_DURATION_MS;
                     this.ccShutdownMs = DDR120A24_CC_SHUTDOWN_MS;
                     this.autoRecoveryMs = DDR120A24_AUTO_RECOVERY_MS;
@@ -11006,19 +11219,61 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.negative = new ElectricalTerminal(this, 'L-');
                     this.current = 0;
                     this.unclampedCurrent = 0;
-                    this.mode = 'CV';
+                    this.mode = 'INRUSH_LIMIT';
+                    this.startupPhase = 'INRUSH_LIMIT';
+                    this.startupStartedAt = performance.now();
+                    this.startupElapsedMs = 0;
+                    this.holdupStartedAt = null;
+                    this.holdupReserveMs = evaluateDdr120HoldupMs(10);
+                    this.holdupRemainingMs = this.holdupReserveMs;
+                    this.en50155Level = 'S2';
+                    this.peakEnergySec = 0;
+                    this.lastSolveTimestamp = performance.now();
+                    this.rippleLfMvPp = 0;
+                    this.rippleHfMvPp = 0;
+                    this.dynamicTransientMvPp = 0;
                     this.limiting = false;
                     this.overloadStartedAt = null;
                     this.overloadElapsedMs = 0;
                     this.tripped = false;
                     this.tripReason = null;
+                    this.componentTempsC = Object.fromEntries(
+                        DDR120A24_SPEC.thermocoupleNodes.map(node => [node.id, this.ambientTempC])
+                    );
+                    this.voltageStress = Object.fromEntries(
+                        DDR120A24_SPEC.voltageStressNodes.map(node => {
+                            const initV = node.dcOnOffV * (this.inputTerminalVoltage / 21.0);
+                            const pct = (initV / node.limitV) * 100;
+                            return [node.id, {
+                                role: node.role,
+                                voltage: initV,
+                                vpk: initV,
+                                limitV: node.limitV,
+                                limit: node.limitV,
+                                stressPct: pct,
+                                ratioPct: pct
+                            }];
+                        })
+                    );
                 }
 
-                trip(reason) {
+                beginColdStart(now = performance.now()) {
+                    if (this.ovpLatched) return;
+                    this.startupStartedAt = now;
+                    this.startupElapsedMs = 0;
+                    this.startupPhase = 'INRUSH_LIMIT';
+                    this.holdupStartedAt = null;
+                    this.dcOk = false;
+                    this.outputVoltage = 0;
+                }
+
+                trip(reason, { ovp = false } = {}) {
                     this.tripped = true;
                     this.tripReason = reason;
-                    this.mode = 'PROTECT';
+                    if (ovp) this.ovpLatched = true;
+                    this.mode = ovp ? 'OVP_LATCH' : 'PROTECT';
                     this.limiting = true;
+                    this.dcOk = false;
                     this.outputVoltage = 0;
                     this.current = 0;
                 }
@@ -11026,13 +11281,55 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 reset() {
                     this.tripped = false;
                     this.tripReason = null;
-                    this.mode = 'CV';
+                    this.ovpLatched = false;
                     this.limiting = false;
                     this.overloadStartedAt = null;
                     this.overloadElapsedMs = 0;
-                    this.outputVoltage = this.nominalVoltage;
+                    this.peakEnergySec = 0;
                     this.current = 0;
                     this.unclampedCurrent = 0;
+                    this.beginColdStart(performance.now());
+                }
+
+                updateThermalAndStressState(dtSec) {
+                    const dt = Math.max(0, Math.min(2.0, Number(dtSec) || 0));
+                    const ta = this.ambientTempC;
+                    const tBlend = Math.max(0, Math.min(1, (ta - 24.0) / (56.1 - 24.0)));
+                    const lossRatio = Math.max(0, this.powerLossW / DDR120A24_SPEC.efficiencySurface.fullLoadBenchLossWatts);
+                    const iInRatioSq = Math.pow(Math.max(0, this.inputCurrent) / 9.37, 2);
+                    DDR120A24_SPEC.thermocoupleNodes.forEach(node => {
+                        const fullLoadDeltaT = node.dTRoomK + tBlend * (node.dTHighK - node.dTRoomK);
+                        const weight = (node.id === 'LF1' || node.id === 'LF2' || node.id === 'Q1')
+                            ? (0.45 * lossRatio + 0.55 * iInRatioSq)
+                            : lossRatio;
+                        const targetTemp = ta + fullLoadDeltaT * weight;
+                        const prevTemp = Number.isFinite(this.componentTempsC[node.id]) ? this.componentTempsC[node.id] : ta;
+                        const alpha = dt > 0 ? (1 - Math.exp(-dt / node.tauSec)) : 0;
+                        this.componentTempsC[node.id] = prevTemp + (targetTemp - prevTemp) * alpha;
+                    });
+                    const vinScale = Math.max(0, Math.min(1.15, this.inputTerminalVoltage / 21.0));
+                    const isStartup = this.startupPhase !== 'REGULATED';
+                    const isOlpOvp = this.limiting || this.tripped || this.mode === 'CC' || this.mode === 'PEAK';
+                    const isMinShort = this.current < 0.15 || (this.limiting && this.outputVoltage < 6.0);
+                    DDR120A24_SPEC.voltageStressNodes.forEach(node => {
+                        let refV = node.contV;
+                        if (isStartup) refV = node.dcOnOffV;
+                        else if (isOlpOvp) refV = node.olpOvpV;
+                        else if (isMinShort) refV = node.shortMinV;
+                        const actualV = node.id === 'U1'
+                            ? (this.inputTerminalVoltage >= 8.5 ? refV : 0)
+                            : (node.id === 'C5' ? Math.max(0, this.inputTerminalVoltage * (refV / 21.0)) : refV * (0.72 + 0.28 * vinScale));
+                        const pct = (actualV / node.limitV) * 100;
+                        this.voltageStress[node.id] = {
+                            role: node.role,
+                            voltage: actualV,
+                            vpk: actualV,
+                            limitV: node.limitV,
+                            limit: node.limitV,
+                            stressPct: pct,
+                            ratioPct: pct
+                        };
+                    });
                 }
             }
 
@@ -11248,6 +11545,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #names = new Set();
                 #protectionTimer = null;
                 #autoRecoveryTimer = null;
+                #startupTimer = null;
 
                 constructor(name, nominalVoltage = 28, currentLimit = 3.6) {
                     super();
@@ -11275,9 +11573,25 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
                 }
 
+                #clearStartupTimer() {
+                    if (this.#startupTimer !== null) {
+                        clearTimeout(this.#startupTimer);
+                        this.#startupTimer = null;
+                    }
+                }
+
+                #scheduleStartupTick(delayMs = 8) {
+                    this.#clearStartupTimer();
+                    const wait = Math.max(2, Math.min(200, Math.ceil(delayMs)));
+                    this.#startupTimer = setTimeout(() => {
+                        this.#startupTimer = null;
+                        this.solve();
+                    }, wait);
+                }
+
                 #scheduleProtectionTick(delayMs = 250) {
                     this.#clearProtectionTimer();
-                    const wait = Math.max(50, Math.min(1000, Math.ceil(delayMs)));
+                    const wait = Math.max(20, Math.min(1000, Math.ceil(delayMs)));
                     this.#protectionTimer = setTimeout(() => {
                         this.#protectionTimer = null;
                         this.solve();
@@ -11285,13 +11599,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
 
                 #scheduleAutoRecovery() {
-                    if (this.#autoRecoveryTimer !== null) return;
+                    if (this.#autoRecoveryTimer !== null || this.source.ovpLatched) return;
                     this.#autoRecoveryTimer = setTimeout(() => {
                         this.#autoRecoveryTimer = null;
-                        if (!this.source.tripped) return;
+                        if (!this.source.tripped || this.source.ovpLatched) return;
                         this.source.tripped = false;
                         this.source.tripReason = null;
                         this.source.overloadStartedAt = performance.now() - this.source.peakDurationMs;
+                        this.source.peakEnergySec = 3.0;
                         this.solve();
                     }, this.source.autoRecoveryMs);
                 }
@@ -11368,7 +11683,39 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
                     this.#solving = true;
                     let passes = 0;
-                    let passVoltageCeiling = this.source.nominalVoltage;
+                    const now = performance.now();
+                    const dtSec = Math.max(0, Math.min(0.5, (now - this.source.lastSolveTimestamp) / 1000));
+                    this.source.lastSolveTimestamp = now;
+                    const previousCurrent = this.source.current || 0;
+
+                    const altPenaltyC = Math.max(0, (this.source.altitudeMeters - DDR120A24_SPEC.altitudeDeratingBaseM) / 1000) *
+                        DDR120A24_SPEC.altitudeTempPenaltyCPer1000M;
+                    const effectiveAmbientC = this.source.ambientTempC + altPenaltyC;
+                    let tempContFactor = 1.0;
+                    let tempPeakFactor = 1.5;
+                    if (effectiveAmbientC < DDR120A24_SPEC.tempDeratingMinC || effectiveAmbientC > DDR120A24_SPEC.tempDeratingMaxC) {
+                        tempContFactor = 0.0;
+                        tempPeakFactor = 0.0;
+                    } else if (effectiveAmbientC > DDR120A24_SPEC.tempDeratingKneeC) {
+                        const excessC = effectiveAmbientC - DDR120A24_SPEC.tempDeratingKneeC;
+                        tempContFactor = Math.max(0, 1.0 - DDR120A24_SPEC.tempSlopeContinuousPerC * excessC);
+                        tempPeakFactor = Math.max(0, 1.5 - DDR120A24_SPEC.tempSlopePeakPerC * excessC);
+                    }
+
+                    const harness = DDR120A24_SPEC.upstreamPcieHarness;
+                    const wireRPerM = harness.awg16OhmsPerMeter20C *
+                        (1 + harness.copperTempCoeffPerC * (this.source.ambientTempC - 20.0));
+                    const harnessResistanceOhms = harness.cableLengthMeters * wireRPerM *
+                        ((1 / harness.positiveConductorsAwg16) + (1 / harness.returnConductorsAwg16)) +
+                        harness.fuseAndQ1ResistanceOhms;
+
+                    const tempDriftFactor = 1 + (DDR120A24_SPEC.tempCoeffMeasuredPctPerC / 100) *
+                        (this.source.ambientTempC - DDR120A24_SPEC.referenceAmbientC);
+                    const lineDriftFactor = 1 + (DDR120A24_SPEC.lineRegulationMeasuredPct / 100) *
+                        ((this.source.inputTerminalVoltage - DDR120A24_SPEC.inputNominalV) / 6.0);
+                    const targetRegulatedNoLoadV = this.source.trimVoltage * tempDriftFactor * lineDriftFactor;
+                    let passVoltageCeiling = targetRegulatedNoLoadV * 1.035;
+
                     try {
                         do {
                             this.#solveAgain = false;
@@ -11377,18 +11724,121 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 throw new Error(this.name + ' failed to reach an electrical steady state');
                             }
 
+                            const vPsu = this.source.upstreamSupplyVoltage;
+                            if (vPsu < 0) {
+                                this.source.reversePolarity = true;
+                                this.source.uvloActive = true;
+                                this.source.inputTerminalVoltage = vPsu;
+                                this.source.inputCurrent = 0;
+                                this.source.outputVoltage = 0;
+                                this.source.current = 0;
+                                this.source.dcOk = false;
+                                this.source.mode = 'REV_POLARITY';
+                                this.potentials = new Map();
+                                this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
+                                continue;
+                            }
+                            this.source.reversePolarity = false;
+                            const uvloThreshold = this.source.uvloActive
+                                ? DDR120A24_SPEC.uvloTurnOnV
+                                : DDR120A24_SPEC.uvloTurnOffSpecV;
+                            if (this.source.inputTerminalVoltage < uvloThreshold) {
+                                if (!this.source.uvloActive) {
+                                    if (this.source.holdupStartedAt === null) {
+                                        this.source.holdupStartedAt = now;
+                                        const loadPct = Math.max(10, Math.min(100, (this.source.outputPowerW / DDR120A24_SPEC.ratedPowerW) * 100));
+                                        this.source.holdupReserveMs = evaluateDdr120HoldupMs(loadPct);
+                                    }
+                                    const holdupElapsed = now - this.source.holdupStartedAt;
+                                    this.source.holdupRemainingMs = Math.max(0, this.source.holdupReserveMs - holdupElapsed);
+                                    if (holdupElapsed < this.source.holdupReserveMs) {
+                                        this.source.mode = 'HOLDUP';
+                                        this.#scheduleStartupTick(Math.min(10, this.source.holdupRemainingMs + 1));
+                                    } else {
+                                        this.source.uvloActive = true;
+                                        this.source.holdupStartedAt = null;
+                                        this.source.holdupRemainingMs = 0;
+                                    }
+                                }
+                                if (this.source.uvloActive) {
+                                    this.source.outputVoltage = 0;
+                                    this.source.current = 0;
+                                    this.source.inputCurrent = 0;
+                                    this.source.dcOk = false;
+                                    this.source.mode = 'UVLO';
+                                    this.potentials = new Map();
+                                    this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
+                                    continue;
+                                }
+                            } else if (this.source.uvloActive) {
+                                this.source.uvloActive = false;
+                                this.source.beginColdStart(now);
+                            } else {
+                                this.source.holdupStartedAt = null;
+                            }
+
+                            if (targetRegulatedNoLoadV >= DDR120A24_SPEC.ovpMeasuredTripV) {
+                                this.source.trip(
+                                    'DDR-120A-24 OVP shutdown (' + targetRegulatedNoLoadV.toFixed(2) + ' V >= 30.90 V — re-power to recover)',
+                                    { ovp: true }
+                                );
+                            }
+
                             if (this.source.tripped) {
                                 this.fault = this.source.tripReason;
                                 this.source.outputVoltage = 0;
                                 this.source.current = 0;
                                 this.source.unclampedCurrent = 0;
-                                this.source.mode = 'PROTECT';
+                                this.source.inputCurrent = DDR120A24_SPEC.startup.icInitIdleCurrentA * 0.25;
+                                this.source.inputPowerW = this.source.inputTerminalVoltage * this.source.inputCurrent;
+                                this.source.outputPowerW = 0;
+                                this.source.powerLossW = this.source.inputPowerW;
+                                this.source.dcOk = false;
+                                this.source.mode = this.source.ovpLatched ? 'OVP_LATCH' : 'PROTECT';
                                 this.source.limiting = true;
                                 this.potentials = new Map();
                                 this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
                                 this.#clearProtectionTimer();
                                 this.#scheduleAutoRecovery();
                                 continue;
+                            }
+
+                            const startupSpec = DDR120A24_SPEC.startup;
+                            const startupElapsed = Math.max(0, now - this.source.startupStartedAt);
+                            this.source.startupElapsedMs = startupElapsed;
+                            let startupVoltageFactor = 1.0;
+                            let startupForcedIin = null;
+                            const riseEndMs = startupSpec.setupTimeMs + startupSpec.riseTimeMs;
+                            const settleEndMs = riseEndMs + startupSpec.overshootSettleMs;
+
+                            if (startupElapsed < startupSpec.inrushClampDurationMs) {
+                                this.source.startupPhase = 'INRUSH_LIMIT';
+                                startupVoltageFactor = 0.0;
+                                startupForcedIin = startupSpec.inrushClampCurrentA;
+                                this.#scheduleStartupTick(Math.min(18, startupSpec.inrushClampDurationMs - startupElapsed + 1));
+                            } else if (startupElapsed < startupSpec.setupTimeMs) {
+                                this.source.startupPhase = 'SETUP';
+                                startupVoltageFactor = 0.0;
+                                startupForcedIin = startupSpec.icInitIdleCurrentA;
+                                this.#scheduleStartupTick(Math.min(25, startupSpec.setupTimeMs - startupElapsed + 1));
+                            } else if (startupElapsed < riseEndMs) {
+                                this.source.startupPhase = 'POWER_START_RISE';
+                                const riseProgress = (startupElapsed - startupSpec.setupTimeMs) / startupSpec.riseTimeMs;
+                                startupVoltageFactor = Math.max(0, Math.min(1, riseProgress)) * (1 + DDR120A24_SPEC.turnOnOvershootPct / 100);
+                                startupForcedIin = startupSpec.powerStartSpikeCurrentA;
+                                this.#scheduleStartupTick(2);
+                            } else if (startupElapsed < settleEndMs) {
+                                this.source.startupPhase = 'TURN_ON_OVERSHOOT';
+                                const decayProgress = (startupElapsed - riseEndMs) / startupSpec.overshootSettleMs;
+                                startupVoltageFactor = 1 + (DDR120A24_SPEC.turnOnOvershootPct / 100) * (1 - Math.max(0, Math.min(1, decayProgress)));
+                                if (startupElapsed < startupSpec.setupTimeMs + startupSpec.powerStartSpikeDurationMs) {
+                                    startupForcedIin = startupSpec.powerStartSpikeCurrentA;
+                                }
+                                this.#scheduleStartupTick(3);
+                            } else {
+                                this.source.startupPhase = 'REGULATED';
+                                startupVoltageFactor = 1.0;
+                                this.#clearStartupTimer();
                             }
 
                             const edges = [];
@@ -11494,42 +11944,104 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             const equivalentConductance = this.source.nominalVoltage > 0
                                 ? unclampedCurrent / this.source.nominalVoltage
                                 : 0;
-                            const now = performance.now();
+
+                            const vinDerating = this.source.inputTerminalVoltage < DDR120A24_SPEC.lowVinStepThresholdV
+                                ? DDR120A24_SPEC.lowVinDeratingFactor
+                                : 1.0;
+                            this.source.effectiveAmbientC = effectiveAmbientC;
+                            this.source.tempDeratingFactor = tempContFactor;
+                            this.source.vinDeratingFactor = vinDerating;
+                            this.source.deratingFactor = tempContFactor * vinDerating;
+                            this.source.peakDeratingFactor = (tempPeakFactor / 1.5) * vinDerating;
+
+                            const baseCurrentCeiling = Math.min(
+                                DDR120A24_SPEC.ratedCurrent24V,
+                                DDR120A24_SPEC.ratedPowerW / this.source.trimVoltage
+                            );
+                            const deratedCurrentLimit = Math.max(0.05, baseCurrentCeiling * this.source.deratingFactor);
+                            const basePeakCeiling = Math.min(
+                                DDR120A24_SPEC.peakCurrent24V,
+                                DDR120A24_SPEC.peakPowerW / this.source.trimVoltage
+                            );
+                            const deratedPeakLimit = Math.max(deratedCurrentLimit, basePeakCeiling * this.source.peakDeratingFactor);
+
+                            const olpFactor = DDR120A24_SPEC.olpMeasuredFactor12V +
+                                (DDR120A24_SPEC.olpMeasuredFactor9V18V - DDR120A24_SPEC.olpMeasuredFactor12V) *
+                                Math.min(1, Math.abs(this.source.inputTerminalVoltage - 12.0) / 6.0);
+                            const olpConstantCurrentLimit = deratedCurrentLimit * olpFactor;
+
+                            this.source.currentLimit = deratedCurrentLimit;
+                            this.source.effectiveRatedCurrent = deratedCurrentLimit;
+                            this.source.peakCurrentLimit = deratedPeakLimit;
+                            this.source.effectivePeakCurrent = deratedPeakLimit;
+                            this.source.constantCurrentLimit = olpConstantCurrentLimit;
+                            this.source.overloadOnsetCurrent = deratedCurrentLimit * DDR120A24_SPEC.olpOnsetFactor;
+                            this.source.overloadCeilingCurrent = deratedCurrentLimit * DDR120A24_SPEC.olpCeilingFactor;
+
                             const rOut = this.source.outputResistance || 0;
+                            const openCircuitVolts = targetRegulatedNoLoadV * startupVoltageFactor;
                             let regulatedVoltage = equivalentConductance > 0
-                                ? this.source.nominalVoltage / (1 + equivalentConductance * rOut)
-                                : this.source.nominalVoltage;
+                                ? openCircuitVolts / (1 + equivalentConductance * rOut)
+                                : openCircuitVolts;
                             let regulatedCurrent = equivalentConductance * regulatedVoltage;
 
-                            if (regulatedCurrent > this.source.currentLimit) {
-                                if (this.source.overloadStartedAt === null) {
-                                    this.source.overloadStartedAt = now;
+                            if (passes === 1 && dtSec > 0 && startupVoltageFactor >= 0.99) {
+                                if (regulatedCurrent > deratedCurrentLimit) {
+                                    const excessNorm = (regulatedCurrent - deratedCurrentLimit) /
+                                        Math.max(0.1, deratedPeakLimit - deratedCurrentLimit);
+                                    this.source.peakEnergySec = Math.min(
+                                        3.5,
+                                        this.source.peakEnergySec + dtSec * Math.max(1.0, excessNorm)
+                                    );
+                                } else if (this.source.peakEnergySec > 0) {
+                                    const loadRatio = Math.max(0, Math.min(1, regulatedCurrent / deratedCurrentLimit));
+                                    const recoveryTimeSec = loadRatio <= 0.40
+                                        ? (6.0 + (loadRatio / 0.40) * 4.0)
+                                        : (10.0 + ((loadRatio - 0.40) / 0.60) * 90.0);
+                                    const coolRate = 3.0 / recoveryTimeSec;
+                                    this.source.peakEnergySec = Math.max(0, this.source.peakEnergySec - dtSec * coolRate);
                                 }
-                                this.source.overloadElapsedMs = Math.max(0, now - this.source.overloadStartedAt);
-                            } else {
-                                this.source.overloadStartedAt = null;
-                                this.source.overloadElapsedMs = 0;
-                                this.#clearProtectionTimer();
-                                this.#clearAutoRecoveryTimer();
                             }
 
-                            const inPeakWindow = this.source.overloadElapsedMs < this.source.peakDurationMs;
+                            if (regulatedCurrent > deratedCurrentLimit) {
+                                if (this.source.overloadStartedAt === null) {
+                                    this.source.overloadStartedAt = now - this.source.peakEnergySec * 1000;
+                                }
+                                this.source.overloadElapsedMs = Math.max(
+                                    this.source.peakEnergySec * 1000,
+                                    now - this.source.overloadStartedAt
+                                );
+                            } else {
+                                this.source.overloadStartedAt = null;
+                                this.source.overloadElapsedMs = this.source.peakEnergySec * 1000;
+                                if (this.source.peakEnergySec <= 0) {
+                                    this.#clearProtectionTimer();
+                                    this.#clearAutoRecoveryTimer();
+                                } else {
+                                    this.#scheduleProtectionTick(250);
+                                }
+                            }
+
+                            const inPeakWindow = this.source.overloadElapsedMs < this.source.peakDurationMs &&
+                                this.source.peakEnergySec < 3.0;
                             const activeCurrentCeiling = inPeakWindow
-                                ? this.source.peakCurrentLimit
-                                : this.source.constantCurrentLimit;
+                                ? deratedPeakLimit
+                                : olpConstantCurrentLimit;
 
                             let effectiveVoltage = regulatedVoltage;
                             let limiting = false;
-                            let mode = 'CV';
+                            let mode = this.source.startupPhase !== 'REGULATED'
+                                ? this.source.startupPhase
+                                : (this.source.holdupStartedAt !== null ? 'HOLDUP' : 'CV');
 
-                            if (regulatedCurrent > activeCurrentCeiling && equivalentConductance > 0) {
+                            if (startupVoltageFactor > 0 && regulatedCurrent > activeCurrentCeiling && equivalentConductance > 0) {
                                 effectiveVoltage = activeCurrentCeiling / equivalentConductance;
                                 limiting = true;
                                 mode = 'CC';
-                            } else if (regulatedCurrent > this.source.currentLimit) {
+                            } else if (startupVoltageFactor > 0 && regulatedCurrent > deratedCurrentLimit) {
                                 mode = inPeakWindow ? 'PEAK' : 'CC';
-                                if (!inPeakWindow && regulatedCurrent > this.source.overloadOnsetCurrent && equivalentConductance > 0) {
-                                    const clampTarget = Math.min(regulatedCurrent, this.source.constantCurrentLimit);
+                                if (!inPeakWindow && equivalentConductance > 0) {
+                                    const clampTarget = Math.min(regulatedCurrent, olpConstantCurrentLimit);
                                     effectiveVoltage = clampTarget / equivalentConductance;
                                     limiting = true;
                                 }
@@ -11551,18 +12063,69 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             });
 
                             const actualCurrent = equivalentConductance * effectiveVoltage;
+                            const pOut = effectiveVoltage * actualCurrent;
+                            const loadPct = (pOut / DDR120A24_SPEC.ratedPowerW) * 100;
+
+                            let vIn = this.source.inputTerminalVoltage || this.source.upstreamSupplyVoltage;
+                            let eff = evaluateDdr120Efficiency(Math.max(10, loadPct), vIn);
+                            let pLoss = 0;
+                            let pIn = 0;
+                            let iIn = 0;
+                            for (let iter = 0; iter < 3; iter++) {
+                                eff = evaluateDdr120Efficiency(Math.max(10, loadPct), vIn);
+                                const lossAt10Pct = (DDR120A24_SPEC.ratedPowerW * 0.10) * ((1 / evaluateDdr120Efficiency(10, vIn)) - 1);
+                                const converterLoss = startupVoltageFactor <= 0
+                                    ? 0.18
+                                    : (loadPct >= 10
+                                        ? pOut * ((1 / eff) - 1)
+                                        : DDR120A24_SPEC.efficiencySurface.idleLossWatts +
+                                            (Math.max(0, loadPct) / 10) * (lossAt10Pct - DDR120A24_SPEC.efficiencySurface.idleLossWatts));
+                                pLoss = converterLoss;
+                                pIn = pOut + pLoss;
+                                iIn = startupForcedIin !== null
+                                    ? startupForcedIin
+                                    : (vIn > 1.0 ? pIn / vIn : 0);
+                                vIn = Math.max(0, this.source.upstreamSupplyVoltage - iIn * harnessResistanceOhms);
+                            }
+
                             this.source.outputVoltage = effectiveVoltage;
                             this.source.current = Math.max(0, actualCurrent);
+                            this.source.outputPowerW = pOut;
+                            this.source.loadPct = loadPct;
+                            this.source.efficiencyPct = pIn > 0.01 ? (pOut / pIn) * 100 : (eff * 100);
+                            this.source.powerLossW = pLoss;
+                            this.source.inputPowerW = pIn;
+                            this.source.inputCurrent = iIn;
+                            this.source.inputTerminalVoltage = vIn;
+                            this.source.harnessDropV = Math.max(0, this.source.upstreamSupplyVoltage - vIn);
+                            this.source.perPinPositiveCurrentA = iIn / harness.positiveConductorsAwg16;
+                            this.source.perPinReturnCurrentA = iIn / harness.returnConductorsAwg16;
+                            this.source.perPinNegativeCurrentA = this.source.perPinReturnCurrentA;
+                            this.source.dcOk = effectiveVoltage >= this.source.trimVoltage * startupSpec.dcOkThresholdRatio && !this.source.tripped;
+                            this.source.holdupReserveMs = evaluateDdr120HoldupMs(Math.max(10, loadPct));
+                            if (this.source.holdupStartedAt === null) {
+                                this.source.holdupRemainingMs = this.source.holdupReserveMs;
+                            }
+                            this.source.en50155Level = this.source.holdupReserveMs >= 10.0 ? 'S2' : (this.source.holdupReserveMs >= 3.0 ? 'S1' : 'BELOW_S1');
+                            const loadRatioRipple = Math.max(0.15, Math.min(1.5, pOut / DDR120A24_SPEC.ratedPowerW));
+                            this.source.rippleLfMvPp = this.source.dcOk ? DDR120A24_SPEC.rippleLfMeasuredMvPp * loadRatioRipple : 0;
+                            this.source.rippleHfMvPp = this.source.dcOk ? DDR120A24_SPEC.rippleHfMeasuredMvPp * loadRatioRipple : 0;
+                            const deltaI = Math.abs(actualCurrent - previousCurrent);
+                            this.source.dynamicTransientMvPp = deltaI > 0.05
+                                ? Math.min(2400, (deltaI / deratedCurrentLimit) * DDR120A24_SPEC.dynamicTransient120HzMvPp)
+                                : this.source.dynamicTransientMvPp * Math.exp(-dtSec / 0.15);
                             this.source.limiting = limiting;
                             this.source.mode = mode;
 
                             this.loads.forEach(load => {
-                                load.applyVoltage(this.voltageBetween(load.a1, load.a2), DC_SOLVER_AUTHORITY);
+                                if (load.applyVoltage(this.voltageBetween(load.a1, load.a2), DC_SOLVER_AUTHORITY)) {
+                                    this.#solveAgain = true;
+                                }
                             });
 
-                            const isDeadShort = limiting && effectiveVoltage < DDR120A24_SHORT_CIRCUIT_VOLTS;
-                            const isSustainedDeepOverload = (
-                                this.source.overloadElapsedMs >= this.source.peakDurationMs &&
+                            const isDeadShort = startupVoltageFactor >= 0.99 && limiting && effectiveVoltage < DDR120A24_SHORT_CIRCUIT_VOLTS;
+                            const isSustainedDeepOverload = startupVoltageFactor >= 0.99 && (
+                                !inPeakWindow &&
                                 regulatedCurrent > this.source.overloadCeilingCurrent &&
                                 (effectiveVoltage < 18.0 || this.source.overloadElapsedMs >= this.source.ccShutdownMs)
                             );
@@ -11570,7 +12133,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             if (isDeadShort || isSustainedDeepOverload) {
                                 const reason = isDeadShort
                                     ? 'DDR-120A-24 short-circuit foldback protection (' + unclampedCurrent.toFixed(3) + ' A demand, Vout=' + effectiveVoltage.toFixed(2) + ' V)'
-                                    : 'DDR-120A-24 overload protection (' + regulatedCurrent.toFixed(3) + ' A > ' + this.source.currentLimit.toFixed(2) + ' A for ' + (this.source.overloadElapsedMs / 1000).toFixed(1) + ' s)';
+                                    : 'DDR-120A-24 OLP protection (' + regulatedCurrent.toFixed(3) + ' A > ' + deratedCurrentLimit.toFixed(2) + ' A for ' + (this.source.overloadElapsedMs / 1000).toFixed(1) + ' s)';
                                 this.source.trip(reason);
                                 this.fault = this.source.tripReason;
                                 this.loads.forEach(load => load.applyVoltage(0, DC_SOLVER_AUTHORITY));
@@ -11585,13 +12148,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                     : (remainingToShutdown > 0 ? Math.min(250, remainingToShutdown + 15) : 250);
                                 this.#scheduleProtectionTick(nextTick);
                                 this.fault = limiting
-                                    ? 'DDR-120A-24 CC limiting: ' + this.source.current.toFixed(3) + ' A @ ' + effectiveVoltage.toFixed(2) + ' V'
-                                    : 'DDR-120A-24 peak load: ' + this.source.current.toFixed(3) + ' A (' + (this.source.overloadElapsedMs / 1000).toFixed(1) + 's / 3.0s)';
+                                    ? 'DDR-120A-24 OLP CC limiting (124.8%): ' + this.source.current.toFixed(3) + ' A @ ' + effectiveVoltage.toFixed(2) + ' V'
+                                    : 'DDR-120A-24 150% peak load: ' + this.source.current.toFixed(3) + ' A (' + this.source.peakEnergySec.toFixed(1) + 's / 3.0s budget)';
                             } else {
                                 this.fault = null;
                             }
                         } while (this.#solveAgain);
                     } finally {
+                        this.source.updateThermalAndStressState(dtSec);
                         this.#solving = false;
                     }
                     this.dispatchEvent(new Event('solved'));
@@ -11601,6 +12165,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 resetProtection() {
                     this.#clearProtectionTimer();
                     this.#clearAutoRecoveryTimer();
+                    this.#clearStartupTimer();
                     this.source.reset();
                     this.fault = null;
                     return this.solve();
@@ -11638,19 +12203,52 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 snapshot() {
                     return {
                         source: {
+                            model: this.source.spec.model,
                             voltage: this.source.tripped ? 0 : this.source.outputVoltage,
                             nominalVoltage: this.source.nominalVoltage,
+                            trimVoltage: this.source.trimVoltage,
                             outputVoltage: this.source.outputVoltage,
                             current: this.source.current,
                             unclampedCurrent: this.source.unclampedCurrent,
                             currentLimit: this.source.currentLimit,
                             constantCurrentLimit: this.source.constantCurrentLimit,
                             peakCurrentLimit: this.source.peakCurrentLimit,
+                            deratingFactor: this.source.deratingFactor,
+                            tempDeratingFactor: this.source.tempDeratingFactor,
+                            vinDeratingFactor: this.source.vinDeratingFactor,
+                            ambientTempC: this.source.ambientTempC,
+                            altitudeMeters: this.source.altitudeMeters,
+                            upstreamSupplyVoltage: this.source.upstreamSupplyVoltage,
+                            inputTerminalVoltage: this.source.inputTerminalVoltage,
+                            inputCurrent: this.source.inputCurrent,
+                            inputPowerW: this.source.inputPowerW,
+                            outputPowerW: this.source.outputPowerW,
+                            powerLossW: this.source.powerLossW,
+                            efficiencyPct: this.source.efficiencyPct,
+                            harnessDropV: this.source.harnessDropV,
+                            perPinPositiveCurrentA: this.source.perPinPositiveCurrentA,
+                            perPinReturnCurrentA: this.source.perPinReturnCurrentA,
+                            switchingFrequencyHz: this.source.spec.switchingFrequencyHz,
+                            rippleLfMvPp: this.source.rippleLfMvPp,
+                            rippleHfMvPp: this.source.rippleHfMvPp,
+                            dynamicTransientMvPp: this.source.dynamicTransientMvPp,
+                            dcOk: this.source.dcOk,
+                            uvloActive: this.source.uvloActive,
+                            reversePolarity: this.source.reversePolarity,
+                            ovpLatched: this.source.ovpLatched,
+                            startupPhase: this.source.startupPhase,
+                            startupElapsedMs: this.source.startupElapsedMs,
+                            holdupReserveMs: this.source.holdupReserveMs,
+                            holdupRemainingMs: this.source.holdupRemainingMs,
+                            en50155Level: this.source.en50155Level,
+                            peakEnergySec: this.source.peakEnergySec,
                             mode: this.source.mode,
                             limiting: this.source.limiting,
                             overloadElapsedMs: this.source.overloadElapsedMs,
                             tripped: this.source.tripped,
-                            tripReason: this.source.tripReason
+                            tripReason: this.source.tripReason,
+                            componentTempsC: { ...this.source.componentTempsC },
+                            voltageStress: { ...this.source.voltageStress }
                         },
                         contacts: Object.fromEntries(this.contacts.map(contact => [
                             contact.name,
@@ -13090,6 +13688,35 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         get source() {
                             return freezeTelemetry({ ...circuit.snapshot().source });
                         },
+                        setAmbientTempC: value => {
+                            if (!Number.isFinite(Number(value))) return false;
+                            circuit.source.ambientTempC = Math.max(-40, Math.min(85, Number(value)));
+                            circuit.solve();
+                            return circuit.source.ambientTempC;
+                        },
+                        setAltitudeMeters: value => {
+                            if (!Number.isFinite(Number(value))) return false;
+                            circuit.source.altitudeMeters = Math.max(0, Math.min(5000, Number(value)));
+                            circuit.solve();
+                            return circuit.source.altitudeMeters;
+                        },
+                        setUpstreamSupplyVoltage: value => {
+                            if (!Number.isFinite(Number(value))) return false;
+                            circuit.source.upstreamSupplyVoltage = Math.max(0, Math.min(20, Number(value)));
+                            circuit.solve();
+                            return circuit.source.upstreamSupplyVoltage;
+                        },
+                        setTrimVoltage: value => {
+                            if (!Number.isFinite(Number(value))) return false;
+                            circuit.source.nominalVoltage = Math.max(24.0, Math.min(33.0, Number(value)));
+                            circuit.solve();
+                            return circuit.source.nominalVoltage;
+                        },
+                        triggerColdStart: () => {
+                            circuit.source.beginColdStart(performance.now());
+                            circuit.solve();
+                            return true;
+                        },
                         get buses() {
                             const conductorCurrent = conductor => conductor?.connected
                                 ? Math.abs(circuit.voltageBetween(conductor.from, conductor.to) / conductor.resistance)
@@ -13102,6 +13729,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             );
                             const source = circuit.source;
                             return freezeTelemetry({
+                                model: source.model,
                                 sourceVoltage: source.tripped ? 0 : source.outputVoltage,
                                 nominalVoltage: source.nominalVoltage,
                                 current: source.current,
@@ -13112,10 +13740,40 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 currentLimit: source.currentLimit,
                                 constantCurrentLimit: source.constantCurrentLimit,
                                 peakCurrentLimit: source.peakCurrentLimit,
+                                effectiveRatedCurrent: source.effectiveRatedCurrent,
+                                effectivePeakCurrent: source.effectivePeakCurrent,
+                                loadPct: source.loadPct,
                                 mode: source.mode,
+                                dcOk: source.dcOk,
+                                startupPhase: source.startupPhase,
+                                startupElapsedMs: source.startupElapsedMs,
                                 limiting: source.limiting,
                                 overloadElapsedMs: source.overloadElapsedMs,
+                                peakEnergySec: source.peakEnergySec,
                                 tripped: source.tripped,
+                                tripReason: source.tripReason,
+                                upstreamSupplyVoltage: source.upstreamSupplyVoltage,
+                                inputTerminalVoltage: source.inputTerminalVoltage,
+                                inputCurrent: source.inputCurrent,
+                                inputPowerW: source.inputPowerW,
+                                outputPowerW: source.outputPowerW,
+                                powerLossW: source.powerLossW,
+                                efficiencyPct: source.efficiencyPct,
+                                harnessDropV: source.harnessDropV,
+                                perPinPositiveCurrentA: source.perPinPositiveCurrentA,
+                                perPinNegativeCurrentA: source.perPinNegativeCurrentA,
+                                holdupReserveMs: source.holdupReserveMs,
+                                holdupRemainingMs: source.holdupRemainingMs,
+                                en50155Level: source.en50155Level,
+                                rippleLfMvPp: source.rippleLfMvPp,
+                                rippleHfMvPp: source.rippleHfMvPp,
+                                ambientTempC: source.ambientTempC,
+                                altitudeMeters: source.altitudeMeters,
+                                effectiveAmbientC: source.effectiveAmbientC,
+                                deratingFactor: source.deratingFactor,
+                                peakDeratingFactor: source.peakDeratingFactor,
+                                componentTempsC: { ...source.componentTempsC },
+                                voltageStress: { ...source.voltageStress },
                                 distribution: {
                                     voltage: circuit.voltageBetween(supplyBusbar.positive, supplyBusbar.negative),
                                     current: conductorCurrent(wires.sourceFeed)
@@ -13226,10 +13884,22 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
 
                 powerOn() {
-                    return this.pagePower.setClosed(true, this.#pagePowerAuthority);
+                    const wasClosed = this.pagePower.closed;
+                    if (!wasClosed || this.circuit.source.startupPhase === 'OFF') {
+                        this.circuit.source.beginColdStart(performance.now());
+                    }
+                    const result = this.pagePower.setClosed(true, this.#pagePowerAuthority);
+                    if (!wasClosed || this.circuit.source.startupPhase !== 'REGULATED') {
+                        [18, 38, 90, 137, 140, 143, 160, 185, 220].forEach(delayMs => {
+                            window.setTimeout(() => this.circuit.solve(), delayMs);
+                        });
+                    }
+                    return result;
                 }
 
                 powerOff() {
+                    this.circuit.source.startupPhase = 'OFF';
+                    this.circuit.source.dcOk = false;
                     return this.pagePower.setClosed(false, this.#pagePowerAuthority);
                 }
 
@@ -14787,7 +15457,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     if (dir >= 0) return raw < 0 ? raw + 2 * Math.PI : raw;
                     return raw > 0 ? raw - 2 * Math.PI : raw;
                 };
-                // Critically-damped / overdamped angular rate controller (zeta >= 1.05 -> zero heading oscillation / zero wiggle!)
                 const smoothTurnRate = (signedError, currentRate = 0) => {
                     const kp = 1.18;
                     const mag = Math.abs(signedError);
@@ -14912,7 +15581,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
 
                     if (travel.mode === 'plan') {
-                        // Next-leg deceleration foresight
                         let foresightSpeedCeiling = Infinity;
                         const remLegDist = Math.max(0, fullPath.total - targetS);
                         if (Number.isFinite(travel.nextLegSpeed) && travel.nextLegSpeed > 0) {
@@ -14931,16 +15599,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             }
                         }
 
-                        // Project aircraft onto fullPath to decouple lateral path-following from longitudinal speed control
                         const nearestOnFull = terminalNdTravelClosest(fullPath, { x: travel.x, y: travel.y });
                         const aircraftS = nearestOnFull.distance;
                         const lateralSeparation = nearestOnFull.separation;
 
-                        // Forward path lookahead (ALWAYS ahead of aircraftS -> guarantees zero S-wave wiggle!)
                         const forwardLookahead = Math.max(14, Math.min(28, 14 + (travel.moveSpeed || routeSpeed) * 1.8 + lateralSeparation * 0.75));
                         const forwardPathS = aircraftS + forwardLookahead;
 
-                        // Off-track stern entry point (behind targetS -> used ONLY when outside the corridor or misaligned)
                         const estTurnSpeed = Math.min(4.8, Math.max(routeSpeed * 1.15, 0.9 + 0.22 * distToDot));
                         const estTurnRadius = estTurnSpeed / turnRate;
                         const alignmentPenalty = 1 - Math.cos(courseError);
@@ -14948,14 +15613,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         const sternOffset = Math.min(28, rolloutAdvance + crossAbs * 0.65 + (alongError > 0 ? alongError * 0.6 + 4 : 2.0));
                         const sternS = targetS - sternOffset;
 
-                        // Smooth blend weight: 0 inside the capture corridor (pure forward path tracking, zero wiggle!),
-                        // 1 when off-track (crossAbs > 14) or pointing away from routeCourse (|courseError| > 55 deg)
                         const crossBlend = Math.max(0, Math.min(1, (lateralSeparation - 4.5) / 10.0));
                         const angleBlend = Math.max(0, Math.min(1, (Math.abs(courseError) - 0.45) / 0.75));
                         const sternWeight = Math.max(crossBlend, angleBlend);
 
                         const blendedAimS = sternWeight * sternS + (1 - sternWeight) * forwardPathS;
-                        // When largely aligned with the track, never aim behind aircraftS + 10 px!
                         const safeAimS = sternWeight < 0.25
                             ? Math.max(aircraftS + 11, blendedAimS)
                             : blendedAimS;
@@ -14969,9 +15631,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         const headingError = angleDiff(desiredCourse, travel.heading);
                         steer(smoothTurnRate(headingError, travel.turnRate || 0), step);
 
-                        // Longitudinal Speed Law:
-                        // - If ahead of the green dot (alongError > 0) and in corridor: brake smoothly in-lane!
-                        // - If behind or off-track: phase-plane closing speed v = routeSpeed + sqrt(2*a*d)
                         let targetSpeed = routeSpeed;
                         if (alongError > 0.05 && sternWeight < 0.5) {
                             const brakeFactor = Math.max(0.03, 1 / (1 + 1.25 * alongError));
@@ -15490,8 +16149,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         } else if (gap > 10) {
                             terminalNdTravel.catchingUp = true;
                         }
-                        // Only trigger a formal reversal on large manual timeline rewinds (> 28 px ahead),
-                        // never on normal in-lane tracking or slow tracks where in-lane braking / stern entry handles it!
                         const canBrakeInLane = alongError > 0 && crossAbs <= 24 && Math.abs(courseError) <= Math.PI * 0.45 && alongError <= 28;
                         if (newTravel && terminalNdTravel.catchingUp && !terminalNdTravel.reversal && !canBrakeInLane) {
                             if (alongError > 28 && behindNose > 14) {
@@ -15892,9 +16549,65 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             });
             const electricalFolio = () => {
                 const buses = window.m2Electrical?.buses;
+                const voltageText = value => Number.isFinite(value) ? (value.toFixed(1) + 'V') : '□□';
+                const ampReading = value => Number.isFinite(value) ? value.toFixed(4) : '0.0000';
+                const eff = Number.isFinite(buses?.efficiencyPct) ? (buses.efficiencyPct.toFixed(1) + '%') : '--';
+                const loss = Number.isFinite(buses?.powerLossW) ? (buses.powerLossW.toFixed(1) + 'W') : '--';
+                const effLoss = eff + '/' + loss;
+                const modeOk = (buses?.mode || 'OFF') + '/' + (buses?.dcOk ? 'OK' : 'OPEN');
+                return {
+                    name: 'ELEC',
+                    entries: [
+                        actionEntry('', '<BUSES', { kind: 'folio', folio: { kind: 'elec-buses', page: 1 } }, '1L'),
+                        actionEntry('', 'STRESS>', { kind: 'folio', folio: { kind: 'elec-ddr-strs', page: 1 } }, '1R'),
+                        actionEntry('', '<DDR I/O', { kind: 'folio', folio: { kind: 'elec-ddr-io', page: 1 } }, '2L'),
+                        actionEntry('', 'THERM>', { kind: 'folio', folio: { kind: 'elec-ddr-thrm', page: 1 } }, '2R'),
+                        actionEntry('', '<DDR PROT', { kind: 'folio', folio: { kind: 'elec-ddr-prot', page: 1 } }, '3L'),
+                        {
+                            title: '',
+                            value: '',
+                            field: '4L',
+                            titleRuns: [
+                                { column: 0, text: 'SOURCE V', color: 'white', size: 'small' },
+                                { column: 10, text: 'SRCE/T', color: 'white', size: 'small' },
+                                { column: 18, text: 'DCAMPS', color: 'white', size: 'small' }
+                            ],
+                            valueRuns: [
+                                { column: 0, text: voltageText(buses?.sourceVoltage), color: buses?.tripped ? 'red' : (buses?.limiting || buses?.mode === 'PEAK' || buses?.startupPhase !== 'REGULATED') ? 'amber' : 'green', size: 'large' },
+                                { column: 10, text: ampReading(buses?.indicatedCurrent), color: buses?.tripped ? 'red' : buses?.indicatedCurrent >= 3.2 ? 'amber' : 'white', size: 'large' },
+                                { column: 18, text: ampReading(buses?.current), color: buses?.tripped ? 'red' : buses?.current >= 3.2 ? 'amber' : 'white', size: 'large' }
+                            ]
+                        },
+                        {
+                            title: 'MODE/DCOK',
+                            value: '',
+                            field: '5L',
+                            valueRuns: [{
+                                column: 0,
+                                text: modeOk,
+                                color: buses?.dcOk ? 'green' : 'amber',
+                                size: 'large'
+                            }]
+                        },
+                        {
+                            title: 'EFF/LOSS',
+                            value: '',
+                            field: '5R',
+                            valueRuns: [{
+                                column: Math.max(12, 24 - effLoss.length),
+                                text: effLoss,
+                                color: 'green',
+                                size: 'large'
+                            }]
+                        }
+                    ]
+                };
+            };
+            const electricalBusesFolio = () => {
+                const buses = window.m2Electrical?.buses;
                 const page = Math.max(1, Math.min(2, folio.page || 1));
-                const voltageText = value => Number.isFinite(value) ? `${value.toFixed(1)}V` : '□□';
-                const currentText = value => Number.isFinite(value) ? `${value.toFixed(3)}A` : '□□';
+                const voltageText = value => Number.isFinite(value) ? (value.toFixed(1) + 'V') : '□□';
+                const currentText = value => Number.isFinite(value) ? (value.toFixed(3) + 'A') : '□□';
                 const ampReading = value => Number.isFinite(value) ? value.toFixed(4) : '0.0000';
                 const entry = (title, value, field, color = 'white') => ({
                     title,
@@ -15918,7 +16631,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             { column: 18, text: 'DCAMPS', color: 'white', size: 'small' }
                         ],
                         valueRuns: [
-                            { column: 0, text: voltageText(buses?.sourceVoltage), color: buses?.tripped ? 'red' : (buses?.limiting || buses?.mode === 'PEAK') ? 'amber' : 'green', size: 'large' },
+                            { column: 0, text: voltageText(buses?.sourceVoltage), color: buses?.tripped ? 'red' : (buses?.limiting || buses?.mode === 'PEAK' || buses?.startupPhase !== 'REGULATED') ? 'amber' : 'green', size: 'large' },
                             { column: 10, text: ampReading(buses?.indicatedCurrent), color: buses?.tripped ? 'red' : buses?.indicatedCurrent >= 3.2 ? 'amber' : 'white', size: 'large' },
                             { column: 18, text: ampReading(buses?.current), color: buses?.tripped ? 'red' : buses?.current >= 3.2 ? 'amber' : 'white', size: 'large' }
                         ]
@@ -15943,7 +16656,163 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     entry('A8 TERM A', currentText(buses?.branches?.terminal), '5L'),
                     entry('A9 ND A', currentText(buses?.branches?.nd), '5R')
                 ];
-                return { name: 'ELEC', entries };
+                return { name: 'ELEC BUSES', entries };
+            };
+            const ddr120Entry = (title, value, field, color = 'white', size = 'large') => ({
+                title,
+                titleLiteral: true,
+                titleLimit: 12,
+                value: '',
+                field,
+                valueRuns: [{
+                    column: field.endsWith('R') ? Math.max(12, 24 - value.length) : 0,
+                    text: value,
+                    color,
+                    size
+                }]
+            });
+            const ddr120IoFolio = () => {
+                const buses = window.m2Electrical?.buses;
+                const vterm = Number.isFinite(buses?.inputTerminalVoltage) ? buses.inputTerminalVoltage.toFixed(2) : '--';
+                const vin = Number.isFinite(buses?.upstreamSupplyVoltage) ? buses.upstreamSupplyVoltage.toFixed(1) : '--';
+                const eff = Number.isFinite(buses?.efficiencyPct) ? (buses.efficiencyPct.toFixed(1) + '%') : '--';
+                const loss = Number.isFinite(buses?.powerLossW) ? (buses.powerLossW.toFixed(2) + 'W') : '--';
+                const iin = Number.isFinite(buses?.inputCurrent) ? (buses.inputCurrent.toFixed(3) + 'A') : '--';
+                const pin = Number.isFinite(buses?.inputPowerW) ? (buses.inputPowerW.toFixed(1) + 'W') : '--';
+                const vout = Number.isFinite(buses?.sourceVoltage) ? (buses.sourceVoltage.toFixed(2) + 'V') : '--';
+                const iout = Number.isFinite(buses?.current) ? (buses.current.toFixed(3) + 'A') : '--';
+                const pout = Number.isFinite(buses?.outputPowerW) ? (buses.outputPowerW.toFixed(1) + 'W') : '--';
+                const loadPct = Number.isFinite(buses?.loadPct) ? (buses.loadPct.toFixed(1) + '%') : '--';
+                const dropMv = Number.isFinite(buses?.harnessDropV) ? ((buses.harnessDropV * 1000).toFixed(1) + 'MV') : '--';
+                const pinCur = Number.isFinite(buses?.perPinPositiveCurrentA) ? (buses.perPinPositiveCurrentA.toFixed(2) + 'A') : '--';
+                return {
+                    name: 'DDR-120 I/O',
+                    entries: [
+                        ddr120Entry('VTERM/VIN', vterm + '/' + vin + 'V', '1L', 'green'),
+                        ddr120Entry('EFF/LOSS', eff + '/' + loss, '1R', 'green'),
+                        ddr120Entry('INPUT I', iin, '2L', 'white'),
+                        ddr120Entry('INPUT P', pin, '2R', 'white'),
+                        ddr120Entry('OUTPUT V', vout, '3L', buses?.dcOk ? 'green' : 'amber'),
+                        ddr120Entry('OUTPUT I', iout, '3R', buses?.mode === 'CV' ? 'white' : 'amber'),
+                        ddr120Entry('OUTPUT P', pout, '4L', 'white'),
+                        ddr120Entry('LOAD PCT', loadPct, '4R', (buses?.loadPct || 0) > 100 ? 'amber' : 'green'),
+                        ddr120Entry('PCIE DROP', dropMv, '5L', 'white'),
+                        ddr120Entry('PIN +12V', pinCur, '5R', 'white')
+                    ]
+                };
+            };
+            const ddr120ProtFolio = () => {
+                const buses = window.m2Electrical?.buses;
+                const dcOkTxt = buses?.dcOk ? 'OK' : 'OPEN';
+                const modeTxt = (buses?.mode || 'OFF') + '/' + dcOkTxt;
+                const startPh = (buses?.startupPhase || 'REG').slice(0, 7);
+                const pkEnergy = Number.isFinite(buses?.peakEnergySec) ? (buses.peakEnergySec.toFixed(2) + '/3.0S') : '0.00/3.0S';
+                const ccLim = Number.isFinite(buses?.constantCurrentLimit) ? (buses.constantCurrentLimit.toFixed(3) + 'A') : '4.491A';
+                const holdup = Number.isFinite(buses?.holdupReserveMs) ? (buses.holdupReserveMs.toFixed(2) + 'MS') : '--';
+                const enLvl = buses?.en50155Level || 'S1/C1';
+                const derate = Number.isFinite(buses?.deratingFactor)
+                    ? ((buses.deratingFactor * 100).toFixed(0) + '%/' + (buses?.ambientTempC ?? 5).toFixed(0) + 'C')
+                    : '100%/5C';
+                const alt = Number.isFinite(buses?.altitudeMeters) ? (Math.round(buses.altitudeMeters) + 'M') : '0M';
+                const rLf = Number.isFinite(buses?.rippleLfMvPp) ? (buses.rippleLfMvPp.toFixed(1) + 'MV') : '--';
+                const rHf = Number.isFinite(buses?.rippleHfMvPp) ? (buses.rippleHfMvPp.toFixed(1) + 'MV') : '--';
+                return {
+                    name: 'DDR-120 PROT',
+                    entries: [
+                        ddr120Entry('MODE/DCOK', modeTxt, '1L', buses?.dcOk ? 'green' : 'amber'),
+                        ddr120Entry('STARTUP', startPh, '1R', buses?.startupPhase === 'REGULATED' ? 'green' : 'amber'),
+                        ddr120Entry('PK ENRGY', pkEnergy, '2L', (buses?.peakEnergySec || 0) > 0.1 ? 'amber' : 'green'),
+                        ddr120Entry('CC LIMIT', ccLim, '2R', 'white'),
+                        ddr120Entry('HOLD-UP', holdup, '3L', (buses?.holdupReserveMs || 0) >= 10 ? 'green' : 'amber'),
+                        ddr120Entry('EN50155', enLvl, '3R', 'green'),
+                        ddr120Entry('DERATE/TA', derate, '4L', (buses?.deratingFactor || 1) < 1 ? 'amber' : 'green'),
+                        ddr120Entry('ALTITUDE', alt, '4R', 'white'),
+                        ddr120Entry('RIPPL LF', rLf, '5L', 'white'),
+                        ddr120Entry('RIPPL HF', rHf, '5R', 'white')
+                    ]
+                };
+            };
+            const ddr120StressFolio = () => {
+                const buses = window.m2Electrical?.buses;
+                const stressEntry = (title, nodeKey, field) => {
+                    const node = buses?.voltageStress?.[nodeKey];
+                    const vStr = node && Number.isFinite(node.vpk)
+                        ? (node.vpk >= 100 ? Math.round(node.vpk) : node.vpk.toFixed(1))
+                        : '';
+                    const txt = node && vStr
+                        ? (vStr + '/' + Math.round(node.limit) + 'V ' + Math.round(node.ratioPct) + '%')
+                        : '□□';
+                    const color = node ? (node.ratioPct >= 95 ? 'red' : node.ratioPct >= 82 ? 'amber' : 'green') : 'white';
+                    return ddr120Entry(title, txt, field, color);
+                };
+                return {
+                    name: 'DDR-120 STRS',
+                    entries: [
+                        stressEntry('Q5 PRI FET', 'Q5', '1L'),
+                        stressEntry('Q6 CLMP FT', 'Q6', '1R'),
+                        stressEntry('Q100 SYNC1', 'Q100', '2L'),
+                        stressEntry('Q101 SYNC2', 'Q101', '2R'),
+                        stressEntry('C5 BULK CP', 'C5', '3L'),
+                        stressEntry('U1 PWM VCC', 'U1', '3R'),
+                        ddr120Entry('OVP TRIP', '30.9V LAT', '4L', 'green'),
+                        ddr120Entry('UVLO HYS', '8.5/9.0V', '4R', 'green'),
+                        ddr120Entry('HI-POT KV', '4.4KVDC', '5L', 'white'),
+                        ddr120Entry('FG CONT', '10.0MOHM', '5R', 'white')
+                    ]
+                };
+            };
+            const ddr120ThermFolio = () => {
+                const buses = window.m2Electrical?.buses;
+                const page = Math.max(1, Math.min(2, folio.page || 1));
+                const tempEntry = (title, nodeKey, limitC, field) => {
+                    const temp = buses?.componentTempsC?.[nodeKey];
+                    const txt = Number.isFinite(temp) ? (temp.toFixed(1) + '/' + limitC + 'C') : '□□';
+                    const ratio = Number.isFinite(temp) ? temp / limitC : 0;
+                    const color = ratio >= 0.85 ? 'red' : ratio >= 0.65 ? 'amber' : 'green';
+                    return ddr120Entry(title, txt, field, color);
+                };
+                if (page === 1) {
+                    return {
+                        name: 'DDR-120 THRM',
+                        entries: [
+                            tempEntry('LF1 CHOK1', 'LF1', 130, '1L'),
+                            tempEntry('LF2 CHOK2', 'LF2', 130, '1R'),
+                            tempEntry('LF100 OUT', 'LF100', 130, '2L'),
+                            tempEntry('L100 INDC', 'L100', 130, '2R'),
+                            tempEntry('T1  XFMR1', 'T1', 130, '3L'),
+                            tempEntry('T2  XFMR2', 'T2', 130, '3R'),
+                            tempEntry('Q1  RVPOL', 'Q1', 115, '4L'),
+                            tempEntry('Q5  PRISW', 'Q5', 115, '4R'),
+                            tempEntry('Q100 REC1', 'Q100', 115, '5L'),
+                            tempEntry('Q101 REC2', 'Q101', 115, '5R')
+                        ]
+                    };
+                }
+                const temps = buses?.componentTempsC || {};
+                let hottestKey = 'LF1';
+                let hottestVal = -Infinity;
+                Object.entries(temps).forEach(([k, v]) => {
+                    if (Number.isFinite(v) && v > hottestVal) {
+                        hottestVal = v;
+                        hottestKey = k;
+                    }
+                });
+                const hotTxt = Number.isFinite(hottestVal) ? (hottestKey + ' ' + hottestVal.toFixed(1) + 'C') : '□□';
+                return {
+                    name: 'DDR-120 THRM',
+                    entries: [
+                        tempEntry('C1  INCAP', 'C1', 105, '1L'),
+                        tempEntry('C5  BULK', 'C5', 105, '1R'),
+                        tempEntry('C6  DECP1', 'C6', 105, '2L'),
+                        tempEntry('C7  DECP2', 'C7', 105, '2R'),
+                        tempEntry('C8  DECP3', 'C8', 105, '3L'),
+                        tempEntry('C101 OUT1', 'C101', 105, '3R'),
+                        tempEntry('C102 OUT2', 'C102', 105, '4L'),
+                        ddr120Entry('HOTTEST', hotTxt, '4R', 'amber'),
+                        ddr120Entry('AMB TEMP', (buses?.ambientTempC ?? 5.0).toFixed(1) + 'C', '5L', 'green'),
+                        ddr120Entry('ALTITUDE', Math.round(buses?.altitudeMeters ?? 0) + 'M', '5R', 'white')
+                    ]
+                };
             };
             const kontrolsFolio = () => {
                 let column = 0;
@@ -16392,6 +17261,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 index: indexFolio,
                 kontrols: kontrolsFolio,
                 elec: electricalFolio,
+                'elec-buses': electricalBusesFolio,
+                'elec-ddr-io': ddr120IoFolio,
+                'elec-ddr-prot': ddr120ProtFolio,
+                'elec-ddr-strs': ddr120StressFolio,
+                'elec-ddr-thrm': ddr120ThermFolio,
                 global: globalFolio,
                 'per-song': perSongFolio,
                 'legs-song-search': legsSongSearchFolio,
@@ -16418,7 +17292,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     const last = savedLegSlots.reduce((index, slot, offset) => slot ? offset : index, -1);
                     return folio.kind === 'save-curr' ? Math.floor((last + 1) / 4) + 1 : Math.max(1, Math.floor(last / 4) + 1);
                 }
-                if (folio.kind === 'elec') return 2;
+                if (folio.kind === 'elec-buses' || folio.kind === 'elec-ddr-thrm') return 2;
                 if (folio.kind === 'archive') return 2;
                 return 1;
             };
@@ -16457,9 +17331,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 });
                 entries.set('6L', testRunning || folio.kind === 'index' ? null : currentPage > 1 ?
                     actionEntry('', '<PAGE', { kind: 'page', folio: { ...folio, page: currentPage - 1 } }) : folio.returnTarget ?
-                    actionEntry('', folio.returnLabel || '<RE-TURN', { kind: 'back', folio: folio.returnTarget }) : null);
+                    actionEntry('', folio.returnLabel || '<RE-TURN', { kind: 'back', folio: folio.returnTarget }) : entries.get('6L') || null);
                 if (currentPage < total) {
-                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs', 'elec'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
+                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs', 'elec-buses', 'elec-ddr-thrm'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
                         kind: 'page', folio: { ...folio, page: currentPage + 1 }
                     }));
                 }
@@ -16543,8 +17417,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 renderTerminalNdCamera();
             };
             window.setInterval(() => {
-                if (folio.kind === 'elec' && !testRunning) renderFolio();
-            }, 1000);
+                if (folio.kind.startsWith('elec') && !testRunning) renderFolio();
+            }, 250);
             const resetTerminalInterface = () => {
                 terminalInterfaceGeneration++;
                 folio = { kind: 'index', page: 1 };
