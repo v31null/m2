@@ -1,9 +1,10 @@
 <?php
 
 declare(strict_types=1);
+// delete not — « Neque porro quisquam est qui dolorem ipsum, quia dolor sit, amet, consectetur, adipisci velit, sed quia nonnumquam eiusmodi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. » , quam felix est qui hunc finem assequitur , ut agendo florea — quod enim placet , placet , ah ; karnifex, velut purgator, mundabit, damnatio aeterna, amor est , non ira , mater enim omnes filios suos diligit =
 
 const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '146';
+const M2_PAGE_CODE_VERSION = '154';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -11155,14 +11156,18 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     profile2: Object.freeze({ baseLoadRatio: 0.40, recoverySec: 10.0, peakRatio: 1.50, peakSec: 3.0, dutyPct: 23.077, avgPowerW: 65.63, rmsCurrent24VA: 3.367 })
                 }),
                 upstreamPcieHarness: Object.freeze({
-                    psuModel: 'Seasonic FOCUS GX-1000 ATX 3.1 (V4)',
-                    nominalRailV: 12.00,
+                    psuModel: 'Seasonic FOCUS GX-1000 (ATX 3.1)',
+                    regulatoryCode: 'SRP-FGX102-A5A51SF',
+                    cybeneticsReportId: '3022',
+                    labId: 'SS10003022',
+                    nominalRailV: 12.094,
                     railMaxCurrentA: 83.0,
                     cableLengthMeters: 0.75,
                     positiveConductorsAwg16: 3,
                     returnConductorsAwg16: 5,
                     awg16OhmsPerMeter20C: 0.01318,
                     copperTempCoeffPerC: 0.00393,
+                    modularConnectorResistanceOhms: 0.0018,
                     inputFuses: '2x Conquer MST 10A 250V Time-Lag',
                     fuseAndQ1ResistanceOhms: 0.0077
                 }),
@@ -11216,6 +11221,73 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     Object.freeze({ id: 'C102', role: 'OUT FILTER CAP 2', dTRoomK: 45.2, dTHighK: 38.6, tauSec: 120 })
                 ])
             });
+            // delete not — Parameters match the physical Seasonic FOCUS GX-1000 (ATX 3.1) power supply unit used in this circuit. 
+            // delete not — Important notifikation to þe koder( s ) :‍— þe Internal komponents are NOT simulaten , Official approx.tions are usen in stead of an Realistik‑simulation of þe Supplie‑unit — proceed wiþ kaution , More‑over ; I am NOT simulating þe Power‑grid of þe citie from þe Out‑let — keeping 230V50HZ as an Stiff‑Wall‑socket is þe Onely þing standing be‑two‑on : ⸄ Me & writing an Entire‑Regional‑Power‑grid‑simulator ⸅ for to light an 28V DIN‑Rail‑brick up , do NOT use þis as an Akkurate approx.tion for Munipicial Elektrikal services :‍— It is an abstraction , not truþful. Do not change þis.
+
+
+            const SEASONIC_GX1000_SPEC = Object.freeze({
+                model: 'Seasonic FOCUS GX-1000 (ATX 3.1)',
+                regulatoryCode: 'SRP-FGX102-A5A51SF',
+                cybeneticsReportId: '3022',
+                labId: 'SS10003022',
+                serialNumber: 'A544940004',
+                pcbDateCode: '2025.05.07',
+                platform: 'Seasonic OptiSink',
+                dimensionsMm: Object.freeze([150.0, 140.0, 86.0]),
+                weightGrams: 1648,
+                ratedPowerW: 1000.0,
+                rail12vRatedCurrentA: 83.0,
+                rail12vRatedPowerW: 996.0,
+                minorRailsStandbyBiasW: 1.45,
+                nominalMainsV: 230.0,
+                mainsRangeV: Object.freeze([90.0, 264.0]),
+                vampirePowerW115V: 0.068,
+                vampirePowerW230V: 0.088,
+                pfcController: 'Champion CM6500UNX',
+                llcController: 'Champion CM6901T6X',
+                supervisorIc: 'Weltrend WT7527RA',
+                fanModel: 'Hong Hua HA13525H12SF-Z (135mm FDB)',
+                primaryBulkCapUf: 820.0,
+                primaryBulkCapRatedV: 420.0,
+                pfcBulkVoltageLightV: 357.0,
+                pfcBulkVoltageFullV: 382.0,
+                pfcBulkLightToFullKneeW: 200.5,
+                powerOnTimeT1Ms: 62.0,
+                riseTimeT2Ms: 12.2,
+                pwrOkDelayT3Ms: 189.2,
+                acLossToPwrOkT5Ms: 17.6,
+                pwrOkToDcLossT6Ms: 1.6,
+                holdupFullLoadMs: 19.2,
+                inrush115VacA: 43.6,
+                inrush230VacA: 87.3,
+                ocp12vNormalA: 117.0,
+                ocp12vHotA: 118.0,
+                oppNormalW: 1389.0,
+                oppHotW: 1388.4,
+                otpHeatsinkC: 117.0,
+                semiPassiveFanThresholdW: 555.0,
+                transientDynamicImpedanceOhms: 0.0024,
+                regulationCurveI12vA: Object.freeze([0.00, 1.49, 3.00, 4.49, 5.99, 7.11, 14.57, 22.05, 29.55, 37.06, 44.59, 52.12, 59.68, 67.19, 74.47, 82.06]),
+                regulationCurveV12v: Object.freeze([12.095, 12.094, 12.094, 12.092, 12.090, 12.090, 12.083, 12.075, 12.067, 12.059, 12.051, 12.041, 12.033, 12.025, 12.016, 12.008]),
+                perfLoadsW: Object.freeze([20.2, 40.3, 60.5, 80.6, 100.2, 200.5, 300.6, 400.7, 500.7, 600.7, 700.4, 800.4, 899.5, 995.7, 1095.6]),
+                eff115VacPct: Object.freeze([74.66, 82.34, 85.94, 88.35, 88.62, 91.47, 92.04, 91.85, 91.32, 90.52, 89.70, 88.78, 87.77, 86.79, 85.46]),
+                eff230VacPct: Object.freeze([74.20, 82.34, 86.62, 89.03, 89.47, 92.69, 93.49, 93.62, 93.36, 92.82, 92.27, 91.68, 91.02, 90.35, 89.63]),
+                pf115Vac: Object.freeze([0.625, 0.800, 0.862, 0.896, 0.931, 0.973, 0.985, 0.989, 0.991, 0.992, 0.992, 0.993, 0.994, 0.994, 0.995]),
+                pf230Vac: Object.freeze([0.382, 0.579, 0.706, 0.768, 0.822, 0.920, 0.954, 0.967, 0.974, 0.978, 0.980, 0.982, 0.985, 0.986, 0.987]),
+                deltaTExhaustK: Object.freeze([3.5, 4.1, 4.4, 4.8, 5.2, 5.7, 6.2, 6.8, 7.2, 7.9, 8.4, 8.9, 9.5, 10.1, 10.7]),
+                rippleLoadsW: Object.freeze([43.0, 100.2, 126.1, 200.5, 300.6, 400.7, 500.7, 600.7, 700.4, 800.4, 899.5, 995.7, 1095.6]),
+                ripple115VacMvPp: Object.freeze([9.2, 11.2, 11.4, 14.5, 16.2, 17.5, 19.6, 20.3, 21.7, 23.5, 25.1, 26.9, 29.4]),
+                ripple230VacMvPp: Object.freeze([9.1, 10.1, 10.9, 13.4, 16.2, 17.5, 18.6, 19.6, 20.9, 22.9, 24.8, 25.4, 27.6]),
+                rail5vNominalV: 5.02,
+                rail3v3NominalV: 3.32,
+                rail5vsbNominalV: 5.02,
+                thermocoupleNodes: Object.freeze([
+                    Object.freeze({ id: 'OPTISINK', tauSec: 95 }),
+                    Object.freeze({ id: 'APFC', tauSec: 110 }),
+                    Object.freeze({ id: 'VEE22', tauSec: 180 }),
+                    Object.freeze({ id: 'KHE', tauSec: 140 })
+                ])
+            });
             const DDR120A24_LOAD_REGULATION_OHMS = (DDR120A24_SPEC.commissionedVoltage * (DDR120A24_SPEC.loadRegulationMeasuredPct / 100)) / 3.60;
             const DDR120A24_OVERLOAD_ONSET_FACTOR = DDR120A24_SPEC.olpOnsetFactor;
             const DDR120A24_CC_LIMIT_FACTOR = DDR120A24_SPEC.olpMeasuredFactor12V;
@@ -11237,6 +11309,166 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
                 }
                 return ys[last];
+            }
+
+            function evaluateSeasonicGx1000State(i12vLoadA, mainsV = 230.0, ambientTempC = 5.0, isTransientSpike = false, prevTemps = null) {
+                const spec = SEASONIC_GX1000_SPEC;
+                const clampedMainsV = Math.max(0, Number.isFinite(mainsV) ? mainsV : spec.nominalMainsV);
+                const mainsFreqHz = clampedMainsV <= 135.0 ? 60.0 : 50.0;
+                if (clampedMainsV < 80.0) {
+                    return {
+                        model: spec.model,
+                        regulatoryCode: spec.regulatoryCode,
+                        labId: spec.labId,
+                        mainsVoltageV: clampedMainsV,
+                        mainsFreqHz,
+                        pfcBulkVoltageV: 0,
+                        pfcGreenMode: false,
+                        outputVoltageV: 0,
+                        outputCurrentA: 0,
+                        loadCurrentA: 0,
+                        loadPct: 0,
+                        dcPowerW: 0,
+                        acInputPowerW: 0,
+                        acInputCurrentA: 0,
+                        powerLossW: 0,
+                        efficiencyPct: 0,
+                        powerFactor: 0,
+                        rippleMvPp: 0,
+                        ripple5vMvPp: 0,
+                        kheStressPct: 0,
+                        rail5vV: 0,
+                        rail3v3V: 0,
+                        rail5vsbV: 0,
+                        holdupMs: 0,
+                        pwrOk: false,
+                        fanRpm: 0,
+                        noiseDba: 0,
+                        heatsinkTempC: prevTemps?.OPTISINK ?? ambientTempC,
+                        pfcTempC: prevTemps?.APFC ?? ambientTempC,
+                        vee22TempC: prevTemps?.VEE22 ?? ambientTempC,
+                        kheTempC: prevTemps?.KHE ?? ambientTempC,
+                        targetSinkC: ambientTempC,
+                        targetPfcC: ambientTempC,
+                        targetVee22C: ambientTempC,
+                        targetKheC: ambientTempC,
+                        exhaustDeltaC: 0,
+                        ocpLimitA: spec.ocp12vNormalA,
+                        tripped: true,
+                        mode: 'AC_UVP'
+                    };
+                }
+                const lineBlend = Math.max(0, Math.min(1, (clampedMainsV - 115.0) / (230.0 - 115.0)));
+                const i12v = Math.max(0, Number(i12vLoadA) || 0);
+                const iFactor = i12v / spec.rail12vRatedCurrentA;
+                const hotBlend = Math.max(0, Math.min(1, (ambientTempC - 25.0) / 20.0));
+                const ocpLimitA = spec.ocp12vNormalA + hotBlend * (spec.ocp12vHotA - spec.ocp12vNormalA);
+                const oppLimitW = spec.oppNormalW + hotBlend * (spec.oppHotW - spec.oppNormalW);
+                const vSteady = interpolateDdr120Piecewise(spec.regulationCurveI12vA, spec.regulationCurveV12v, i12v);
+                const transientDipV = isTransientSpike ? Math.min(0.54, i12v * spec.transientDynamicImpedanceOhms) : 0;
+                let vOut = Math.max(0, vSteady - transientDipV);
+                let dcPowerW = vOut * i12v + (vOut > 1.0 ? spec.minorRailsStandbyBiasW : 0);
+                const tripped = i12v > ocpLimitA || dcPowerW > oppLimitW;
+                if (tripped) {
+                    vOut = 0;
+                    dcPowerW = 0;
+                }
+                const loadPct = (dcPowerW / spec.ratedPowerW) * 100;
+
+                const eff115 = interpolateDdr120Piecewise(spec.perfLoadsW, spec.eff115VacPct, Math.max(20.2, dcPowerW));
+                const eff230 = interpolateDdr120Piecewise(spec.perfLoadsW, spec.eff230VacPct, Math.max(20.2, dcPowerW));
+                const effTablePct = eff115 + lineBlend * (eff230 - eff115);
+                const vampireW = spec.vampirePowerW115V + lineBlend * (spec.vampirePowerW230V - spec.vampirePowerW115V);
+                const lossAt20W = 20.2 * ((100 / effTablePct) - 1);
+                const powerLossW = tripped
+                    ? vampireW
+                    : (dcPowerW >= 20.2
+                        ? dcPowerW * ((100 / effTablePct) - 1)
+                        : (vampireW + 0.52 + (dcPowerW / 20.2) * Math.max(0, lossAt20W - vampireW - 0.52)));
+                const acInputPowerW = tripped ? vampireW : (dcPowerW + powerLossW);
+                const efficiencyPct = (!tripped && acInputPowerW > 0.05) ? (dcPowerW / acInputPowerW) * 100 : 0;
+
+                const pf115 = interpolateDdr120Piecewise(spec.perfLoadsW, spec.pf115Vac, Math.max(20.2, dcPowerW));
+                const pf230 = interpolateDdr120Piecewise(spec.perfLoadsW, spec.pf230Vac, Math.max(20.2, dcPowerW));
+                const powerFactor = tripped ? 0.006 : (pf115 + lineBlend * (pf230 - pf115));
+                const acInputCurrentA = (!tripped && clampedMainsV > 10 && powerFactor > 0.05)
+                    ? (acInputPowerW / (clampedMainsV * powerFactor))
+                    : 0;
+
+                const pfcBlend = Math.max(0, Math.min(1, (dcPowerW - 80.6) / (spec.pfcBulkLightToFullKneeW - 80.6)));
+                const pfcBulkVoltageV = tripped ? 0 : (spec.pfcBulkVoltageLightV + pfcBlend * (spec.pfcBulkVoltageFullV - spec.pfcBulkVoltageLightV));
+                const pfcGreenMode = !tripped && pfcBulkVoltageV < 370.0;
+                const kheStressPct = (pfcBulkVoltageV / spec.primaryBulkCapRatedV) * 100;
+
+                const rip115 = interpolateDdr120Piecewise(spec.rippleLoadsW, spec.ripple115VacMvPp, Math.max(15, dcPowerW));
+                const rip230 = interpolateDdr120Piecewise(spec.rippleLoadsW, spec.ripple230VacMvPp, Math.max(15, dcPowerW));
+                const rippleMvPp = tripped ? 0 : (rip115 + lineBlend * (rip230 - rip115)) * (dcPowerW < 43.0 ? (0.72 + 0.28 * (dcPowerW / 43.0)) : 1.0);
+                const ripple5vMvPp = (!tripped && vOut > 1.0) ? (7.2 + loadPct * 0.14) : 0;
+
+                const rail5vV = (!tripped && vOut > 1.0) ? (spec.rail5vNominalV - 0.012 * iFactor) : 0;
+                const rail3v3V = (!tripped && vOut > 1.0) ? (spec.rail3v3NominalV - 0.008 * iFactor) : 0;
+                const rail5vsbV = spec.rail5vsbNominalV;
+
+                const fullLoadAcW = 995.7 / (90.35 / 100);
+                const bulkEnergyScale = Math.pow(pfcBulkVoltageV / spec.pfcBulkVoltageFullV, 2);
+                const holdupMs = tripped ? 0 : Math.min(260.0, spec.holdupFullLoadMs * bulkEnergyScale * (fullLoadAcW / Math.max(18.0, acInputPowerW)));
+
+                const dTExhaust = interpolateDdr120Piecewise(spec.perfLoadsW, spec.deltaTExhaustK, Math.max(20.2, dcPowerW));
+                const targetSinkC = ambientTempC + 3.5 + dTExhaust * 2.25;
+                const targetPfcC = targetSinkC + 1.4 + iFactor * 14.0;
+                const targetVee22C = targetSinkC + 2.1 + iFactor * 16.2;
+                const targetKheC = Math.max(ambientTempC + 1.5, targetSinkC - 3.6 + iFactor * 5.0);
+
+                const heatsinkTempC = Number.isFinite(prevTemps?.OPTISINK) ? prevTemps.OPTISINK : targetSinkC;
+                const pfcTempC = Number.isFinite(prevTemps?.APFC) ? prevTemps.APFC : targetPfcC;
+                const vee22TempC = Number.isFinite(prevTemps?.VEE22) ? prevTemps.VEE22 : targetVee22C;
+                const kheTempC = Number.isFinite(prevTemps?.KHE) ? prevTemps.KHE : targetKheC;
+
+                const fanActive = dcPowerW > spec.semiPassiveFanThresholdW || heatsinkTempC > 52.0;
+                const fanRpm = !fanActive ? 0 : Math.round(640 + Math.min(1, Math.max(0, (dcPowerW - 555.0) / 540.0)) * (1766 - 640));
+                const noiseDba = !fanActive ? 5.5 : (15.1 + Math.min(1, Math.max(0, (dcPowerW - 555.0) / 540.0)) * (38.2 - 15.1));
+
+                return {
+                    model: spec.model,
+                    regulatoryCode: spec.regulatoryCode,
+                    labId: spec.labId,
+                    mainsVoltageV: clampedMainsV,
+                    mainsFreqHz,
+                    pfcBulkVoltageV,
+                    pfcGreenMode,
+                    outputVoltageV: vOut,
+                    outputCurrentA: i12v,
+                    loadCurrentA: i12v,
+                    loadPct,
+                    dcPowerW,
+                    acInputPowerW,
+                    acInputCurrentA,
+                    powerLossW,
+                    efficiencyPct,
+                    powerFactor,
+                    rippleMvPp,
+                    ripple5vMvPp,
+                    kheStressPct,
+                    rail5vV,
+                    rail3v3V,
+                    rail5vsbV,
+                    holdupMs,
+                    pwrOk: !tripped && vOut >= 11.20,
+                    fanRpm,
+                    noiseDba,
+                    heatsinkTempC,
+                    pfcTempC,
+                    vee22TempC,
+                    kheTempC,
+                    targetSinkC,
+                    targetPfcC,
+                    targetVee22C,
+                    targetKheC,
+                    exhaustDeltaC: dTExhaust,
+                    ocpLimitA,
+                    tripped,
+                    mode: tripped ? 'WT7527_OCP' : (pfcBlend < 0.5 ? 'GREEN_PFC_357V' : 'FULL_PFC_382V')
+                };
             }
 
             function evaluateDdr120Efficiency(loadPct, vin) {
@@ -11273,6 +11505,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.name = name;
                     this.model = DDR120A24_SPEC.model;
                     this.spec = DDR120A24_SPEC;
+                    this.upstreamPsuSpec = SEASONIC_GX1000_SPEC;
                     this.trimVoltage = Math.max(
                         DDR120A24_SPEC.trimRangeMeasured[0],
                         Math.min(DDR120A24_SPEC.trimRangeMeasured[1], nominalVoltage)
@@ -11280,7 +11513,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.ambientTempC = DDR120A24_SPEC.referenceAmbientC;
                     this.altitudeMeters = 0;
                     this.effectiveAmbientC = this.ambientTempC;
-                    this.upstreamSupplyVoltage = DDR120A24_SPEC.upstreamPcieHarness.nominalRailV;
+                    this.upstreamMainsVoltageV = SEASONIC_GX1000_SPEC.nominalMainsV;
+                    this.upstreamManualVoltageOverride = null;
+                    this.psuTempsC = {
+                        OPTISINK: this.ambientTempC + 10.5,
+                        APFC: this.ambientTempC + 11.8,
+                        VEE22: this.ambientTempC + 12.4,
+                        KHE: this.ambientTempC + 7.2
+                    };
+                    this.upstreamPsu = evaluateSeasonicGx1000State(0.08, this.upstreamMainsVoltageV, this.ambientTempC, false, this.psuTempsC);
+                    this.upstreamSupplyVoltage = this.upstreamPsu.outputVoltageV;
                     this.inputTerminalVoltage = this.upstreamSupplyVoltage;
                     this.inputCurrent = 0;
                     this.inputPowerW = 0;
@@ -11341,7 +11583,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     );
                     this.voltageStress = Object.fromEntries(
                         DDR120A24_SPEC.voltageStressNodes.map(node => {
-                            const initV = node.dcOnOffV * (this.inputTerminalVoltage / 21.0);
+                            const initV = node.contV * (this.inputTerminalVoltage / DDR120A24_SPEC.inputNominalV);
                             const pct = (initV / node.limitV) * 100;
                             return [node.id, {
                                 role: node.role,
@@ -11406,7 +11648,25 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         const alpha = dt > 0 ? (1 - Math.exp(-dt / node.tauSec)) : 0;
                         this.componentTempsC[node.id] = prevTemp + (targetTemp - prevTemp) * alpha;
                     });
-                    const vinScale = Math.max(0, Math.min(1.15, this.inputTerminalVoltage / 21.0));
+                    if (this.upstreamPsu && this.psuTempsC) {
+                        const psuTargets = {
+                            OPTISINK: this.upstreamPsu.targetSinkC ?? ta,
+                            APFC: this.upstreamPsu.targetPfcC ?? ta,
+                            VEE22: this.upstreamPsu.targetVee22C ?? ta,
+                            KHE: this.upstreamPsu.targetKheC ?? ta
+                        };
+                        SEASONIC_GX1000_SPEC.thermocoupleNodes.forEach(node => {
+                            const prevT = Number.isFinite(this.psuTempsC[node.id]) ? this.psuTempsC[node.id] : ta;
+                            const alpha = dt > 0 ? (1 - Math.exp(-dt / node.tauSec)) : 0;
+                            this.psuTempsC[node.id] = prevT + (psuTargets[node.id] - prevT) * alpha;
+                        });
+                        this.upstreamPsu.heatsinkTempC = this.psuTempsC.OPTISINK;
+                        this.upstreamPsu.pfcTempC = this.psuTempsC.APFC;
+                        this.upstreamPsu.vee22TempC = this.psuTempsC.VEE22;
+                        this.upstreamPsu.kheTempC = this.psuTempsC.KHE;
+                    }
+                    const vinRatio = Math.max(0, Math.min(1.5, this.inputTerminalVoltage / DDR120A24_SPEC.inputNominalV));
+                    const voutRatio = Math.max(0, Math.min(1.3, this.outputVoltage / Math.max(1.0, this.trimVoltage)));
                     const isStartup = this.startupPhase !== 'REGULATED';
                     const isOlpOvp = this.limiting || this.tripped || this.mode === 'CC' || this.mode === 'PEAK';
                     const isMinShort = this.current < 0.15 || (this.limiting && this.outputVoltage < 6.0);
@@ -11415,9 +11675,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         if (isStartup) refV = node.dcOnOffV;
                         else if (isOlpOvp) refV = node.olpOvpV;
                         else if (isMinShort) refV = node.shortMinV;
-                        const actualV = node.id === 'U1'
-                            ? (this.inputTerminalVoltage >= 8.5 ? refV : 0)
-                            : (node.id === 'C5' ? Math.max(0, this.inputTerminalVoltage * (refV / 21.0)) : refV * (0.72 + 0.28 * vinScale));
+                        let actualV = 0;
+                        if (node.id === 'U1') {
+                            actualV = this.inputTerminalVoltage >= 8.5 ? refV : 0;
+                        } else if (node.id === 'C5') {
+                            actualV = Math.max(0, refV * vinRatio);
+                        } else if (node.id === 'Q100' || node.id === 'Q101') {
+                            actualV = this.outputVoltage > 0.5 ? refV * (0.15 + 0.85 * voutRatio) : 0;
+                        } else {
+                            actualV = this.inputTerminalVoltage > 0.5 ? refV * (0.65 + 0.35 * vinRatio) : 0;
+                        }
                         const pct = (actualV / node.limitV) * 100;
                         this.voltageStress[node.id] = {
                             role: node.role,
@@ -12329,6 +12596,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         (1 + harness.copperTempCoeffPerC * (this.source.ambientTempC - 20.0));
                     const harnessResistanceOhms = harness.cableLengthMeters * wireRPerM *
                         ((1 / harness.positiveConductorsAwg16) + (1 / harness.returnConductorsAwg16)) +
+                        (harness.modularConnectorResistanceOhms || 0) +
                         harness.fuseAndQ1ResistanceOhms;
 
                     const tempDriftFactor = 1 + (DDR120A24_SPEC.tempCoeffMeasuredPctPerC / 100) *
@@ -12346,7 +12614,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 throw new Error(this.name + ' failed to reach an electrical steady state');
                             }
 
-                            const vPsu = this.source.upstreamSupplyVoltage;
+                            const vPsu = this.source.upstreamManualVoltageOverride !== null
+                                ? this.source.upstreamManualVoltageOverride
+                                : this.source.upstreamSupplyVoltage;
                             if (vPsu < 0) {
                                 this.source.reversePolarity = true;
                                 this.source.uvloActive = true;
@@ -12657,6 +12927,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             let pLoss = 0;
                             let pIn = 0;
                             let iIn = 0;
+                            const isPowerStartSpike = this.source.startupPhase === 'POWER_START';
                             for (let iter = 0; iter < 3; iter++) {
                                 eff = evaluateDdr120Efficiency(Math.max(10, loadPct), vIn);
                                 const lossAt10Pct = (DDR120A24_SPEC.ratedPowerW * 0.10) * ((1 / evaluateDdr120Efficiency(10, vIn)) - 1);
@@ -12671,6 +12942,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 iIn = startupForcedIin !== null
                                     ? startupForcedIin
                                     : (vIn > 1.0 ? pIn / vIn : 0);
+                                const psuState = evaluateSeasonicGx1000State(
+                                    iIn,
+                                    this.source.upstreamMainsVoltageV,
+                                    this.source.ambientTempC,
+                                    isPowerStartSpike,
+                                    this.source.psuTempsC
+                                );
+                                this.source.upstreamPsu = psuState;
+                                this.source.upstreamSupplyVoltage = this.source.upstreamManualVoltageOverride !== null
+                                    ? this.source.upstreamManualVoltageOverride
+                                    : psuState.outputVoltageV;
                                 vIn = Math.max(0, this.source.upstreamSupplyVoltage - iIn * harnessResistanceOhms);
                             }
 
@@ -14699,10 +14981,22 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             return circuit.source.altitudeMeters;
                         },
                         setUpstreamSupplyVoltage: value => {
+                            if (value === null || value === undefined || value === 'auto') {
+                                circuit.source.upstreamManualVoltageOverride = null;
+                                circuit.solve();
+                                return circuit.source.upstreamSupplyVoltage;
+                            }
                             if (!Number.isFinite(Number(value))) return false;
-                            circuit.source.upstreamSupplyVoltage = Math.max(0, Math.min(20, Number(value)));
+                            circuit.source.upstreamManualVoltageOverride = Math.max(-20, Math.min(24, Number(value)));
+                            circuit.source.upstreamSupplyVoltage = circuit.source.upstreamManualVoltageOverride;
                             circuit.solve();
                             return circuit.source.upstreamSupplyVoltage;
+                        },
+                        setUpstreamMainsVoltage: value => {
+                            if (!Number.isFinite(Number(value))) return false;
+                            circuit.source.upstreamMainsVoltageV = Math.max(0, Math.min(264, Number(value)));
+                            circuit.solve();
+                            return circuit.source.upstreamMainsVoltageV;
                         },
                         setTrimVoltage: value => {
                             if (!Number.isFinite(Number(value))) return false;
@@ -14751,6 +15045,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 tripped: source.tripped,
                                 tripReason: source.tripReason,
                                 upstreamSupplyVoltage: source.upstreamSupplyVoltage,
+                                upstreamMainsVoltageV: source.upstreamMainsVoltageV,
+                                upstreamPsu: source.upstreamPsu ? { ...source.upstreamPsu } : null,
                                 inputTerminalVoltage: source.inputTerminalVoltage,
                                 inputCurrent: source.inputCurrent,
                                 inputPowerW: source.inputPowerW,
@@ -17237,14 +17533,33 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 positionTerminalNdDirections();
             };
 
+            let terminalNdMonitorTarget = 'ddr';
+            const setTerminalNdMonitorTarget = target => {
+                terminalNdMonitorTarget = ['ddr', 'gx', 'both'].includes(target) ? target : 'ddr';
+                if (terminalNdViewMode === 'nav') {
+                    setTerminalNdViewMode('ddr');
+                } else {
+                    renderTerminalNdDdr();
+                }
+            };
+            const cycleTerminalNdMonitorTarget = () => {
+                const order = ['ddr', 'gx', 'both'];
+                const next = order[(order.indexOf(terminalNdMonitorTarget) + 1) % order.length];
+                setTerminalNdMonitorTarget(next);
+            };
+
             const readTerminalNdDdrTelemetry = () => {
                 const elec = window.m2Electrical || {};
                 const buses = elec.buses || {};
+                const psu = buses.upstreamPsu || {};
                 const vs = buses.voltageStress || {};
                 const temps = buses.componentTempsC || {};
+                const vPsu = Number.isFinite(buses.upstreamSupplyVoltage)
+                    ? buses.upstreamSupplyVoltage
+                    : (Number.isFinite(psu.outputVoltageV) ? psu.outputVoltageV : 12.094);
                 const vIn = Number.isFinite(buses.inputTerminalVoltage)
                     ? buses.inputTerminalVoltage
-                    : (Number.isFinite(buses.upstreamSupplyVoltage) ? buses.upstreamSupplyVoltage : 0);
+                    : vPsu;
                 const vOut = Number.isFinite(buses.sourceVoltage)
                     ? buses.sourceVoltage
                     : (Number(buses.distribution?.voltage) || Number(buses.page?.voltage) || 0);
@@ -17258,17 +17573,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const loadPct = Number.isFinite(buses.loadPct)
                     ? Math.min(160, Math.max(0, buses.loadPct))
                     : Math.min(160, Math.max(0, (iOut / Math.max(0.5, Number(buses.effectiveRatedCurrent) || 3.6)) * 100));
-                const ambientC = Number.isFinite(buses.ambientTempC) ? buses.ambientTempC : 25;
+                const ambientC = Number.isFinite(buses.ambientTempC) ? buses.ambientTempC : 5.0;
                 const priTempC = Math.max(Number(temps.Q5) || ambientC, Number(temps.LF1) || ambientC, ambientC);
                 const secTempC = Math.max(Number(temps.Q100) || ambientC, Number(temps.T2) || ambientC, ambientC);
                 const t2TempC = Number(temps.T2) || ambientC;
                 const lf1TempC = Number(temps.LF1) || ambientC;
-                const q5Pct = Number.isFinite(vs.Q5?.stressPct) ? vs.Q5.stressPct : (vIn > 0.5 ? Math.min(100, (vIn * 2.15 / 60) * 100) : 0);
-                const q100Pct = Number.isFinite(vs.Q100?.stressPct) ? vs.Q100.stressPct : (vOut > 0.5 ? Math.min(100, (vOut * 3.1 / 200) * 100) : 0);
-                const q6V = Number.isFinite(vs.Q6?.voltage) ? vs.Q6.voltage : (vIn > 0.5 ? vIn * 4.15 : 0);
-                const q101V = Number.isFinite(vs.Q101?.voltage) ? vs.Q101.voltage : (vOut > 0.5 ? vOut * 3.18 : 0);
-                const c5Pct = Number.isFinite(vs.C5?.stressPct) ? vs.C5.stressPct : (vOut > 0.5 ? Math.min(100, (vOut / 35) * 100) : 0);
-                const u1Pct = Number.isFinite(vs.U1?.stressPct) ? vs.U1.stressPct : (vIn > 0.5 ? Math.min(100, ((11.4 + vIn * 0.12) / 30) * 100) : 0);
+                const q5Pct = Number.isFinite(vs.Q5?.stressPct) ? vs.Q5.stressPct : (vIn > 0.5 ? Math.min(100, (46.5 * (vIn / 12.0) / 60) * 100) : 0);
+                const q100Pct = Number.isFinite(vs.Q100?.stressPct) ? vs.Q100.stressPct : (vOut > 0.5 ? Math.min(100, (50.5 * (vOut / 28.0) / 200) * 100) : 0);
+                const q6V = Number.isFinite(vs.Q6?.voltage) ? vs.Q6.voltage : (vIn > 0.5 ? 28.9 * (vIn / 12.0) : 0);
+                const q101V = Number.isFinite(vs.Q101?.voltage) ? vs.Q101.voltage : (vOut > 0.5 ? 118.0 * (vOut / 28.0) : 0);
+                const c5Pct = Number.isFinite(vs.C5?.stressPct) ? vs.C5.stressPct : (vIn > 0.5 ? Math.min(100, (20.8 * (vIn / 12.0) / 35) * 100) : 0);
+                const u1Pct = Number.isFinite(vs.U1?.stressPct) ? vs.U1.stressPct : (vIn > 0.5 ? 90.0 : 0);
                 const rippleLf = Number.isFinite(buses.rippleLfMvPp) ? buses.rippleLfMvPp : (vOut > 1 ? 12 + iOut * 4.5 : 0);
                 const rippleHf = Number.isFinite(buses.rippleHfMvPp) ? buses.rippleHfMvPp : (vOut > 1 ? 26 + iOut * 9.2 : 0);
                 const holdupMs = Number.isFinite(buses.holdupRemainingMs)
@@ -17279,8 +17594,47 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const secPowered = vOut > 0.8;
                 const iInTag = startupPhase.includes('INRUSH') ? 'INRUSH' : startupPhase.includes('RISE') ? 'RISE' : startupPhase.includes('OVERSHOOT') ? 'OVRSHT' : startupPhase.includes('HOLDUP') ? 'HOLDUP' : '';
                 const iOutTag = buses.limiting || buses.mode === 'CC' ? 'CC LIM' : buses.mode === 'PEAK' || (Number(buses.peakEnergySec) || 0) > 0.05 ? 'PEAK' : startupPhase.includes('OVERSHOOT') ? 'OVRSHT' : '';
+                const gxMainsV = Number.isFinite(psu.mainsVoltageV) ? psu.mainsVoltageV : 230.0;
+                const gxMainsHz = Number.isFinite(psu.mainsFreqHz) ? psu.mainsFreqHz : 50.0;
+                const gxPfcV = Number.isFinite(psu.pfcBulkVoltageV) ? psu.pfcBulkVoltageV : 357.0;
+                const gxPfcGreen = psu.pfcGreenMode !== false && gxPfcV < 370;
+                const gxV12 = Number.isFinite(psu.outputVoltageV) ? psu.outputVoltageV : vPsu;
+                const gxI12 = Number.isFinite(psu.loadCurrentA) ? psu.loadCurrentA : iIn;
+                const gxPdc = Number.isFinite(psu.dcPowerW) ? psu.dcPowerW : (gxV12 * gxI12 + 1.45);
+                const gxPac = Number.isFinite(psu.acInputPowerW) ? psu.acInputPowerW : (gxPdc + 4.8);
+                const gxLossW = Number.isFinite(psu.powerLossW) ? psu.powerLossW : Math.max(0, gxPac - gxPdc);
+                const gxEffPct = Number.isFinite(psu.efficiencyPct) ? psu.efficiencyPct : (gxPac > 0.1 ? (gxPdc / gxPac) * 100 : 0);
+                const gxPf = Number.isFinite(psu.powerFactor) ? psu.powerFactor : 0.62;
+                const gxIac = Number.isFinite(psu.acInputCurrentA)
+                    ? psu.acInputCurrentA
+                    : (gxMainsV > 10 && gxPf > 0.05 ? gxPac / (gxMainsV * gxPf) : 0);
+                const gxLoadPct = Number.isFinite(psu.loadPct) ? psu.loadPct : ((gxI12 / 83.0) * 100);
+                const gxRippleMv = Number.isFinite(psu.rippleMvPp) ? psu.rippleMvPp : 8.2;
+                const gxRipple5vMv = Number.isFinite(psu.ripple5vMvPp) ? psu.ripple5vMvPp : 8.4;
+                const gxHoldupMs = Number.isFinite(psu.holdupMs) ? psu.holdupMs : 19.6;
+                const gxSinkC = Number.isFinite(psu.heatsinkTempC) ? psu.heatsinkTempC : (ambientC + 2.4);
+                const gxPfcTempC = Number.isFinite(psu.pfcTempC) ? psu.pfcTempC : (ambientC + 3.8);
+                const gxVee22TempC = Number.isFinite(psu.vee22TempC) ? psu.vee22TempC : (ambientC + 4.5);
+                const gxKheTempC = Number.isFinite(psu.kheTempC) ? psu.kheTempC : (ambientC + 1.5);
+                const gxKheStressPct = Number.isFinite(psu.kheStressPct) ? psu.kheStressPct : 85.0;
+                const gxRail5v = Number.isFinite(psu.rail5vV) ? psu.rail5vV : 0;
+                const gxRail3v3 = Number.isFinite(psu.rail3v3V) ? psu.rail3v3V : 0;
+                const gxRail5vsb = Number.isFinite(psu.rail5vsbV) ? psu.rail5vsbV : 0;
+                const gxExhDtC = Number.isFinite(psu.exhaustDeltaC) ? psu.exhaustDeltaC : 1.5;
+                const gxFanRpm = Number.isFinite(psu.fanRpm) ? psu.fanRpm : 0;
+                const gxNoiseDba = Number.isFinite(psu.noiseDba) ? psu.noiseDba : 0;
+                const gxOcpA = Number.isFinite(psu.ocpLimitA) ? psu.ocpLimitA : 117.1;
+                const gxPwrOk = psu.pwrOk !== false && gxV12 >= 10.4;
+                const gxTripped = !!psu.tripped;
+                const gxMode = String(psu.mode || 'HYBRID 0-RPM');
+                const harnDropMv = (Number(buses.harnessDropV) || Math.max(0, gxV12 - vIn)) * 1000;
+                const harnLossW = Math.max(0, (gxV12 - vIn) * iIn);
+                const pinPosA = Number.isFinite(buses.perPinPositiveCurrentA) ? buses.perPinPositiveCurrentA : (iIn / 3);
+                const pinRetA = Number.isFinite(buses.perPinReturnCurrentA) ? buses.perPinReturnCurrentA : (iIn / 3);
+                const sysEffPct = gxPac > 0.5 && pOut > 0.1 ? Math.min(99.9, (pOut / gxPac) * 100) : (gxEffPct * effPct / 100);
+                const sysLossW = gxLossW + harnLossW + lossW;
                 return {
-                    vIn, vOut, vAux, iIn, iOut, pIn, pOut, lossW, effPct, loadPct,
+                    vPsu, vIn, vOut, vAux, iIn, iOut, pIn, pOut, lossW, effPct, loadPct,
                     priTempC, secTempC, t2TempC, lf1TempC,
                     q5Pct, q100Pct, q6V, q101V, c5Pct, u1Pct,
                     rippleLf, rippleHf, holdupMs, startupPhase,
@@ -17292,7 +17646,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     harnDrop: (Number(buses.harnessDropV) || 0) > 0.45,
                     ccPeak: !!buses.limiting || buses.mode === 'CC' || buses.mode === 'PEAK' || loadPct > 98,
                     hiTemp: priTempC > 82 || secTempC > 82,
-                    ovpTrip: !!buses.tripped
+                    ovpTrip: !!buses.tripped,
+                    ambientC,
+                    gxMainsV, gxMainsHz, gxPfcV, gxPfcGreen, gxV12, gxI12, gxPdc, gxPac, gxIac,
+                    gxLossW, gxEffPct, gxPf, gxLoadPct, gxRippleMv, gxRipple5vMv, gxHoldupMs, gxSinkC,
+                    gxPfcTempC, gxVee22TempC, gxKheTempC, gxKheStressPct, gxRail5v, gxRail3v3, gxRail5vsb,
+                    gxExhDtC, gxFanRpm, gxNoiseDba, gxOcpA, gxPwrOk, gxTripped, gxMode,
+                    harnDropMv, harnLossW, pinPosA, pinRetA, sysEffPct, sysLossW
                 };
             };
 
@@ -17323,7 +17683,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (!terminalNdDdrSvg || terminalNdViewMode === 'nav') return;
                 const d = readTerminalNdDdrTelemetry();
                 const isSplit = terminalNdViewMode === 'split';
-                terminalNdDdrSvg.setAttribute('viewBox', isSplit ? '0 0 240 382' : '0 0 520 382');
+                if (terminalNdMonitorTarget === 'both') {
+                    terminalNdDdrSvg.setAttribute('viewBox', isSplit ? '112 0 236 548' : '0 0 460 500');
+                    terminalNdDdrSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                } else {
+                    terminalNdDdrSvg.setAttribute('viewBox', isSplit ? '0 0 240 382' : '0 0 520 382');
+                    terminalNdDdrSvg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                }
 
                 let defs = '';
                 let body = '';
@@ -17446,48 +17812,40 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 };
 
                 if (!isSplit) {
-                    // FULL DDR-120A-24 SYNOPTIC MODE (520x382)
                     body += `<line x1="278" y1="12" x2="278" y2="374" stroke="#00c4f0" stroke-width="1.5"/>`;
                     body += `<line x1="10" y1="308" x2="278" y2="308" stroke="#00c4f0" stroke-width="1.5"/>`;
                     body += `<line x1="278" y1="286" x2="512" y2="286" stroke="#00c4f0" stroke-width="1.5"/>`;
 
-                    // Column headers
                     body += `<text x="58" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PRI 12V</text>`;
                     body += `<text x="139" y="15" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">DDR-120A-24</text>`;
                     body += `<text x="218" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">SEC 28V</text>`;
                     body += `<text x="336" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PRI STAGE</text>`;
                     body += `<text x="462" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">SEC STAGE</text>`;
 
-                    // Left 4 rows of C-arc cutout gauges (r = 25)
                     const lx = 50;
                     const rx = 204;
                     const mx = 136;
 
-                    // Row 1: VIN / VOUT
-                    drawCArcGauge(lx, 52, 25, d.vIn, 0, 16, { powered: d.priPowered, decimals: 1, refVal: 12.0, warnVal: 14.8, limVal: 15.6 });
+                    drawCArcGauge(lx, 52, 25, d.vIn, 0, 16, { powered: d.priPowered, decimals: 2, refVal: d.vPsu, warnVal: 14.8, limVal: 15.6, boxW: 44 });
                     body += `<text x="${mx}" y="44" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">V DC</text>`;
                     body += `<text x="${mx}" y="53" fill="#00c4f0" font-size="8" text-anchor="middle">IN / OUT</text>`;
-                    drawCArcGauge(rx, 52, 25, d.vOut, 0, 32, { powered: d.secPowered, decimals: 1, refVal: 28.0, warnVal: 29.5, limVal: 31.0 });
+                    drawCArcGauge(rx, 52, 25, d.vOut, 0, 32, { powered: d.secPowered, decimals: 2, refVal: 28.0, warnVal: 29.5, limVal: 31.0, boxW: 44 });
 
-                    // Row 2: PRI T / SEC T
                     drawCArcGauge(lx, 118, 25, d.priTempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100 });
                     body += `<text x="${mx}" y="110" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">TEMP</text>`;
                     body += `<text x="${mx}" y="119" fill="#00c4f0" font-size="8" text-anchor="middle">DEG C</text>`;
                     drawCArcGauge(rx, 118, 25, d.secTempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100 });
 
-                    // Row 3: I IN / I OUT
                     drawCArcGauge(lx, 184, 25, d.iIn, 0, 12, { powered: d.priPowered, decimals: 2, warnVal: 9.5, limVal: 11.0, tag: d.iInTag });
                     body += `<text x="${mx}" y="176" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">AMPS</text>`;
                     body += `<text x="${mx}" y="185" fill="#00c4f0" font-size="8" text-anchor="middle">I IN / OUT</text>`;
                     drawCArcGauge(rx, 184, 25, d.iOut, 0, 5.2, { powered: d.secPowered, decimals: 2, refVal: 3.6, warnVal: 3.8, limVal: 4.4, tag: d.iOutTag });
 
-                    // Row 4: P IN / P OUT
                     drawCArcGauge(lx, 250, 25, d.pIn, 0, 150, { powered: d.priPowered, decimals: 1, warnVal: 118, limVal: 135 });
                     body += `<text x="${mx}" y="242" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PWR W</text>`;
                     body += `<text x="${mx}" y="251" fill="#00c4f0" font-size="8" text-anchor="middle">LOSS ${d.secPowered ? d.lossW.toFixed(1) : '0.0'}W</text>`;
                     drawCArcGauge(rx, 250, 25, d.pOut, 0, 150, { powered: d.secPowered, decimals: 1, warnVal: 105, limVal: 120 });
 
-                    // Bottom-Left Cyan Bracket Box (BUS & HOLDUP - DDR-120)
                     body += `<path d="M 32 320 H 14 A 4 4 0 0 0 10 324 V 368 A 4 4 0 0 0 14 372 H 204 A 4 4 0 0 0 208 368 V 324 A 4 4 0 0 0 204 320 H 184" fill="none" stroke="#00c4f0" stroke-width="1.4"/>`;
                     body += `<text x="109" y="323" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">BUS &amp; HOLDUP - DDR-120</text>`;
                     body += `<text x="42" y="346" fill="#ffffff" font-size="13" font-weight="700" text-anchor="middle">${d.secPowered ? d.vOut.toFixed(1) : '0.0'}</text>`;
@@ -17501,11 +17859,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     body += `<text x="174" y="357" fill="#00c4f0" font-size="7.5" text-anchor="middle">TIME 28V</text>`;
                     if (d.vAux < 18) body += `<text x="174" y="368" fill="#f2b418" font-size="8.5" font-weight="700" text-anchor="middle">LOW</text>`;
 
-                    // Total Efficiency outside right of frame
                     body += `<text x="244" y="346" fill="#ffffff" font-size="14" font-weight="700" text-anchor="middle">${d.secPowered ? d.effPct.toFixed(1) : '0.0'}</text>`;
                     body += `<text x="244" y="362" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">TOTAL EFF</text>`;
 
-                    // Right Column Top Caution Banners (2x2)
                     const drawBanner = (bx, by, bw, bh, line1, line2, active) => {
                         body += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${active ? '#f2b418' : '#060606'}" stroke="${active ? '#f2b418' : '#2c2c2c'}" stroke-width="1.1"/>`;
                         const tc = active ? '#000000' : '#4a4a4a';
@@ -17517,37 +17873,31 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     drawBanner(286, 44, 108, 19, 'COLD START', 'INRUSH / RISE', d.inrushActive || d.riseActive);
                     drawBanner(400, 44, 108, 19, 'OVERLOAD LIM', 'CC / OVP TRIP', d.ccPeak || d.ovpTrip);
 
-                    // Right Column Round Dials (r = 24)
                     const rlx = 334;
                     const rrx = 462;
                     const rmx = 398;
 
-                    // Row 1: FET VDS % (Q5 / Q100)
                     drawRoundDial(rlx, 96, 24, d.q5Pct, 0, 100, { powered: d.priPowered, decimals: 0, warnVal: 78, limVal: 90, scaleMid: 50, scaleMax: 100 });
                     body += `<text x="${rmx}" y="93" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">FET VDS</text>`;
                     body += `<text x="${rmx}" y="103" fill="#00c4f0" font-size="7.5" text-anchor="middle">Q5 / Q100 %</text>`;
                     drawRoundDial(rrx, 96, 24, d.q100Pct, 0, 100, { powered: d.secPowered, decimals: 0, warnVal: 78, limVal: 90, scaleMid: 50, scaleMax: 100 });
 
-                    // Row 2: CLMP / S2 V (Q6 / Q101)
                     drawRoundDial(rlx, 158, 24, d.q6V, 0, 100, { powered: d.priPowered, decimals: 0, warnVal: 80, limVal: 92, scaleMid: 50, scaleMax: 100 });
                     body += `<text x="${rmx}" y="155" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">CLMP / S2</text>`;
                     body += `<text x="${rmx}" y="165" fill="#00c4f0" font-size="7.5" text-anchor="middle">Q6 / Q101 V</text>`;
                     drawRoundDial(rrx, 158, 24, d.q101V, 0, 200, { powered: d.secPowered, decimals: 0, warnVal: 160, limVal: 185, scaleMid: 100, scaleMax: 200 });
 
-                    // Boxed Digital Row: [ C5 % ]  CAP / VCC %  [ U1 % ]
                     body += `<rect x="310" y="196" width="44" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
                     if (d.secPowered) body += `<text x="350" y="207.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.c5Pct.toFixed(0)}</text>`;
                     body += `<text x="${rmx}" y="207" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">CAP / VCC %</text>`;
                     body += `<rect x="440" y="196" width="44" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
                     if (d.priPowered) body += `<text x="480" y="207.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.u1Pct.toFixed(0)}</text>`;
 
-                    // Row 3: RIPPLE LF / HF (mVpp)
                     drawRoundDial(rlx, 246, 24, d.rippleLf, 0, 50, { powered: d.secPowered, decimals: 1, warnVal: 35, limVal: 45, scaleMid: 25, scaleMax: 50 });
                     body += `<text x="${rmx}" y="243" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">RIPPLE</text>`;
                     body += `<text x="${rmx}" y="253" fill="#00c4f0" font-size="7.5" text-anchor="middle">LF / HF MV</text>`;
                     drawRoundDial(rrx, 246, 24, d.rippleHf, 0, 100, { powered: d.secPowered, decimals: 1, warnVal: 75, limVal: 90, scaleMid: 50, scaleMax: 100 });
 
-                    // Below y=286 divider: Sub-labels A / B + XFMR T2 / CHOK LF1 + [ EFF% ] / [ LOAD% ]
                     body += `<text x="294" y="300" fill="#00c4f0" font-size="9" font-weight="700">A</text>`;
                     body += `<text x="500" y="300" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="end">B</text>`;
                     drawRoundDial(rlx, 322, 23, d.t2TempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, scaleMid: 60, scaleMax: 120 });
@@ -17561,16 +17911,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     body += `<rect x="440" y="356" width="46" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
                     if (d.secPowered) body += `<text x="482" y="367.5" fill="${d.loadPct > 98 ? '#f2b418' : '#ffffff'}" font-size="11" font-weight="700" text-anchor="end">${d.loadPct.toFixed(1)}</text>`;
                 } else {
-                    // SPLIT MODE COMPACT DDR-120A-24 SYNOPTIC (240x382 Left Pane)
                     body += `<text x="28" y="13" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">PRI</text>`;
                     body += `<text x="68" y="13" fill="#ffffff" font-size="8.5" font-weight="700" text-anchor="middle">DDR-120</text>`;
                     body += `<text x="108" y="13" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">SEC</text>`;
 
-                    // 3 Compact C-arc rows (r = 17.5) with titles carried UP above the SEC left rim
                     const slx = 22;
                     const srx = 98;
                     const smx = 69;
-                    drawCArcGauge(slx, 36, 17.5, d.vIn, 0, 16, { powered: d.priPowered, decimals: 1, refVal: 12.0, warnVal: 14.8, limVal: 15.6, boxW: 31 });
+                    drawCArcGauge(slx, 36, 17.5, d.vIn, 0, 16, { powered: d.priPowered, decimals: 2, refVal: d.vPsu, warnVal: 14.8, limVal: 15.6, boxW: 33 });
                     body += `<text x="${smx}" y="25" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">V DC</text>`;
                     drawCArcGauge(srx, 36, 17.5, d.vOut, 0, 32, { powered: d.secPowered, decimals: 1, refVal: 28.0, warnVal: 29.5, limVal: 31.0, boxW: 31 });
 
@@ -17582,19 +17930,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     body += `<text x="${smx}" y="113" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">AMPS</text>`;
                     drawCArcGauge(srx, 124, 17.5, d.iOut, 0, 5.2, { powered: d.secPowered, decimals: 2, refVal: 3.6, warnVal: 3.8, limVal: 4.4, tag: d.iOutTag, boxW: 31 });
 
-                    // Digital PWR W row (y = 152)
                     body += `<rect x="8" y="150" width="38" height="13" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
                     if (d.priPowered) body += `<text x="43" y="160" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.pIn.toFixed(1)}</text>`;
                     body += `<text x="${smx}" y="159.5" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">PWR W</text>`;
                     body += `<rect x="92" y="150" width="38" height="13" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
                     if (d.secPowered) body += `<text x="127" y="160" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.pOut.toFixed(1)}</text>`;
 
-                    // Vertical Parallel Tape Gauges (Photo 3 style)
                     const drawVerticalTapePair = (yTop, h, title1, title2, valL, maxL, valR, maxR, pL, pR, dec = 0) => {
                         const xL = 44;
                         const xR = 94;
                         const yBot = yTop + h;
-                        // Stems & top/bottom caps
                         body += `<line x1="${xL}" y1="${yTop}" x2="${xL}" y2="${yBot}" stroke="#ffffff" stroke-width="1.3"/>`;
                         body += `<line x1="${xL - 4}" y1="${yBot}" x2="${xL + 2}" y2="${yBot}" stroke="#ffffff" stroke-width="1.2"/>`;
                         body += `<line x1="${xL - 4}" y1="${yTop}" x2="${xL + 2}" y2="${yTop}" stroke="#ff2a2a" stroke-width="1.8"/>`;
@@ -17624,7 +17969,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     drawVerticalTapePair(172, 30, 'FET VDS', 'Q5/Q100%', d.q5Pct, 100, d.q100Pct, 100, d.priPowered, d.secPowered, 0);
                     drawVerticalTapePair(212, 30, 'CLMP/S2', 'VOLTS', d.q6V, 100, d.q101V, 200, d.priPowered, d.secPowered, 0);
 
-                    // [ C5% ] CAP/VCC [ U1% ] digital row (y = 250)
                     body += `<rect x="8" y="250" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
                     if (d.secPowered) body += `<text x="37" y="259.5" fill="#fff" font-size="9" font-weight="700" text-anchor="end">${d.c5Pct.toFixed(0)}</text>`;
                     body += `<text x="69" y="259" fill="#00c4f0" font-size="7.2" font-weight="700" text-anchor="middle">CAP/VCC%</text>`;
@@ -17633,7 +17977,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
                     drawVerticalTapePair(272, 30, 'RIPPLE', 'LF/HF MV', d.rippleLf, 50, d.rippleHf, 100, d.secPowered, d.secPowered, 1);
 
-                    // Right Sub-column of Left Pane (x = 138..236): 2x4 Annunciator Matrix + Circular LOAD % Dial
                     body += `<text x="162" y="13" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">PRI 12V</text>`;
                     body += `<text x="212" y="13" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">SEC 28V</text>`;
 
@@ -17652,7 +17995,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     drawMatrixCell(139, 90, 'PRI T', 'HIGH', d.hiTemp);
                     drawMatrixCell(189, 90, 'OVP', 'TRIP', d.ovpTrip);
 
-                    // Circular FLAPS-style LOAD % Dial (cx = 188, cy = 176, r = 33)
                     const lcx = 188;
                     const lcy = 176;
                     const lr = 33;
@@ -17672,7 +18014,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     body += `<rect x="164" y="216" width="48" height="14" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
                     if (d.secPowered) body += `<text x="208" y="226.5" fill="${d.loadPct > 98 ? '#f2b418' : '#ffffff'}" font-size="10" font-weight="700" text-anchor="end">${d.loadPct.toFixed(1)}</text>`;
 
-                    // Mag Temp & Efficiency summary below Load dial
                     body += `<text x="188" y="246" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">MAG T2 / LF1 C</text>`;
                     body += `<rect x="142" y="251" width="42" height="13" fill="#000" stroke="#fff" stroke-width="1"/>`;
                     body += `<text x="180" y="260.5" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.t2TempC.toFixed(0)}</text>`;
@@ -17683,7 +18024,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     body += `<rect x="164" y="285" width="48" height="14" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
                     if (d.secPowered) body += `<text x="208" y="295.5" fill="#00f000" font-size="10" font-weight="700" text-anchor="end">${d.effPct.toFixed(1)}</text>`;
 
-                    // Bottom Compact Cyan Bracket Frame (BUS & HOLDUP - DDR-120)
                     body += `<path d="M 28 318 H 10 A 4 4 0 0 0 6 322 V 370 A 4 4 0 0 0 10 374 H 228 A 4 4 0 0 0 232 370 V 322 A 4 4 0 0 0 228 318 H 210" fill="none" stroke="#00c4f0" stroke-width="1.3"/>`;
                     body += `<text x="119" y="321" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">BUS &amp; HOLDUP - DDR-120</text>`;
                     body += `<text x="44" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${d.secPowered ? d.vOut.toFixed(1) : '0.0'}</text>`;
@@ -17696,6 +18036,423 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     body += `<text x="194" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${d.vAux > 0.8 ? d.vAux.toFixed(1) : '0.0'}</text>`;
                     body += `<text x="194" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">TIME 28V</text>`;
                     if (d.vAux < 18) body += `<text x="194" y="366" fill="#f2b418" font-size="8" font-weight="700" text-anchor="middle">LOW</text>`;
+                }
+
+                if (terminalNdMonitorTarget === 'gx') {
+                    defs = '';
+                    body = '';
+                    const tPfc = d.gxPfcTempC;
+                    const tKhe = d.gxKheTempC;
+                    const tVee22 = d.gxVee22TempC;
+                    const iAc = d.gxIac;
+                    const khePct = d.gxKheStressPct;
+                    const rip5v = d.gxRipple5vMv;
+                    const gxPowered = d.gxV12 > 1.0;
+                    const pfcRef = d.gxPfcGreen ? 357 : 382;
+                    const fanTag = d.gxFanRpm === 0 ? '0-RPM' : '';
+
+                    if (!isSplit) {
+                        body += `<line x1="274" y1="6" x2="274" y2="376" stroke="#00c4f0" stroke-width="1.5"/>`;
+                        body += `<line x1="16" y1="296" x2="274" y2="296" stroke="#00c4f0" stroke-width="1.5"/>`;
+                        body += `<line x1="274" y1="286" x2="508" y2="286" stroke="#00c4f0" stroke-width="1.5"/>`;
+
+                        body += `<text x="70" y="15" fill="#00c4f0" font-size="10" font-weight="700" text-anchor="middle">PFC HV</text>`;
+                        body += `<text x="139" y="15" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">GX-1000</text>`;
+                        body += `<text x="208" y="15" fill="#00c4f0" font-size="10" font-weight="700" text-anchor="middle">12V RAIL</text>`;
+                        body += `<text x="338" y="15" fill="#00c4f0" font-size="10" font-weight="700" text-anchor="middle">APFC PRI</text>`;
+                        body += `<text x="454" y="15" fill="#00c4f0" font-size="10" font-weight="700" text-anchor="middle">LLC SEC</text>`;
+
+                        const lx = 70;
+                        const rx = 208;
+                        const mx = 139;
+
+                        drawCArcGauge(lx, 52, 28, d.gxPfcV, 0, 420, { powered: gxPowered, decimals: 0, refVal: pfcRef, warnVal: 392, limVal: 405 });
+                        body += `<text x="${mx}" y="47" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">V DC</text>`;
+                        body += `<text x="${mx}" y="58" fill="#00c4f0" font-size="8" text-anchor="middle">PFC / 12V</text>`;
+                        drawCArcGauge(rx, 52, 28, d.gxV12, 0, 15.0, { powered: gxPowered, decimals: 2, refVal: 12.09, warnVal: 12.6, limVal: 13.8 });
+
+                        drawCArcGauge(lx, 120, 28, tPfc, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100 });
+                        body += `<text x="${mx}" y="115" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">TEMP</text>`;
+                        body += `<text x="${mx}" y="126" fill="#00c4f0" font-size="8" text-anchor="middle">DEG C</text>`;
+                        drawCArcGauge(rx, 120, 28, d.gxSinkC, 0, 110, { powered: true, decimals: 0, warnVal: 78, limVal: 92 });
+
+                        drawCArcGauge(lx, 188, 28, iAc, 0, 8.0, { powered: gxPowered, decimals: 2, warnVal: 5.5, limVal: 6.5 });
+                        body += `<text x="${mx}" y="183" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">AMPS</text>`;
+                        body += `<text x="${mx}" y="194" fill="#00c4f0" font-size="8" text-anchor="middle">I AC / 12V</text>`;
+                        drawCArcGauge(rx, 188, 28, d.gxI12, 0, 100, { powered: gxPowered, decimals: 2, refVal: 83.0, warnVal: 85, limVal: 96, tag: fanTag });
+
+                        drawCArcGauge(lx, 256, 28, d.gxPac, 0, 1150, { powered: gxPowered, decimals: 1, warnVal: 980, limVal: 1080 });
+                        body += `<text x="${mx}" y="251" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PWR W</text>`;
+                        body += `<text x="${mx}" y="262" fill="#00c4f0" font-size="8" text-anchor="middle">LOSS ${d.gxLossW.toFixed(1)}W</text>`;
+                        drawCArcGauge(rx, 256, 28, d.gxPdc, 0, 1050, { powered: gxPowered, decimals: 1, warnVal: 880, limVal: 996 });
+
+                        body += `<path d="M 38 308 H 18 A 5 5 0 0 0 13 313 V 369 A 5 5 0 0 0 18 374 H 206 A 5 5 0 0 0 211 369 V 313 A 5 5 0 0 0 206 308 H 186" fill="none" stroke="#00c4f0" stroke-width="1.4"/>`;
+                        body += `<text x="112" y="311" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">RAILS &amp; HOLDUP - GX-1000</text>`;
+
+                        body += `<text x="48" y="338" fill="#ffffff" font-size="13.5" font-weight="700" text-anchor="middle">${gxPowered ? d.gxV12.toFixed(2) : '0.00'}</text>`;
+                        body += `<text x="48" y="350" fill="#00c4f0" font-size="7.5" text-anchor="middle">MAIN 12V</text>`;
+
+                        body += `<text x="112" y="338" fill="#ffffff" font-size="13.5" font-weight="700" text-anchor="middle">${d.gxHoldupMs.toFixed(0)}</text>`;
+                        body += `<text x="112" y="350" fill="#00c4f0" font-size="7.5" text-anchor="middle">HOLDUP MS</text>`;
+
+                        body += `<text x="176" y="338" fill="#ffffff" font-size="13.5" font-weight="700" text-anchor="middle">${gxPowered ? d.gxRail5v.toFixed(2) : '0.00'}</text>`;
+                        body += `<text x="176" y="350" fill="#00c4f0" font-size="7.5" text-anchor="middle">AUX 5.0V</text>`;
+
+                        body += `<text x="244" y="346" fill="#ffffff" font-size="14" font-weight="700" text-anchor="middle">${gxPowered ? d.gxEffPct.toFixed(1) : '0.0'}</text>`;
+                        body += `<text x="244" y="362" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">PLAT EFF</text>`;
+
+                        const drawBanner = (bx, by, bw, bh, line1, line2, active) => {
+                            body += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${active ? '#f2b418' : '#060606'}" stroke="${active ? '#f2b418' : '#2c2c2c'}" stroke-width="1.1"/>`;
+                            const tc = active ? '#000000' : '#4a4a4a';
+                            body += `<text x="${bx + bw / 2}" y="${by + 8.5}" fill="${tc}" font-size="7.8" font-weight="700" text-anchor="middle">${line1}</text>`;
+                            body += `<text x="${bx + bw / 2}" y="${by + 16.5}" fill="${tc}" font-size="7.8" font-weight="700" text-anchor="middle">${line2}</text>`;
+                        };
+                        drawBanner(286, 22, 108, 19, 'AC MAINS LOW', 'UVLO < 195V', d.gxMainsV < 195);
+                        drawBanner(400, 22, 108, 19, 'PWR OK OPEN', 'WT7527 LOW', !d.gxPwrOk);
+                        drawBanner(286, 44, 108, 19, 'NTC INRUSH', 'BYPASS OPEN', d.inrushActive);
+                        drawBanner(400, 44, 108, 19, 'OVERLOAD LIM', 'OCP / OTP TRIP', d.gxTripped || d.gxI12 > 83);
+
+                        const rlx = 334;
+                        const rrx = 462;
+                        const rmx = 398;
+
+                        drawRoundDial(rlx, 96, 24, d.gxPf * 100, 0, 100, { powered: gxPowered, decimals: 1, warnVal: 96, limVal: 99, scaleMid: 50, scaleMax: 100 });
+                        body += `<text x="${rmx}" y="93" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">PF / LOAD</text>`;
+                        body += `<text x="${rmx}" y="103" fill="#00c4f0" font-size="7.5" text-anchor="middle">APFC / PSU %</text>`;
+                        drawRoundDial(rrx, 96, 24, d.gxLoadPct, 0, 100, { powered: gxPowered, decimals: 1, warnVal: 80, limVal: 95, scaleMid: 50, scaleMax: 100 });
+
+                        drawRoundDial(rlx, 158, 24, d.gxFanRpm, 0, 1850, { powered: gxPowered, decimals: 0, warnVal: 1400, limVal: 1700, scaleMid: 900, scaleMax: 1800 });
+                        body += `<text x="${rmx}" y="155" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">OPTISILENT</text>`;
+                        body += `<text x="${rmx}" y="165" fill="#00c4f0" font-size="7.5" text-anchor="middle">RPM / DBA</text>`;
+                        drawRoundDial(rrx, 158, 24, d.gxNoiseDba, 0, 45, { powered: gxPowered, decimals: 1, warnVal: 34, limVal: 40, scaleMid: 20, scaleMax: 40 });
+
+                        body += `<rect x="310" y="196" width="44" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                        if (gxPowered) body += `<text x="350" y="207.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${khePct.toFixed(0)}</text>`;
+                        body += `<text x="${rmx}" y="207" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">CAP / DROP MV</text>`;
+                        body += `<rect x="440" y="196" width="44" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                        if (gxPowered) body += `<text x="480" y="207.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.harnDropMv.toFixed(0)}</text>`;
+
+                        drawRoundDial(rlx, 246, 24, d.gxRippleMv, 0, 50, { powered: gxPowered, decimals: 1, warnVal: 32, limVal: 42, scaleMid: 25, scaleMax: 50 });
+                        body += `<text x="${rmx}" y="243" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">RIPPLE</text>`;
+                        body += `<text x="${rmx}" y="253" fill="#00c4f0" font-size="7.5" text-anchor="middle">12V / 5V MV</text>`;
+                        drawRoundDial(rrx, 246, 24, rip5v, 0, 50, { powered: gxPowered, decimals: 1, warnVal: 32, limVal: 42, scaleMid: 25, scaleMax: 50 });
+
+                        body += `<text x="294" y="300" fill="#00c4f0" font-size="9" font-weight="700">A</text>`;
+                        body += `<text x="500" y="300" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="end">B</text>`;
+                        drawRoundDial(rlx, 322, 23, tVee22, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, scaleMid: 60, scaleMax: 120 });
+                        body += `<text x="${rmx}" y="319" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">MAG / BULK</text>`;
+                        body += `<text x="${rmx}" y="329" fill="#00c4f0" font-size="7.5" text-anchor="middle">VEE22 / KHE C</text>`;
+                        drawRoundDial(rrx, 322, 23, tKhe, 0, 105, { powered: true, decimals: 0, warnVal: 78, limVal: 92, scaleMid: 50, scaleMax: 100 });
+
+                        body += `<rect x="310" y="356" width="46" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                        if (gxPowered) body += `<text x="352" y="367.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.gxEffPct.toFixed(1)}</text>`;
+                        body += `<text x="${rmx}" y="367" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">EFF / MAINS V</text>`;
+                        body += `<rect x="440" y="356" width="46" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                        if (gxPowered) body += `<text x="482" y="367.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.gxMainsV.toFixed(0)}</text>`;
+                    } else {
+                        body += `<text x="28" y="13" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">PFC</text>`;
+                        body += `<text x="68" y="13" fill="#ffffff" font-size="8.5" font-weight="700" text-anchor="middle">GX-1000</text>`;
+                        body += `<text x="108" y="13" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">12V</text>`;
+
+                        const slx = 22;
+                        const srx = 98;
+                        const smx = 69;
+                        drawCArcGauge(slx, 36, 17.5, d.gxPfcV, 0, 420, { powered: gxPowered, decimals: 0, refVal: pfcRef, warnVal: 392, limVal: 405, boxW: 33 });
+                        body += `<text x="${smx}" y="25" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">V DC</text>`;
+                        drawCArcGauge(srx, 36, 17.5, d.gxV12, 0, 15.0, { powered: gxPowered, decimals: 2, refVal: 12.09, warnVal: 12.6, limVal: 13.8, boxW: 31 });
+
+                        drawCArcGauge(slx, 80, 17.5, tPfc, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, boxW: 31 });
+                        body += `<text x="${smx}" y="69" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">TEMP</text>`;
+                        drawCArcGauge(srx, 80, 17.5, d.gxSinkC, 0, 110, { powered: true, decimals: 0, warnVal: 78, limVal: 92, boxW: 31 });
+
+                        drawCArcGauge(slx, 124, 17.5, iAc, 0, 8.0, { powered: gxPowered, decimals: 2, warnVal: 5.5, limVal: 6.5, boxW: 31 });
+                        body += `<text x="${smx}" y="113" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">AMPS</text>`;
+                        drawCArcGauge(srx, 124, 17.5, d.gxI12, 0, 100, { powered: gxPowered, decimals: 2, refVal: 83.0, warnVal: 85, limVal: 96, tag: fanTag, boxW: 31 });
+
+                        body += `<rect x="8" y="150" width="38" height="13" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                        if (gxPowered) body += `<text x="43" y="160" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.gxPac.toFixed(1)}</text>`;
+                        body += `<text x="${smx}" y="159.5" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">PWR W</text>`;
+                        body += `<rect x="92" y="150" width="38" height="13" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                        if (gxPowered) body += `<text x="127" y="160" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.gxPdc.toFixed(1)}</text>`;
+
+                        const drawVerticalTapePair = (yTop, h, title1, title2, valL, maxL, valR, maxR, pL, pR, dec = 0) => {
+                            const xL = 44;
+                            const xR = 94;
+                            const yBot = yTop + h;
+                            body += `<line x1="${xL}" y1="${yTop}" x2="${xL}" y2="${yBot}" stroke="#ffffff" stroke-width="1.3"/>`;
+                            body += `<line x1="${xL - 4}" y1="${yBot}" x2="${xL + 2}" y2="${yBot}" stroke="#ffffff" stroke-width="1.2"/>`;
+                            body += `<line x1="${xL - 4}" y1="${yTop}" x2="${xL + 2}" y2="${yTop}" stroke="#ff2a2a" stroke-width="1.8"/>`;
+                            body += `<line x1="${xL - 3}" y1="${yTop + h * 0.18}" x2="${xL + 1}" y2="${yTop + h * 0.18}" stroke="#f2b418" stroke-width="1.3"/>`;
+
+                            body += `<line x1="${xR}" y1="${yTop}" x2="${xR}" y2="${yBot}" stroke="#ffffff" stroke-width="1.3"/>`;
+                            body += `<line x1="${xR - 2}" y1="${yBot}" x2="${xR + 4}" y2="${yBot}" stroke="#ffffff" stroke-width="1.2"/>`;
+                            body += `<line x1="${xR - 2}" y1="${yTop}" x2="${xR + 4}" y2="${yTop}" stroke="#ff2a2a" stroke-width="1.8"/>`;
+                            body += `<line x1="${xR - 1}" y1="${yTop + h * 0.18}" x2="${xR + 3}" y2="${yTop + h * 0.18}" stroke="#f2b418" stroke-width="1.3"/>`;
+
+                            body += `<text x="69" y="${yTop + h * 0.45}" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">${title1}</text>`;
+                            if (title2) body += `<text x="69" y="${yTop + h * 0.78}" fill="#00c4f0" font-size="7" text-anchor="middle">${title2}</text>`;
+
+                            const fL = Math.max(0, Math.min(1, (Number(valL) || 0) / maxL));
+                            const pyL = yBot - fL * h;
+                            body += `<polygon points="${xL},${pyL} ${xL - 5},${pyL - 3} ${xL - 5},${pyL + 3}" fill="#ffffff"/>`;
+                            body += `<rect x="6" y="${pyL - 6.5}" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                            if (pL) body += `<text x="35" y="${pyL + 3}" fill="#ffffff" font-size="9" font-weight="700" text-anchor="end">${Number(valL).toFixed(dec)}</text>`;
+
+                            const fR = Math.max(0, Math.min(1, (Number(valR) || 0) / maxR));
+                            const pyR = yBot - fR * h;
+                            body += `<polygon points="${xR},${pyR} ${xR + 5},${pyR - 3} ${xR + 5},${pyR + 3}" fill="#ffffff"/>`;
+                            body += `<rect x="100" y="${pyR - 6.5}" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                            if (pR) body += `<text x="129" y="${pyR + 3}" fill="#ffffff" font-size="9" font-weight="700" text-anchor="end">${Number(valR).toFixed(dec)}</text>`;
+                        };
+
+                        drawVerticalTapePair(172, 30, 'PF/LOAD', 'APFC/PSU%', d.gxPf * 100, 100, d.gxLoadPct, 100, gxPowered, gxPowered, 0);
+                        drawVerticalTapePair(212, 30, 'FAN/DBA', 'RPM/NOISE', d.gxFanRpm, 1850, d.gxNoiseDba, 45, gxPowered, gxPowered, 0);
+
+                        body += `<rect x="8" y="250" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                        if (gxPowered) body += `<text x="37" y="259.5" fill="#fff" font-size="9" font-weight="700" text-anchor="end">${khePct.toFixed(0)}</text>`;
+                        body += `<text x="69" y="259" fill="#00c4f0" font-size="7.2" font-weight="700" text-anchor="middle">CAP/DRP</text>`;
+                        body += `<rect x="98" y="250" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                        if (gxPowered) body += `<text x="127" y="259.5" fill="#fff" font-size="9" font-weight="700" text-anchor="end">${d.harnDropMv.toFixed(0)}</text>`;
+
+                        drawVerticalTapePair(272, 30, 'RIPPLE', '12V/5V MV', d.gxRippleMv, 50, rip5v, 50, gxPowered, gxPowered, 1);
+
+                        body += `<text x="162" y="13" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">APFC</text>`;
+                        body += `<text x="212" y="13" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">12V SR</text>`;
+
+                        const drawMatrixCell = (cx, cy, l1, l2, active) => {
+                            body += `<rect x="${cx}" y="${cy}" width="46" height="21" fill="${active ? '#f2b418' : '#050505'}" stroke="${active ? '#f2b418' : '#2c2c2c'}" stroke-width="1"/>`;
+                            const tc = active ? '#000000' : '#444444';
+                            body += `<text x="${cx + 23}" y="${cy + 9}" fill="${tc}" font-size="7" font-weight="700" text-anchor="middle">${l1}</text>`;
+                            body += `<text x="${cx + 23}" y="${cy + 17.5}" fill="${tc}" font-size="7" font-weight="700" text-anchor="middle">${l2}</text>`;
+                        };
+                        drawMatrixCell(139, 18, 'AC IN', 'LOW V', d.gxMainsV < 195);
+                        drawMatrixCell(189, 18, 'PWR OK', 'OPEN', !d.gxPwrOk);
+                        drawMatrixCell(139, 42, 'NTC', 'INRUSH', d.inrushActive);
+                        drawMatrixCell(189, 42, 'OCP', 'LIMIT', d.gxI12 > 83);
+                        drawMatrixCell(139, 66, 'OPP', 'PEAK', d.gxPdc > 1000);
+                        drawMatrixCell(189, 66, 'OTP', 'HIGH', d.gxSinkC > 85);
+                        drawMatrixCell(139, 90, 'HARN', 'DROP', d.harnDrop);
+                        drawMatrixCell(189, 90, 'PSU', 'TRIP', d.gxTripped);
+
+                        const lcx = 188;
+                        const lcy = 176;
+                        const lr = 33;
+                        for (let i = 0; i < 20; i++) {
+                            const ang = i * 18 - 90;
+                            const p1 = ddrPolar(lcx, lcy, lr - (i % 5 === 0 ? 5 : 3), ang);
+                            const p2 = ddrPolar(lcx, lcy, lr, ang);
+                            const col = i >= 14 && i <= 17 ? '#f2b418' : i > 17 ? '#ff2a2a' : '#ffffff';
+                            body += `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" stroke="${col}" stroke-width="${i % 5 === 0 ? '1.5' : '1'}"/>`;
+                        }
+                        body += `<text x="${lcx}" y="${lcy - 10}" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">LOAD %</text>`;
+                        const loadAng = -90 + Math.min(1.5, Math.max(0, d.gxLoadPct / 100)) * 240;
+                        const pln = ddrPolar(lcx, lcy, lr - 4, loadAng);
+                        body += `<line x1="${lcx}" y1="${lcy}" x2="${pln.x.toFixed(2)}" y2="${pln.y.toFixed(2)}" stroke="#ffffff" stroke-width="1.8"/>`;
+                        body += `<circle cx="${lcx}" cy="${lcy}" r="2.2" fill="#ffffff"/>`;
+
+                        body += `<rect x="164" y="216" width="48" height="14" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                        if (gxPowered) body += `<text x="208" y="226.5" fill="${d.gxLoadPct > 95 ? '#f2b418' : '#ffffff'}" font-size="10" font-weight="700" text-anchor="end">${d.gxLoadPct.toFixed(1)}</text>`;
+
+                        body += `<text x="188" y="246" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">VEE22 / KHE C</text>`;
+                        body += `<rect x="142" y="251" width="42" height="13" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                        body += `<text x="180" y="260.5" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${tVee22.toFixed(0)}</text>`;
+                        body += `<rect x="192" y="251" width="42" height="13" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                        body += `<text x="230" y="260.5" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${tKhe.toFixed(0)}</text>`;
+
+                        body += `<text x="188" y="280" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">PLAT EFF %</text>`;
+                        body += `<rect x="164" y="285" width="48" height="14" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                        if (gxPowered) body += `<text x="208" y="295.5" fill="#00f000" font-size="10" font-weight="700" text-anchor="end">${d.gxEffPct.toFixed(1)}</text>`;
+
+                        body += `<path d="M 28 318 H 10 A 4 4 0 0 0 6 322 V 370 A 4 4 0 0 0 10 374 H 228 A 4 4 0 0 0 232 370 V 322 A 4 4 0 0 0 228 318 H 210" fill="none" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        body += `<text x="119" y="321" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">RAILS &amp; HOLDUP - GX-1000</text>`;
+                        body += `<text x="44" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${gxPowered ? d.gxV12.toFixed(2) : '0.00'}</text>`;
+                        body += `<text x="44" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">MAIN 12V</text>`;
+
+                        body += `<text x="119" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${d.gxHoldupMs.toFixed(0)}</text>`;
+                        body += `<text x="119" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">HOLDUP MS</text>`;
+
+                        body += `<text x="194" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${gxPowered ? d.gxRail5v.toFixed(2) : '0.00'}</text>`;
+                        body += `<text x="194" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">AUX 5.0V</text>`;
+                    }
+                } else if (terminalNdMonitorTarget === 'both') {
+                    defs = '';
+                    body = '';
+                    const acPowered = d.gxMainsV > 80;
+                    const gxPowered = d.gxV12 > 1.0;
+                    const pgClosed = Boolean(d.gxPwrOk && gxPowered);
+                    const secPowered = Boolean(d.secPowered);
+                    const dcOkClosed = Boolean(secPowered && !d.dcOkOpen);
+                    const ntcClosed = Boolean(acPowered && !d.inrushActive);
+
+                    const iAc = d.gxIac;
+                    const ddrTempC = Math.max(d.priTempC, d.secTempC);
+                    const pfStr = acPowered ? d.gxPf.toFixed(2).replace(/^0/, '') : '.00';
+
+                    const colAc = acPowered ? '#00f000' : '#4a5a64';
+                    const colGx = gxPowered ? '#00f000' : '#4a5a64';
+                    const colPg = pgClosed ? '#00f000' : (gxPowered ? '#ffaa00' : '#4a5a64');
+                    const colSec = secPowered ? '#00f000' : '#4a5a64';
+                    const colBus = dcOkClosed ? '#00f000' : (secPowered ? '#ffaa00' : '#4a5a64');
+
+                    const ddrPathD = 'M 6.050 0.000 L 102.000 0.000 L 102.000 125.200 L 6.050 125.200 C 6.050 101.200, 0.000 86.600, 0.000 62.600 C 0.000 38.600, 6.050 24.000, 6.050 0.000 Z';
+
+                    const renderDdrUnit = (includeOuterPipeAndBus) => {
+                        let s = '';
+                        s += `<g transform="translate(153.500, 34.067) scale(1.5)"><path d="${ddrPathD}" fill="#263137" stroke="#00c4f0" stroke-width="1.3333" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+                        s += `<line x1="157" y1="128" x2="306" y2="128" stroke="#e8eef2" stroke-width="2"/>`;
+                        s += `<line x1="180" y1="221.867" x2="180" y2="128" stroke="${colPg}" stroke-width="3.6"/>`;
+                        s += `<line x1="180" y1="128" x2="180" y2="${includeOuterPipeAndBus ? 52 : 34.067}" stroke="${colSec}" stroke-width="3.6"/>`;
+                        if (includeOuterPipeAndBus) {
+                            s += `<line x1="180" y1="52" x2="112" y2="52" stroke="${colBus}" stroke-width="3.6" stroke-linejoin="round"/>`;
+                            s += `<polygon points="105,52 114,47.5 114,56.5" fill="${colBus}"/>`;
+                            s += `<circle cx="132" cy="52" r="9" fill="#000000" stroke="${colBus}" stroke-width="2"/>`;
+                            if (dcOkClosed) {
+                                s += `<line x1="123" y1="52" x2="141" y2="52" stroke="#00f000" stroke-width="2.8"/>`;
+                            } else {
+                                s += `<line x1="132" y1="43" x2="132" y2="61" stroke="#ffaa00" stroke-width="2.8"/>`;
+                            }
+                            s += `<text x="132" y="39" fill="#00c4f0" font-size="9" font-weight="bold" text-anchor="middle">DC OK</text>`;
+                            s += `<text x="62" y="36" fill="#00c4f0" font-size="10.5" font-weight="bold" text-anchor="middle">28V BUS</text>`;
+                            s += `<rect x="20" y="40" width="84" height="26" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.6"/>`;
+                            s += `<text x="62" y="58" fill="#ffffff" font-size="16" font-weight="bold" text-anchor="middle">${secPowered ? d.vOut.toFixed(2) : '0.00'}V</text>`;
+                            s += `<rect x="20" y="70" width="84" height="22" rx="2" fill="#000000" stroke="#d8e2e8" stroke-width="1.4"/>`;
+                            s += `<text x="62" y="86" fill="${colBus}" font-size="13" font-weight="bold" text-anchor="middle">${secPowered ? d.iOut.toFixed(1) : '0.0'}A  ${secPowered ? d.loadPct.toFixed(0) : '0'}%</text>`;
+                        }
+                        s += `<rect x="164" y="170" width="32" height="16" fill="#000000" stroke="${colPg}" stroke-width="2"/>`;
+                        s += `<line x1="164" y1="178" x2="196" y2="178" stroke="${colPg}" stroke-width="2"/>`;
+                        s += `<text x="180" y="165" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">PRI</text>`;
+                        s += `<text x="253" y="165" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">12V IN</text>`;
+                        s += `<rect x="206" y="169" width="94" height="22" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.4"/>`;
+                        s += `<text x="253" y="185" fill="#ffffff" font-size="11.5" font-weight="bold" text-anchor="middle">${d.priPowered ? d.vIn.toFixed(2) : '0.00'}V ${d.priPowered ? d.iIn.toFixed(1) : '0.0'}A</text>`;
+                        s += `<circle cx="180" cy="128" r="9" fill="#000000" stroke="#e8eef2" stroke-width="2"/>`;
+                        if (secPowered) {
+                            s += `<line x1="180" y1="119" x2="180" y2="137" stroke="#00f000" stroke-width="2.8"/>`;
+                        } else {
+                            s += `<line x1="171" y1="128" x2="189" y2="128" stroke="#ffaa00" stroke-width="2.8"/>`;
+                        }
+                        s += `<text x="200" y="123" fill="#00c4f0" font-size="8.5" font-weight="bold">4KV ISO</text>`;
+                        s += `<rect x="164" y="66" width="32" height="16" fill="#000000" stroke="${colSec}" stroke-width="2"/>`;
+                        s += `<line x1="164" y1="74" x2="196" y2="74" stroke="${colSec}" stroke-width="2"/>`;
+                        s += `<text x="180" y="94" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">SEC</text>`;
+                        s += `<text x="236" y="55" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">TEMP</text>`;
+                        s += `<rect x="212" y="59" width="48" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="236" y="74" fill="${ddrTempC >= 85 ? '#ffaa00' : '#ffffff'}" font-size="13" font-weight="bold" text-anchor="middle">${ddrTempC.toFixed(0)} C</text>`;
+                        s += `<text x="254" y="91" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">OUT PWR</text>`;
+                        s += `<rect x="218" y="95" width="72" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="254" y="110" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">${secPowered ? d.pOut.toFixed(1) : '0.0'}W</text>`;
+                        return s;
+                    };
+
+                    const renderGxUnit = (includeOuterPipeAndAc) => {
+                        let s = '';
+                        s += `<rect x="117.500" y="255.933" width="225.000" height="210.000" fill="#263137" stroke="#00c4f0" stroke-width="2" stroke-linejoin="round"/>`;
+                        s += `<circle cx="230" cy="361" r="64" fill="none" stroke="#00c4f0" stroke-width="1" stroke-dasharray="5,4" opacity="0.38"/>`;
+                        s += `<path d="M ${includeOuterPipeAndAc ? 356 : 284} 438 L 180 438 L 180 255.933" fill="none" stroke="${colGx}" stroke-width="3.6" stroke-linejoin="round"/>`;
+                        s += `<line x1="180" y1="314" x2="254" y2="314" stroke="${colGx}" stroke-width="3.2"/>`;
+                        s += `<circle cx="284" cy="438" r="9" fill="#000000" stroke="${colAc}" stroke-width="2"/>`;
+                        if (ntcClosed) {
+                            s += `<line x1="275" y1="438" x2="293" y2="438" stroke="#00f000" stroke-width="2.8"/>`;
+                        } else {
+                            s += `<line x1="284" y1="429" x2="284" y2="447" stroke="#ffaa00" stroke-width="2.8"/>`;
+                        }
+                        s += `<text x="284" y="425" fill="#00c4f0" font-size="9" font-weight="bold" text-anchor="middle">NTC</text>`;
+                        s += `<rect x="164" y="430" width="32" height="16" fill="#000000" stroke="${colAc}" stroke-width="2"/>`;
+                        s += `<line x1="164" y1="438" x2="196" y2="438" stroke="${colAc}" stroke-width="2"/>`;
+                        s += `<text x="180" y="425" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">APFC</text>`;
+                        s += `<text x="228" y="425" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">PF</text>`;
+                        s += `<rect x="208" y="429" width="40" height="18" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="228" y="442" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">${pfStr}</text>`;
+                        s += `<circle cx="180" cy="376" r="24" fill="#000000" stroke="#00c4f0" stroke-width="2"/>`;
+                        s += `<text x="180" y="365" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">HV DC</text>`;
+                        s += `<text x="180" y="383" fill="#ffffff" font-size="15" font-weight="bold" text-anchor="middle">${acPowered ? d.gxPfcV.toFixed(0) : '0'}</text>`;
+                        s += `<rect x="164" y="306" width="32" height="16" fill="#000000" stroke="${colGx}" stroke-width="2"/>`;
+                        s += `<line x1="164" y1="314" x2="196" y2="314" stroke="${colGx}" stroke-width="2"/>`;
+                        s += `<text x="180" y="302" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">12V SR</text>`;
+                        s += `<text x="148" y="269" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">12V RAIL</text>`;
+                        s += `<rect x="122" y="273" width="52" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.4"/>`;
+                        s += `<text x="148" y="288" fill="#ffffff" font-size="12.5" font-weight="bold" text-anchor="middle">${gxPowered ? d.gxV12.toFixed(2) : '0.00'}</text>`;
+                        s += `<rect x="238" y="306" width="32" height="16" fill="#000000" stroke="${colGx}" stroke-width="2"/>`;
+                        s += `<line x1="238" y1="314" x2="270" y2="314" stroke="${colGx}" stroke-width="2"/>`;
+                        s += `<text x="254" y="302" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">VRM</text>`;
+                        s += `<text x="208" y="269" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">+5V</text>`;
+                        s += `<rect x="188" y="273" width="40" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="208" y="288" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">${gxPowered ? d.gxRail5v.toFixed(2) : '0.00'}</text>`;
+                        s += `<text x="254" y="269" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">+3.3V</text>`;
+                        s += `<rect x="234" y="273" width="40" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="254" y="288" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">${gxPowered ? d.gxRail3v3.toFixed(2) : '0.00'}</text>`;
+                        s += `<text x="300" y="269" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">5VSB</text>`;
+                        s += `<rect x="280" y="273" width="40" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="300" y="288" fill="#ffffff" font-size="12" font-weight="bold" text-anchor="middle">${acPowered ? d.gxRail5vsb.toFixed(2) : '0.00'}</text>`;
+                        s += `<text x="250" y="355" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">FAN RPM</text>`;
+                        s += `<rect x="226" y="359" width="48" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="250" y="374" fill="${d.gxFanRpm === 0 ? '#ffaa00' : '#ffffff'}" font-size="13" font-weight="bold" text-anchor="middle">${d.gxFanRpm.toFixed(0)}</text>`;
+                        s += `<text x="306" y="355" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">TEMP</text>`;
+                        s += `<rect x="282" y="359" width="48" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="306" y="374" fill="${d.gxSinkC >= 78 ? '#ffaa00' : '#ffffff'}" font-size="13" font-weight="bold" text-anchor="middle">${d.gxSinkC.toFixed(0)} C</text>`;
+                        s += `<text x="278" y="391" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">DC PWR</text>`;
+                        s += `<rect x="246" y="395" width="64" height="20" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.3"/>`;
+                        s += `<text x="278" y="410" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">${gxPowered ? d.gxPdc.toFixed(1) : '0.0'}W</text>`;
+                        if (includeOuterPipeAndAc) {
+                            s += `<text x="398" y="418" fill="#00c4f0" font-size="10.5" font-weight="bold" text-anchor="middle">AC MAINS</text>`;
+                            s += `<rect x="356" y="422" width="84" height="26" rx="2" fill="#000000" stroke="${colAc}" stroke-width="1.6"/>`;
+                            s += `<text x="398" y="440" fill="#ffffff" font-size="16" font-weight="bold" text-anchor="middle">${acPowered ? d.gxMainsV.toFixed(0) : '0'}V</text>`;
+                            s += `<rect x="356" y="452" width="84" height="22" rx="2" fill="#000000" stroke="#d8e2e8" stroke-width="1.4"/>`;
+                            s += `<text x="398" y="468" fill="${colAc}" font-size="13" font-weight="bold" text-anchor="middle">${iAc.toFixed(2)}A  50HZ</text>`;
+                        }
+                        return s;
+                    };
+
+                    if (!isSplit) {
+                        body += `<rect x="-200" y="0" width="860" height="500" fill="#000000"/>`;
+                        body += renderDdrUnit(true);
+                        body += renderGxUnit(true);
+                        body += `<line x1="180" y1="255.933" x2="180" y2="221.867" stroke="${colPg}" stroke-width="3.6"/>`;
+                        body += `<circle cx="180" cy="239" r="9" fill="#000000" stroke="${colPg}" stroke-width="2"/>`;
+                        if (pgClosed) {
+                            body += `<line x1="180" y1="230" x2="180" y2="248" stroke="#00f000" stroke-width="2.8"/>`;
+                        } else {
+                            body += `<line x1="171" y1="239" x2="189" y2="239" stroke="#ffaa00" stroke-width="2.8"/>`;
+                        }
+                        body += `<text x="165" y="243" fill="#00c4f0" font-size="9" font-weight="bold" text-anchor="end">PG</text>`;
+                    } else {
+                        body += `<rect x="0" y="0" width="460" height="560" fill="#000000"/>`;
+
+                        body += `<g transform="translate(0, 30)">${renderDdrUnit(false)}</g>`;
+                        body += `<path d="M 180 64.067 L 180 28 L 213 28" fill="none" stroke="${colBus}" stroke-width="3.4" stroke-linejoin="round"/>`;
+                        body += `<polygon points="219,28 211,23.8 211,32.2" fill="${colBus}"/>`;
+                        body += `<circle cx="196" cy="28" r="8" fill="#000000" stroke="${colBus}" stroke-width="2"/>`;
+                        if (dcOkClosed) {
+                            body += `<line x1="188" y1="28" x2="204" y2="28" stroke="#00f000" stroke-width="2.6"/>`;
+                        } else {
+                            body += `<line x1="196" y1="20" x2="196" y2="36" stroke="#ffaa00" stroke-width="2.6"/>`;
+                        }
+                        body += `<text x="196" y="16" fill="#00c4f0" font-size="8.5" font-weight="bold" text-anchor="middle">DC OK</text>`;
+
+                        body += `<text x="263" y="12" fill="#00c4f0" font-size="10" font-weight="bold" text-anchor="middle">28V BUS</text>`;
+                        body += `<rect x="220" y="15" width="86" height="24" rx="2" fill="#000000" stroke="#00c4f0" stroke-width="1.5"/>`;
+                        body += `<text x="263" y="32" fill="#ffffff" font-size="15.5" font-weight="bold" text-anchor="middle">${secPowered ? d.vOut.toFixed(2) : '0.00'}V</text>`;
+                        body += `<rect x="220" y="41" width="86" height="20" rx="2" fill="#000000" stroke="#d8e2e8" stroke-width="1.3"/>`;
+                        body += `<text x="263" y="55" fill="${colBus}" font-size="12.5" font-weight="bold" text-anchor="middle">${secPowered ? d.iOut.toFixed(1) : '0.0'}A  ${secPowered ? d.loadPct.toFixed(0) : '0'}%</text>`;
+
+                        body += `<path d="M 236 513 L 284 513 L 284 485.933" fill="none" stroke="${colAc}" stroke-width="3.4" stroke-linejoin="round"/>`;
+                        body += `<g transform="translate(0, 20)">${renderGxUnit(false)}</g>`;
+                        body += `<line x1="284" y1="485.933" x2="284" y2="467" stroke="${colAc}" stroke-width="3.4"/>`;
+
+                        body += `<line x1="180" y1="275.933" x2="180" y2="251.867" stroke="${colPg}" stroke-width="3.6"/>`;
+                        body += `<circle cx="180" cy="263.9" r="8.5" fill="#000000" stroke="${colPg}" stroke-width="2"/>`;
+                        if (pgClosed) {
+                            body += `<line x1="180" y1="255.4" x2="180" y2="272.4" stroke="#00f000" stroke-width="2.8"/>`;
+                        } else {
+                            body += `<line x1="171.5" y1="263.9" x2="188.5" y2="263.9" stroke="#ffaa00" stroke-width="2.8"/>`;
+                        }
+                        body += `<text x="165" y="267.5" fill="#00c4f0" font-size="9" font-weight="bold" text-anchor="end">PG</text>`;
+
+                        body += `<text x="193" y="498" fill="#00c4f0" font-size="10" font-weight="bold" text-anchor="middle">AC MAINS</text>`;
+                        body += `<rect x="150" y="501" width="86" height="24" rx="2" fill="#000000" stroke="${colAc}" stroke-width="1.5"/>`;
+                        body += `<text x="193" y="518" fill="#ffffff" font-size="15.5" font-weight="bold" text-anchor="middle">${acPowered ? d.gxMainsV.toFixed(0) : '0'}V</text>`;
+                        body += `<rect x="150" y="527" width="86" height="20" rx="2" fill="#000000" stroke="#d8e2e8" stroke-width="1.3"/>`;
+                        body += `<text x="193" y="541" fill="${colAc}" font-size="12.5" font-weight="bold" text-anchor="middle">${iAc.toFixed(2)}A  50HZ</text>`;
+                    }
                 }
 
                 terminalNdDdrSvg.innerHTML = `<defs>${defs}</defs>${body}`;
@@ -18403,7 +19160,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     entries: [
                         actionEntry('', '<BUSES', { kind: 'folio', folio: { kind: 'elec-buses', page: 1 } }, '1L'),
                         actionEntry('', 'STRESS>', { kind: 'folio', folio: { kind: 'elec-ddr-strs', page: 1 } }, '1R'),
-                        actionEntry('', '<DDR I/O', { kind: 'folio', folio: { kind: 'elec-ddr-io', page: 1 } }, '2L'),
+                        actionEntry('', '<DDR/GX I/O', { kind: 'folio', folio: { kind: 'elec-ddr-io', page: 1 } }, '2L'),
                         actionEntry('', 'THERM>', { kind: 'folio', folio: { kind: 'elec-ddr-thrm', page: 1 } }, '2R'),
                         actionEntry('', '<DDR PROT', { kind: 'folio', folio: { kind: 'elec-ddr-prot', page: 1 } }, '3L'),
                         {
@@ -18442,7 +19199,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 color: 'green',
                                 size: 'large'
                             }]
-                        }
+                        },
+                        actionEntry('', 'KONTROLS>', { kind: 'folio', folio: { kind: 'kontrols', page: 1 } }, '6R')
                     ]
                 };
             };
@@ -18516,8 +19274,41 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             });
             const ddr120IoFolio = () => {
                 const buses = window.m2Electrical?.buses;
+                const page = Math.max(1, Math.min(2, folio.page || 1));
+                if (page === 2) {
+                    const psu = buses?.upstreamPsu || {};
+                    const v12 = Number.isFinite(psu.outputVoltageV) ? psu.outputVoltageV.toFixed(2) : '--';
+                    const pfc = Number.isFinite(psu.pfcBulkVoltageV) ? Math.round(psu.pfcBulkVoltageV) : '--';
+                    const mains = Number.isFinite(psu.mainsVoltageV) ? psu.mainsVoltageV.toFixed(0) : '230';
+                    const freq = Number.isFinite(psu.mainsFreqHz) ? psu.mainsFreqHz.toFixed(0) : '50';
+                    const acP = Number.isFinite(psu.acInputPowerW) ? (psu.acInputPowerW.toFixed(1) + 'W') : '--';
+                    const pEff = Number.isFinite(psu.efficiencyPct) ? psu.efficiencyPct.toFixed(1) : '--';
+                    const pf = Number.isFinite(psu.powerFactor) ? psu.powerFactor.toFixed(2) : '--';
+                    const pLoss = Number.isFinite(psu.powerLossW) ? (psu.powerLossW.toFixed(2) + 'W') : '--';
+                    const rip = Number.isFinite(psu.rippleMvPp) ? (psu.rippleMvPp.toFixed(1) + 'MV') : '--';
+                    const hold = Number.isFinite(psu.holdupMs) ? (Math.round(psu.holdupMs) + 'MS') : '--';
+                    const sinkT = Number.isFinite(psu.heatsinkTempC) ? (psu.heatsinkTempC.toFixed(1) + 'C') : '--';
+                    const fan = Number.isFinite(psu.fanRpm) ? (psu.fanRpm + 'RPM') : '0RPM';
+                    const db = Number.isFinite(psu.noiseDba) ? (psu.fanRpm === 0 ? '<6DB' : psu.noiseDba.toFixed(0) + 'DB') : '<6DB';
+                    const ocp = Number.isFinite(psu.ocpLimitA) ? (psu.ocpLimitA.toFixed(0) + 'A/' + (psu.pwrOk ? 'OK' : 'TRIP')) : '117A/OK';
+                    return {
+                        name: 'GX-1000 12V',
+                        entries: [
+                            ddr120Entry('VOUT/PFC', v12 + 'V/' + pfc + 'V', '1L', psu.pwrOk ? 'green' : 'amber'),
+                            ddr120Entry('MAINS AC', mains + 'V/' + freq + 'HZ', '1R', 'green'),
+                            ddr120Entry('AC IN P', acP, '2L', 'white'),
+                            ddr120Entry('PSU EFF/PF', pEff + '%/' + pf, '2R', 'green'),
+                            ddr120Entry('PSU LOSS', pLoss, '3L', 'white'),
+                            ddr120Entry('12V RIPPLE', rip, '3R', 'white'),
+                            ddr120Entry('HOLDUP T5', hold, '4L', 'green'),
+                            ddr120Entry('OPTISINK T', sinkT, '4R', 'white'),
+                            ddr120Entry('FAN RPM/DB', fan + '/' + db, '5L', 'green'),
+                            ddr120Entry('WT7527 OCP', ocp, '5R', psu.tripped ? 'red' : 'green')
+                        ]
+                    };
+                }
                 const vterm = Number.isFinite(buses?.inputTerminalVoltage) ? buses.inputTerminalVoltage.toFixed(2) : '--';
-                const vin = Number.isFinite(buses?.upstreamSupplyVoltage) ? buses.upstreamSupplyVoltage.toFixed(1) : '--';
+                const vin = Number.isFinite(buses?.upstreamSupplyVoltage) ? buses.upstreamSupplyVoltage.toFixed(2) : '--';
                 const eff = Number.isFinite(buses?.efficiencyPct) ? (buses.efficiencyPct.toFixed(1) + '%') : '--';
                 const loss = Number.isFinite(buses?.powerLossW) ? (buses.powerLossW.toFixed(2) + 'W') : '--';
                 const iin = Number.isFinite(buses?.inputCurrent) ? (buses.inputCurrent.toFixed(3) + 'A') : '--';
@@ -18604,7 +19395,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     ]
                 };
             };
-            const ddr120ThermFolio = () => {
+            const ddr120ThermFolio = () => ({
+                name: 'THERM',
+                entries: [
+                    actionEntry('', '<DDR', { kind: 'folio', folio: { kind: 'elec-ddr-thrm-ddr', page: 1 } }, '1L'),
+                    actionEntry('', '<GX1000', { kind: 'folio', folio: { kind: 'elec-ddr-thrm-gx', page: 1 } }, '2L')
+                ]
+            });
+            const ddr120ThermDdrFolio = () => {
                 const buses = window.m2Electrical?.buses;
                 const page = Math.max(1, Math.min(2, folio.page || 1));
                 const tempEntry = (title, nodeKey, limitC, field) => {
@@ -18657,6 +19455,65 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     ]
                 };
             };
+            const gx1000ThermFolio = () => {
+                const buses = window.m2Electrical?.buses;
+                const psu = buses?.upstreamPsu || {};
+                const page = Math.max(1, Math.min(2, folio.page || 1));
+                const amb = Number.isFinite(buses?.ambientTempC) ? buses.ambientTempC : 5.0;
+                const sink = Number.isFinite(psu.heatsinkTempC) ? psu.heatsinkTempC : (amb + 2.4);
+                const i12 = Number.isFinite(psu.loadCurrentA) ? psu.loadCurrentA : (Number(buses?.inputCurrent) || 0);
+                const lf = i12 / 83.0;
+                const gxTempEntry = (title, tempC, limitC, field) => {
+                    const txt = Number.isFinite(tempC) ? (tempC.toFixed(1) + '/' + limitC + 'C') : '□□';
+                    const ratio = Number.isFinite(tempC) ? tempC / limitC : 0;
+                    const color = ratio >= 0.85 ? 'red' : ratio >= 0.65 ? 'amber' : 'green';
+                    return ddr120Entry(title, txt, field, color);
+                };
+                const tNtc = amb + 1.8 + lf * 18.5;
+                const tBrg = sink + 1.1 + lf * 13.0;
+                const tPfc = sink + 1.4 + lf * 14.0;
+                const tSic = sink + 1.2 + lf * 12.8;
+                const tKhe = amb + 1.6 + lf * 9.5;
+                const tLlc = sink + 1.3 + lf * 13.5;
+                const tVee = sink + 2.1 + lf * 16.2;
+                const tSr = sink + 1.2 + lf * 15.0;
+                const tVrm = amb + 2.5 + lf * 8.4;
+                if (page === 1) {
+                    return {
+                        name: 'GX-1000 THRM',
+                        entries: [
+                            gxTempEntry('MF72 NTC1', tNtc, 125, '1L'),
+                            gxTempEntry('GBU1508 B1', tBrg, 125, '1R'),
+                            gxTempEntry('AOB125 PFC', tPfc, 125, '2L'),
+                            gxTempEntry('IDH08G SIC', tSic, 135, '2R'),
+                            gxTempEntry('KHE 820UF', tKhe, 105, '3L'),
+                            gxTempEntry('AOB190 LLC', tLlc, 125, '3R'),
+                            gxTempEntry('VEE22 XFMR', tVee, 130, '4L'),
+                            gxTempEntry('PSMN1R4 12', tSr, 125, '4R'),
+                            gxTempEntry('PSMN4R0 VR', tVrm, 125, '5L'),
+                            gxTempEntry('OPTISINK T', sink, 110, '5R')
+                        ]
+                    };
+                }
+                const fanRpm = Number.isFinite(psu.fanRpm) ? psu.fanRpm : 0;
+                const fanDb = Number.isFinite(psu.noiseDba) ? (fanRpm === 0 ? '<6DB' : psu.noiseDba.toFixed(0) + 'DB') : '<6DB';
+                const exhDt = Number.isFinite(psu.exhaustDeltaC) ? ('+' + psu.exhaustDeltaC.toFixed(1) + 'C') : '+1.5C';
+                return {
+                    name: 'GX-1000 THRM',
+                    entries: [
+                        gxTempEntry('CM6500 PFC', amb + 2.8 + lf * 7.2, 115, '1L'),
+                        gxTempEntry('CM6901 LLC', amb + 3.0 + lf * 7.8, 115, '1R'),
+                        gxTempEntry('APW7159 VR', amb + 2.6 + lf * 6.9, 115, '2L'),
+                        gxTempEntry('WT7527 SUP', amb + 2.0 + lf * 4.5, 110, '2R'),
+                        gxTempEntry('FPCAP POL', amb + 1.7 + lf * 8.2, 105, '3L'),
+                        ddr120Entry('FAN RPM/DB', fanRpm + 'RPM/' + fanDb, '3R', 'green'),
+                        ddr120Entry('EXHAUST DT', exhDt, '4L', 'green'),
+                        ddr120Entry('HOTTEST', 'VEE22 ' + tVee.toFixed(1) + 'C', '4R', 'amber'),
+                        ddr120Entry('AMB TEMP', amb.toFixed(1) + 'C', '5L', 'green'),
+                        ddr120Entry('FAN MODE', fanRpm === 0 ? '0-RPM HYB' : 'ACTIVE FDB', '5R', 'green')
+                    ]
+                };
+            };
             const kontrolsFolio = () => {
                 let column = 0;
                 const valueRuns = [];
@@ -18684,7 +19541,43 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         { title: 'ROTATE', value: '', field: '4L', ndToggle: 'rotate', valueRuns: toggleRuns(terminalNdRotateOn) },
                         actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '2R'),
                         actionEntry('', 'STEP>', { kind: 'nd-step' }, '3R'),
-                        actionEntry('VIEW', 'ALTERNATE>', { kind: 'nd-view-alternate' }, '4R')
+                        actionEntry('', 'VIEW>', { kind: 'folio', folio: { kind: 'dysplay-view', page: 1 } }, '4R')
+                    ]
+                };
+            };
+            const dysplayViewFolio = () => {
+                const monitorTargets = [
+                    { key: 'ddr', label: 'DDR' },
+                    { key: 'gx', label: 'GX' },
+                    { key: 'both', label: 'BOTH' }
+                ];
+                let column = 0;
+                const monitorRuns = [];
+                monitorTargets.forEach((item, index) => {
+                    if (index) {
+                        monitorRuns.push({ column, text: '<>', color: 'white', size: 'small' });
+                        column += 2;
+                    }
+                    const active = terminalNdMonitorTarget === item.key;
+                    monitorRuns.push({
+                        column,
+                        text: item.label,
+                        color: active ? 'green' : 'gray',
+                        size: active ? 'large' : 'small'
+                    });
+                    column += item.label.length;
+                });
+                return {
+                    name: 'DYSPLAY VIEW',
+                    entries: [
+                        actionEntry('', '<ALTERNATE', { kind: 'nd-view-alternate' }, '1L'),
+                        {
+                            title: 'MONITOR',
+                            value: '',
+                            field: '2L',
+                            action: { kind: 'nd-monitor-cycle' },
+                            valueRuns: monitorRuns
+                        }
                     ]
                 };
             };
@@ -19104,12 +19997,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const folioRegistry = {
                 index: indexFolio,
                 kontrols: kontrolsFolio,
+                'dysplay-view': dysplayViewFolio,
                 elec: electricalFolio,
                 'elec-buses': electricalBusesFolio,
                 'elec-ddr-io': ddr120IoFolio,
                 'elec-ddr-prot': ddr120ProtFolio,
                 'elec-ddr-strs': ddr120StressFolio,
                 'elec-ddr-thrm': ddr120ThermFolio,
+                'elec-ddr-thrm-ddr': ddr120ThermDdrFolio,
+                'elec-ddr-thrm-gx': gx1000ThermFolio,
                 global: globalFolio,
                 'per-song': perSongFolio,
                 'legs-song-search': legsSongSearchFolio,
@@ -19136,7 +20032,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     const last = savedLegSlots.reduce((index, slot, offset) => slot ? offset : index, -1);
                     return folio.kind === 'save-curr' ? Math.floor((last + 1) / 4) + 1 : Math.max(1, Math.floor(last / 4) + 1);
                 }
-                if (folio.kind === 'elec-buses' || folio.kind === 'elec-ddr-thrm') return 2;
+                if (folio.kind === 'elec-buses' || folio.kind === 'elec-ddr-io' || folio.kind === 'elec-ddr-thrm-ddr' || folio.kind === 'elec-ddr-thrm-gx') return 2;
                 if (folio.kind === 'archive') return 2;
                 return 1;
             };
@@ -19177,7 +20073,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     actionEntry('', '<PAGE', { kind: 'page', folio: { ...folio, page: currentPage - 1 } }) : folio.returnTarget ?
                     actionEntry('', folio.returnLabel || '<RE-TURN', { kind: 'back', folio: folio.returnTarget }) : entries.get('6L') || null);
                 if (currentPage < total) {
-                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs', 'elec-buses', 'elec-ddr-thrm'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
+                    entries.set('6R', actionEntry('', ['legs', 'save-curr', 'load-legs', 'elec-buses', 'elec-ddr-io', 'elec-ddr-thrm-ddr', 'elec-ddr-thrm-gx'].includes(folio.kind) ? 'PAGE>' : 'PAGE >', {
                         kind: 'page', folio: { ...folio, page: currentPage + 1 }
                     }));
                 }
@@ -19460,6 +20356,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 if (action.kind === 'nd-view-alternate') {
                     cycleTerminalNdViewMode();
+                    return;
+                }
+                if (action.kind === 'nd-monitor-cycle') {
+                    cycleTerminalNdMonitorTarget();
+                    renderFolio();
                     return;
                 }
                 if (action.kind === 'run-test') {
