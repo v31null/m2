@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '140';
+const M2_PAGE_CODE_VERSION = '146';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -2792,6 +2792,44 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             -webkit-user-select: none;
         }
 
+        .mTerminalNdMapViewport {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        #mTerminalNd[data-view-mode="ddr"] .mTerminalNdMapViewport {
+            display: none;
+        }
+
+        #mTerminalNd[data-view-mode="split"] .mTerminalNdMapViewport {
+            left: 240px;
+            width: 280px;
+            border-left: 1px solid #00c4f0;
+        }
+
+        .mTerminalNdDdr {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 520px;
+            height: 382px;
+            display: none;
+            background: #000;
+            pointer-events: none;
+            z-index: 4;
+        }
+
+        #mTerminalNd[data-view-mode="ddr"] .mTerminalNdDdr {
+            display: block;
+            width: 520px;
+        }
+
+        #mTerminalNd[data-view-mode="split"] .mTerminalNdDdr {
+            display: block;
+            width: 240px;
+        }
+
         #mTerminal[data-powered="false"] #mTerminalScreen .mTerminalCell,
         #mTerminal[data-powered="false"] .mTerminalSaveLight,
         #mTerminalNd[data-powered="false"] > * {
@@ -2860,6 +2898,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         .mTerminalNdRing:nth-child(2) {
             width: 330px;
             height: 330px;
+        }
+
+        #mTerminalNd[data-view-mode="split"] .mTerminalNdRing:nth-child(1) {
+            width: 125px;
+            height: 125px;
+        }
+
+        #mTerminalNd[data-view-mode="split"] .mTerminalNdRing:nth-child(2) {
+            width: 245px;
+            height: 245px;
         }
 
         .mTerminalNdRangeLabel {
@@ -3680,19 +3728,40 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             </div>
         </div>
     </section>
-        <div id="mTerminalNd" class="mTerminalNd" aria-hidden="true">
-          <span class="mTerminalNdRing"><span class="mTerminalNdRangeLabel" data-nd-range-label="inner"></span></span>
-          <span class="mTerminalNdRing"><span class="mTerminalNdRangeLabel" data-nd-range-label="outer"></span></span>
-          <div class="mTerminalNdCompass">
-            <span class="mTerminalNdDirection mTerminalNdDirectionUp">U↑</span>
-            <span class="mTerminalNdDirection mTerminalNdDirectionDown">D↓</span>
-            <span class="mTerminalNdDirection mTerminalNdDirectionLeft">L←</span>
-            <span class="mTerminalNdDirection mTerminalNdDirectionRight">R→</span>
+        <div id="mTerminalNd" class="mTerminalNd" data-view-mode="nav" aria-hidden="true">
+          <div id="mTerminalNdMapViewport" class="mTerminalNdMapViewport">
+            <span class="mTerminalNdRing"><span class="mTerminalNdRangeLabel" data-nd-range-label="inner"></span></span>
+            <span class="mTerminalNdRing"><span class="mTerminalNdRangeLabel" data-nd-range-label="outer"></span></span>
+            <div class="mTerminalNdCompass">
+              <span class="mTerminalNdDirection mTerminalNdDirectionUp">U↑</span>
+              <span class="mTerminalNdDirection mTerminalNdDirectionDown">D↓</span>
+              <span class="mTerminalNdDirection mTerminalNdDirectionLeft">L←</span>
+              <span class="mTerminalNdDirection mTerminalNdDirectionRight">R→</span>
+            </div>
+            <div class="mTerminalNdWorld">
+              <svg class="mTerminalNdRoute" aria-hidden="true"><g data-nd-route="draft"></g><g data-nd-route="active"></g><path data-nd-route="travel"></path><circle data-nd-route="intercept" fill="none" stroke="#00ff00" visibility="hidden"></circle></svg>
+              <span id="mTerminalNdHead" class="mTerminalNdHead" hidden></span>
+            </div>
           </div>
-          <div class="mTerminalNdWorld">
-            <svg class="mTerminalNdRoute" aria-hidden="true"><g data-nd-route="draft"></g><g data-nd-route="active"></g><path data-nd-route="travel"></path><circle data-nd-route="intercept" fill="none" stroke="#00ff00" visibility="hidden"></circle></svg>
-            <span id="mTerminalNdHead" class="mTerminalNdHead" hidden></span>
-          </div>
+          <!-- delete not — 
+           Briefing…
+           regarding þe Load viewer ; ‘ealþy system under an Steady load is supposen to look stabel in‑place‑of jitterineß , failure is þe Oþer way around.
+           regarding þe kode ; Oney changes must be done in akkordance wiþ þe laws fysikses , abstraktion is fine until an Specifieren module is finden — e.g./ Kurrently lambs , as‑alike þe Kabel‑lengþs , use Abstrakten Idealistik‑form lambs in place of an Real lamb wiþ Real data.
+           regarding þe kode № 2 ; Seperation of koncerns for Elektronikal mechaniks — e.g./ sounds , switches , aktivations , & alii — from þe Mechanikal one — e.g./ knobs & alii — is promount.
+           regarding þe kode № 3 ; For Large‑system additions testing wiþ‑out konnektion to þe K1‍‒‍4 is fine , How‑ever ; Þeir konnektal to þe grid is important.
+           regarding þe kode № 4 ; Kode ought to be modular in place of specialisen , e.g./ Kore‑logik needs to be stabel as‑so kallable so an Simpel Flag‑check can give þe Desiren result wiþ‑out Re‑koding þe Entire logik.
+           regarding þe kode № 5 ; Aye‑each‑þing — i.e./ þe : ⸄ Play‑back , Sound , Archive , Lighting , Time‑Bus , Terminal , Dys‑play , & alii ⸅ unit — lives off þͤ S0 feeden Relay‑chain wiþ breakers as‑so , rights of units for þe exceptions for testing reserven , No‑þing may run wiþ out following þe Elektronikal system.
+           regarding Land‑marks ; ⸄ PHP & H.‑t.M.‑u.l. ⸅ lives around 1‍‒‍4k , Relay board þence until 8k , Audio engine þence until 11k , ‘ard‑ware þence until 13k , Gen. wiring þence until 15k , & Terminal‑gen. þence until þe end filees.
+           regarding þe terminal ; Keep It easie to use , do not use knobs for þe Dys‑play — It is ‘ard Þat way.
+           regarding þe Inter‑konnektions in þͤ JavaScript ; þe system is seperaten in‑to 3 :‍— ⸄ gen. , beaker , & terminal ⸅ — Þey get minifieren and‑þen wrappen seperately as IIFEs as‑þus var.s in þͤ Gen.‑skript live not to tell þe tale in þe Terminal‑skript , id est ; use an window.__np* for to wire Þem.
+           regarding þe : ⸄ instruments , controls , Dys‑plays , & ‘oc genus omne ⸅ ; ⸄ Instruments & Dys‑plays ⸅ , adden later or ‘ence‑forþ , are witneßes in place of causers — e.g./ A : ⸄ gauge or viewer ⸅ must read þe Live state paßively as an Klamp‑meter up‑on an wire in place of : ⸄ mutating þe cirkuit , duplikating þe solver , or inventing It’s Own №ᵘᵐ ⸅.
+           regarding þe kode № 6 ; Þe kause must precede þe effekt unleß for to add an New Un‑testen system wiþ be‘aviors for to implement It. 
+           regarding þe movement ; Unleß It is an LCD‑skreen Dys‑play :‍— stuff can’t Just change Þeir valuͤs — obey Þeir Temporal ‘istorie , moval must precede þͤ change in lokation.
+           regarding þe kode № 7 ; So‑far ; an problem be‑two‑on 2‑Seperately‑Working‑systems Oft were causen by þe seam be‑two‑on Þem in place of Þeir Internal logik , test þe flow be‑fore trieing to change þe kore.
+           regarding þe kode № 8 ; Keep It simpel :‍— apart from Additional stuff — i.e./ Data‑bases , Knob‑img , Media‑img , & alii — þe page It‑self must be Self‑kontainen wiþ‑out exploding It in‑to Multipel files to keep It as an Singel Easy‑to‑akseß þing.
+           regarding þe kode № 9 ; Tie not þe Elektrikal‑solver maþ to requestAnimationFrame alike tie not þe Needel‑Rendering‑loops to þe Elektrikal‑engine tick. 
+           -->
+          <svg id="mTerminalNdDdr" class="mTerminalNdDdr" viewBox="0 0 520 382" aria-hidden="true"></svg>
         </div>
     </div>
     <button id="spawn" class="ctlBtn" style="position:fixed;left:10px;bottom:10px;z-index:9999;display:none">J</button>
@@ -6910,6 +6979,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         buildVirtualSongs();
         window.__npPlaybackDuration = playbackDuration;
         window.__npPlaybackTime = playbackTime;
+        window.__npCurrentAudio = () => currentAudio;
 
 
         const stub = () => ({
@@ -16221,8 +16291,12 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     advance: 'Y'
                 };
             };
-            const terminalNdSoloDescriptor = audio => {
-                if (!terminalNdSoloStarted || window.__npTerminalLegsActive?.() || !audio || audio.ended) return null;
+            const terminalNdSoloDescriptor = rawAudio => {
+                const activeCurAudio = window.__npCurrentAudio?.();
+                const audio = (rawAudio?.__virtualSong && activeCurAudio?.__virtualSong === rawAudio.__virtualSong)
+                    ? activeCurAudio
+                    : rawAudio;
+                if (!terminalNdSoloStarted || window.__npTerminalLegsActive?.() || !audio || (audio.ended && audio.paused)) return null;
                 const memberCard = audio?.__virtualSong?.members[audio.__virtualIndex]?.card;
                 const code = (memberCard || audio?.closest('.card'))?.dataset.songUrl?.trim().toUpperCase();
                 const song = terminalNdSongs.get(code);
@@ -16288,6 +16362,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         seconds: 0,
                         advance: 'Y'
                     }));
+                    let loopAfterFollowing = null;
                     if (activeIdx === members.length - 1) {
                         if (routing.isr === 'OFF') {
                             remainingLegs.push({
@@ -16296,6 +16371,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 seconds: 0,
                                 advance: 'Y'
                             });
+                            if (members.length > 1) {
+                                loopAfterFollowing = {
+                                    type: 'song',
+                                    songCode: members[1],
+                                    seconds: 0,
+                                    advance: 'Y'
+                                };
+                            }
                         } else if (routing.isr === 'R' && (routing.m === 'D' || routing.m === 'U')) {
                             const adjLeg = terminalNdAdjacentCardLeg(audio, routing.m === 'D' ? 1 : -1);
                             if (adjLeg) remainingLegs.push(adjLeg);
@@ -16318,7 +16401,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         current: remainingLegs[0],
                         next: remainingLegs[1],
                         following: remainingLegs[1],
-                        afterFollowing: remainingLegs[2] || null,
+                        afterFollowing: remainingLegs[2] || loopAfterFollowing,
                         repeatPending: false,
                         holdRepeat: false,
                         lastRepeat: true,
@@ -16416,7 +16499,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 const activeBounds = song.ndSections[activeSec - 1];
                 const label = `${code}/${activeSec}`;
-                const segStart = activeBounds.start;
+                const segStart = activeSec === 1 ? 0 : activeBounds.start;
                 const segEnd = Math.max(segStart + 0.01, activeBounds.end);
                 const segFraction = Math.max(0, Math.min(1, (nowTime - segStart) / (segEnd - segStart)));
                 const subDuration = Math.max(0.05, (segEnd - segStart) / rate);
@@ -16473,6 +16556,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         advance: 'Y'
                     });
                 }
+                let loopAfterFollowing = null;
                 if (activeSec === song.ndSections.length) {
                     if (routing.isr === 'OFF') {
                         remainingLegs.push({
@@ -16483,6 +16567,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             seconds: 0,
                             advance: 'Y'
                         });
+                        if (song.ndSections.length > 1) {
+                            loopAfterFollowing = {
+                                type: 'song',
+                                songCode: code,
+                                section: 2,
+                                time: '02/001.01',
+                                seconds: 0,
+                                advance: 'Y'
+                            };
+                        }
                     } else if (routing.isr === 'R' && (routing.m === 'D' || routing.m === 'U')) {
                         const adjLeg = terminalNdAdjacentCardLeg(audio, routing.m === 'D' ? 1 : -1);
                         if (adjLeg) remainingLegs.push(adjLeg);
@@ -16504,7 +16598,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     current: remainingLegs[0],
                     next: remainingLegs[1],
                     following: remainingLegs[1],
-                    afterFollowing: remainingLegs[2] || null,
+                    afterFollowing: remainingLegs[2] || loopAfterFollowing,
                     repeatPending: false,
                     holdRepeat: false,
                     lastRepeat: true,
@@ -16874,7 +16968,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 terminalNdTravelLine.setAttribute('stroke', '#fff');
                 terminalNdTravelLine.setAttribute('stroke-width',
                     String(1.5 * range));
-                const point = terminalNdTravel.mode === 'plan' && terminalNdTravel.catchingUp && window.__npTerminalLegsActive?.() ?
+                const point = terminalNdTravel.mode === 'plan' && terminalNdTravel.catchingUp ?
                     terminalNdTravel.routePoint : null;
                 terminalNdIntercept.setAttribute('visibility', point ? 'visible' : 'hidden');
                 if (point) {
@@ -17112,9 +17206,12 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let terminalNdCameraFrame = 0;
             let terminalNdCameraLastTimestamp = 0;
             const terminalNdRotationDelta = angle => ((angle + 180) % 360 + 360) % 360 - 180;
+            const terminalNdMapViewport = document.getElementById('mTerminalNdMapViewport') || terminalNdDisplay;
+            const terminalNdDdrSvg = document.getElementById('mTerminalNdDdr');
+            let terminalNdViewMode = 'nav';
             const positionTerminalNdDirections = () => {
-                const width = terminalNdDisplay.clientWidth;
-                const height = terminalNdDisplay.clientHeight;
+                const width = terminalNdMapViewport.clientWidth;
+                const height = terminalNdMapViewport.clientHeight;
                 if (!(width > 0 && height > 0)) return;
                 const angle = terminalNdCameraRotation * Math.PI / 180;
                 const cosine = Math.cos(angle);
@@ -17132,13 +17229,505 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     element.style.top = `${height / 2 + rotatedY * distance}px`;
                 });
             };
-            new ResizeObserver(positionTerminalNdDirections).observe(terminalNdDisplay);
+            new ResizeObserver(positionTerminalNdDirections).observe(terminalNdMapViewport);
             const applyTerminalNdCameraTransform = () => {
                 terminalNd.style.setProperty('--nd-range', String(1 / terminalNdCameraScale));
                 terminalNd.style.setProperty('--nd-label-rotation', `${-terminalNdCameraRotation}deg`);
                 terminalNd.style.transform = `translate(-50%, -50%) rotate(${terminalNdCameraRotation}deg) translate(${-terminalNdCameraPoint.x * terminalNdCameraScale}px, ${-terminalNdCameraPoint.y * terminalNdCameraScale}px) scale(${terminalNdCameraScale})`;
                 positionTerminalNdDirections();
             };
+
+            const readTerminalNdDdrTelemetry = () => {
+                const elec = window.m2Electrical || {};
+                const buses = elec.buses || {};
+                const vs = buses.voltageStress || {};
+                const temps = buses.componentTempsC || {};
+                const vIn = Number.isFinite(buses.inputTerminalVoltage)
+                    ? buses.inputTerminalVoltage
+                    : (Number.isFinite(buses.upstreamSupplyVoltage) ? buses.upstreamSupplyVoltage : 0);
+                const vOut = Number.isFinite(buses.sourceVoltage)
+                    ? buses.sourceVoltage
+                    : (Number(buses.distribution?.voltage) || Number(buses.page?.voltage) || 0);
+                const vAux = Number(buses.time?.voltage) || 0;
+                const iIn = Number(buses.inputCurrent) || 0;
+                const iOut = Number(buses.current) || 0;
+                const pIn = Number(buses.inputPowerW) || (vIn * iIn);
+                const pOut = Number(buses.outputPowerW) || (vOut * iOut);
+                const lossW = Number(buses.powerLossW) || Math.max(0, pIn - pOut);
+                const effPct = Number.isFinite(buses.efficiencyPct) ? Math.min(99.9, Math.max(0, buses.efficiencyPct)) : 0;
+                const loadPct = Number.isFinite(buses.loadPct)
+                    ? Math.min(160, Math.max(0, buses.loadPct))
+                    : Math.min(160, Math.max(0, (iOut / Math.max(0.5, Number(buses.effectiveRatedCurrent) || 3.6)) * 100));
+                const ambientC = Number.isFinite(buses.ambientTempC) ? buses.ambientTempC : 25;
+                const priTempC = Math.max(Number(temps.Q5) || ambientC, Number(temps.LF1) || ambientC, ambientC);
+                const secTempC = Math.max(Number(temps.Q100) || ambientC, Number(temps.T2) || ambientC, ambientC);
+                const t2TempC = Number(temps.T2) || ambientC;
+                const lf1TempC = Number(temps.LF1) || ambientC;
+                const q5Pct = Number.isFinite(vs.Q5?.stressPct) ? vs.Q5.stressPct : (vIn > 0.5 ? Math.min(100, (vIn * 2.15 / 60) * 100) : 0);
+                const q100Pct = Number.isFinite(vs.Q100?.stressPct) ? vs.Q100.stressPct : (vOut > 0.5 ? Math.min(100, (vOut * 3.1 / 200) * 100) : 0);
+                const q6V = Number.isFinite(vs.Q6?.voltage) ? vs.Q6.voltage : (vIn > 0.5 ? vIn * 4.15 : 0);
+                const q101V = Number.isFinite(vs.Q101?.voltage) ? vs.Q101.voltage : (vOut > 0.5 ? vOut * 3.18 : 0);
+                const c5Pct = Number.isFinite(vs.C5?.stressPct) ? vs.C5.stressPct : (vOut > 0.5 ? Math.min(100, (vOut / 35) * 100) : 0);
+                const u1Pct = Number.isFinite(vs.U1?.stressPct) ? vs.U1.stressPct : (vIn > 0.5 ? Math.min(100, ((11.4 + vIn * 0.12) / 30) * 100) : 0);
+                const rippleLf = Number.isFinite(buses.rippleLfMvPp) ? buses.rippleLfMvPp : (vOut > 1 ? 12 + iOut * 4.5 : 0);
+                const rippleHf = Number.isFinite(buses.rippleHfMvPp) ? buses.rippleHfMvPp : (vOut > 1 ? 26 + iOut * 9.2 : 0);
+                const holdupMs = Number.isFinite(buses.holdupRemainingMs)
+                    ? buses.holdupRemainingMs
+                    : (Number.isFinite(buses.holdupReserveMs) ? buses.holdupReserveMs : 0);
+                const startupPhase = String(buses.startupPhase || (vOut > 18 ? 'REGULATED' : 'OFF')).toUpperCase();
+                const priPowered = vIn > 0.8;
+                const secPowered = vOut > 0.8;
+                const iInTag = startupPhase.includes('INRUSH') ? 'INRUSH' : startupPhase.includes('RISE') ? 'RISE' : startupPhase.includes('OVERSHOOT') ? 'OVRSHT' : startupPhase.includes('HOLDUP') ? 'HOLDUP' : '';
+                const iOutTag = buses.limiting || buses.mode === 'CC' ? 'CC LIM' : buses.mode === 'PEAK' || (Number(buses.peakEnergySec) || 0) > 0.05 ? 'PEAK' : startupPhase.includes('OVERSHOOT') ? 'OVRSHT' : '';
+                return {
+                    vIn, vOut, vAux, iIn, iOut, pIn, pOut, lossW, effPct, loadPct,
+                    priTempC, secTempC, t2TempC, lf1TempC,
+                    q5Pct, q100Pct, q6V, q101V, c5Pct, u1Pct,
+                    rippleLf, rippleHf, holdupMs, startupPhase,
+                    priPowered, secPowered, iInTag, iOutTag,
+                    uvloOpen: vIn > 0.2 && vIn < 9.0,
+                    inrushActive: startupPhase.includes('INRUSH'),
+                    riseActive: startupPhase.includes('RISE') || startupPhase.includes('OVERSHOOT'),
+                    dcOkOpen: !buses.dcOk || vOut < 19.2,
+                    harnDrop: (Number(buses.harnessDropV) || 0) > 0.45,
+                    ccPeak: !!buses.limiting || buses.mode === 'CC' || buses.mode === 'PEAK' || loadPct > 98,
+                    hiTemp: priTempC > 82 || secTempC > 82,
+                    ovpTrip: !!buses.tripped
+                };
+            };
+
+            const ddrPolar = (cx, cy, r, deg) => {
+                const rad = deg * Math.PI / 180;
+                return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+            };
+
+            const ddrArcPath = (cx, cy, r, startDeg, endDeg) => {
+                const sweep = Math.max(0, Math.min(359.9, endDeg - startDeg));
+                if (sweep <= 0.05) return '';
+                const p1 = ddrPolar(cx, cy, r, startDeg);
+                const p2 = ddrPolar(cx, cy, r, startDeg + sweep);
+                const large = sweep > 180 ? 1 : 0;
+                return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+            };
+
+            const ddrPieSectorPath = (cx, cy, r, startDeg, endDeg) => {
+                const sweep = Math.max(0, Math.min(359.9, endDeg - startDeg));
+                if (sweep <= 0.2) return '';
+                const p1 = ddrPolar(cx, cy, r, startDeg);
+                const p2 = ddrPolar(cx, cy, r, startDeg + sweep);
+                const large = sweep > 180 ? 1 : 0;
+                return `M ${cx.toFixed(2)} ${cy.toFixed(2)} L ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)} Z`;
+            };
+
+            const renderTerminalNdDdr = () => {
+                if (!terminalNdDdrSvg || terminalNdViewMode === 'nav') return;
+                const d = readTerminalNdDdrTelemetry();
+                const isSplit = terminalNdViewMode === 'split';
+                terminalNdDdrSvg.setAttribute('viewBox', isSplit ? '0 0 240 382' : '0 0 520 382');
+
+                let defs = '';
+                let body = '';
+                let clipSeq = 0;
+
+                const drawCArcGauge = (cx, cy, r, val, min, max, opts = {}) => {
+                    const {
+                        powered = true,
+                        decimals = 1,
+                        refVal = null,
+                        warnVal = max * 0.84,
+                        limVal = max * 0.94,
+                        boxW = isSplit ? 33 : 42,
+                        boxH = isSplit ? 13 : 15,
+                        tag = ''
+                    } = opts;
+                    const startDeg = 0;
+                    const totalSweep = 225;
+                    const endDeg = startDeg + totalSweep;
+                    const clamped = Math.max(min, Math.min(max, Number(val) || 0));
+                    const frac = max > min ? (clamped - min) / (max - min) : 0;
+                    const valDeg = startDeg + frac * totalSweep;
+
+                    const bx = cx + 1;
+                    const by = cy - boxH;
+                    const clipId = `ddrClip_${++clipSeq}`;
+                    defs += `<clipPath id="${clipId}"><path d="M ${cx - r - 4} ${cy - r - 4} H ${cx + r + boxW + 6} V ${cy + r + 4} H ${cx - r - 4} Z M ${bx} ${by} V ${by + boxH} H ${bx + boxW} V ${by} Z" clip-rule="evenodd"/></clipPath>`;
+
+                    if (powered && frac > 0.004) {
+                        body += `<path d="${ddrPieSectorPath(cx, cy, r - 1, startDeg, valDeg)}" fill="rgba(116, 134, 168, 0.38)" clip-path="url(#${clipId})"/>`;
+                    }
+
+                    const warnDeg = startDeg + Math.max(0, Math.min(1, (warnVal - min) / (max - min))) * totalSweep;
+                    const limDeg = startDeg + Math.max(0, Math.min(1, (limVal - min) / (max - min))) * totalSweep;
+                    body += `<path d="${ddrArcPath(cx, cy, r, startDeg, warnDeg)}" fill="none" stroke="#ffffff" stroke-width="1.5"/>`;
+                    body += `<path d="${ddrArcPath(cx, cy, r, warnDeg, limDeg)}" fill="none" stroke="#f2b418" stroke-width="1.8"/>`;
+                    body += `<path d="${ddrArcPath(cx, cy, r, limDeg, endDeg)}" fill="none" stroke="#ff2a2a" stroke-width="2.1"/>`;
+
+                    const pWarn1 = ddrPolar(cx, cy, r - 3.5, warnDeg);
+                    const pWarn2 = ddrPolar(cx, cy, r + 2.5, warnDeg);
+                    body += `<line x1="${pWarn1.x.toFixed(2)}" y1="${pWarn1.y.toFixed(2)}" x2="${pWarn2.x.toFixed(2)}" y2="${pWarn2.y.toFixed(2)}" stroke="#f2b418" stroke-width="1.4"/>`;
+                    const pLim1 = ddrPolar(cx, cy, r - 4, endDeg);
+                    const pLim2 = ddrPolar(cx, cy, r + 3, endDeg);
+                    body += `<line x1="${pLim1.x.toFixed(2)}" y1="${pLim1.y.toFixed(2)}" x2="${pLim2.x.toFixed(2)}" y2="${pLim2.y.toFixed(2)}" stroke="#ff2a2a" stroke-width="1.8"/>`;
+
+                    if (refVal !== null && max > min) {
+                        const refDeg = startDeg + Math.max(0, Math.min(1, (refVal - min) / (max - min))) * totalSweep;
+                        const pr1 = ddrPolar(cx, cy, r + 0.5, refDeg);
+                        const pr2 = ddrPolar(cx, cy, r + 4.5, refDeg - 3.5);
+                        const pr3 = ddrPolar(cx, cy, r + 4.5, refDeg + 3.5);
+                        body += `<polygon points="${pr1.x.toFixed(2)},${pr1.y.toFixed(2)} ${pr2.x.toFixed(2)},${pr2.y.toFixed(2)} ${pr3.x.toFixed(2)},${pr3.y.toFixed(2)}" fill="none" stroke="#00f000" stroke-width="1.2"/>`;
+                        body += `<text x="${(bx + boxW - 2).toFixed(1)}" y="${(by - 2.5).toFixed(1)}" fill="#00f000" font-size="${isSplit ? '8.5' : '9.5'}" font-weight="700" text-anchor="end">${Number(refVal).toFixed(decimals)}</text>`;
+                    }
+
+                    if (powered) {
+                        const pn = ddrPolar(cx, cy, r - 1.5, valDeg);
+                        body += `<line x1="${cx}" y1="${cy}" x2="${pn.x.toFixed(2)}" y2="${pn.y.toFixed(2)}" stroke="#ffffff" stroke-width="1.8" clip-path="url(#${clipId})"/>`;
+                    }
+
+                    body += `<rect x="${bx}" y="${by}" width="${boxW}" height="${boxH}" fill="#000000" stroke="#ffffff" stroke-width="1.2"/>`;
+                    if (powered) {
+                        const valColor = clamped >= limVal ? '#ff2a2a' : clamped >= warnVal ? '#f2b418' : '#ffffff';
+                        body += `<text x="${(bx + boxW - 3).toFixed(1)}" y="${(by + boxH - (isSplit ? 3 : 3.5)).toFixed(1)}" fill="${valColor}" font-size="${isSplit ? '10' : '11.5'}" font-weight="700" text-anchor="end">${clamped.toFixed(decimals)}</text>`;
+                    }
+
+                    if (tag) {
+                        const tw = isSplit ? 34 : 42;
+                        const th = isSplit ? 10 : 11;
+                        const tx = cx - tw * 0.55;
+                        const ty = cy + r * 0.22;
+                        body += `<rect x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" width="${tw}" height="${th}" fill="#000000" stroke="#ffffff" stroke-width="1"/>`;
+                        body += `<text x="${(tx + tw / 2).toFixed(1)}" y="${(ty + th - 2.2).toFixed(1)}" fill="#ffffff" font-size="${isSplit ? '7.2' : '8'}" font-weight="700" text-anchor="middle">${tag}</text>`;
+                    }
+                };
+
+                const drawRoundDial = (cx, cy, r, val, min, max, opts = {}) => {
+                    const {
+                        powered = true,
+                        decimals = 0,
+                        warnVal = max * 0.8,
+                        limVal = max * 0.92,
+                        scaleMid = Math.round((min + max) / 2),
+                        scaleMax = Math.round(max)
+                    } = opts;
+                    const startDeg = 135;
+                    const totalSweep = 235;
+                    const endDeg = startDeg + totalSweep;
+                    const clamped = Math.max(min, Math.min(max, Number(val) || 0));
+                    const frac = max > min ? (clamped - min) / (max - min) : 0;
+                    const valDeg = startDeg + frac * totalSweep;
+                    const warnDeg = startDeg + Math.max(0, Math.min(1, (warnVal - min) / (max - min))) * totalSweep;
+                    const limDeg = startDeg + Math.max(0, Math.min(1, (limVal - min) / (max - min))) * totalSweep;
+
+                    body += `<path d="${ddrArcPath(cx, cy, r, startDeg, warnDeg)}" fill="none" stroke="#ffffff" stroke-width="1.5"/>`;
+                    body += `<path d="${ddrArcPath(cx, cy, r, warnDeg, limDeg)}" fill="none" stroke="#f2b418" stroke-width="1.8"/>`;
+                    body += `<path d="${ddrArcPath(cx, cy, r, limDeg, endDeg)}" fill="none" stroke="#ff2a2a" stroke-width="2.1"/>`;
+
+                    [0, 0.25, 0.5, 0.75, 1].forEach(t => {
+                        const td = startDeg + t * totalSweep;
+                        const p1 = ddrPolar(cx, cy, r - 3.5, td);
+                        const p2 = ddrPolar(cx, cy, r + 0.5, td);
+                        const col = t >= 0.9 ? '#ff2a2a' : t >= 0.78 ? '#f2b418' : '#ffffff';
+                        body += `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" stroke="${col}" stroke-width="1.2"/>`;
+                    });
+
+                    const p0 = ddrPolar(cx, cy, r - 9, startDeg + 6);
+                    const pMid = ddrPolar(cx, cy, r - 9, startDeg + totalSweep * 0.5);
+                    const pMax = ddrPolar(cx, cy, r - 10, endDeg - 14);
+                    body += `<text x="${p0.x.toFixed(1)}" y="${(p0.y + 3).toFixed(1)}" fill="#ffffff" font-size="7.5" text-anchor="middle">0</text>`;
+                    body += `<text x="${pMid.x.toFixed(1)}" y="${(pMid.y + 3).toFixed(1)}" fill="#ffffff" font-size="7.5" text-anchor="middle">${scaleMid}</text>`;
+                    body += `<text x="${pMax.x.toFixed(1)}" y="${(pMax.y + 2).toFixed(1)}" fill="#ffffff" font-size="7.2" text-anchor="middle">${scaleMax}</text>`;
+
+                    if (powered) {
+                        const pn = ddrPolar(cx, cy, r - 2, valDeg);
+                        body += `<line x1="${cx}" y1="${cy}" x2="${pn.x.toFixed(2)}" y2="${pn.y.toFixed(2)}" stroke="#ffffff" stroke-width="1.8"/>`;
+                        body += `<circle cx="${cx}" cy="${cy}" r="2" fill="#ffffff"/>`;
+                        const vCol = clamped >= limVal ? '#ff2a2a' : clamped >= warnVal ? '#f2b418' : '#ffffff';
+                        body += `<text x="${(cx + 12).toFixed(1)}" y="${(cy + r + 2).toFixed(1)}" fill="${vCol}" font-size="10.5" font-weight="700" text-anchor="middle">${clamped.toFixed(decimals)}</text>`;
+                    }
+                };
+
+                if (!isSplit) {
+                    // FULL DDR-120A-24 SYNOPTIC MODE (520x382)
+                    body += `<line x1="278" y1="12" x2="278" y2="374" stroke="#00c4f0" stroke-width="1.5"/>`;
+                    body += `<line x1="10" y1="308" x2="278" y2="308" stroke="#00c4f0" stroke-width="1.5"/>`;
+                    body += `<line x1="278" y1="286" x2="512" y2="286" stroke="#00c4f0" stroke-width="1.5"/>`;
+
+                    // Column headers
+                    body += `<text x="58" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PRI 12V</text>`;
+                    body += `<text x="139" y="15" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">DDR-120A-24</text>`;
+                    body += `<text x="218" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">SEC 28V</text>`;
+                    body += `<text x="336" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PRI STAGE</text>`;
+                    body += `<text x="462" y="15" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">SEC STAGE</text>`;
+
+                    // Left 4 rows of C-arc cutout gauges (r = 25)
+                    const lx = 50;
+                    const rx = 204;
+                    const mx = 136;
+
+                    // Row 1: VIN / VOUT
+                    drawCArcGauge(lx, 52, 25, d.vIn, 0, 16, { powered: d.priPowered, decimals: 1, refVal: 12.0, warnVal: 14.8, limVal: 15.6 });
+                    body += `<text x="${mx}" y="44" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">V DC</text>`;
+                    body += `<text x="${mx}" y="53" fill="#00c4f0" font-size="8" text-anchor="middle">IN / OUT</text>`;
+                    drawCArcGauge(rx, 52, 25, d.vOut, 0, 32, { powered: d.secPowered, decimals: 1, refVal: 28.0, warnVal: 29.5, limVal: 31.0 });
+
+                    // Row 2: PRI T / SEC T
+                    drawCArcGauge(lx, 118, 25, d.priTempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100 });
+                    body += `<text x="${mx}" y="110" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">TEMP</text>`;
+                    body += `<text x="${mx}" y="119" fill="#00c4f0" font-size="8" text-anchor="middle">DEG C</text>`;
+                    drawCArcGauge(rx, 118, 25, d.secTempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100 });
+
+                    // Row 3: I IN / I OUT
+                    drawCArcGauge(lx, 184, 25, d.iIn, 0, 12, { powered: d.priPowered, decimals: 2, warnVal: 9.5, limVal: 11.0, tag: d.iInTag });
+                    body += `<text x="${mx}" y="176" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">AMPS</text>`;
+                    body += `<text x="${mx}" y="185" fill="#00c4f0" font-size="8" text-anchor="middle">I IN / OUT</text>`;
+                    drawCArcGauge(rx, 184, 25, d.iOut, 0, 5.2, { powered: d.secPowered, decimals: 2, refVal: 3.6, warnVal: 3.8, limVal: 4.4, tag: d.iOutTag });
+
+                    // Row 4: P IN / P OUT
+                    drawCArcGauge(lx, 250, 25, d.pIn, 0, 150, { powered: d.priPowered, decimals: 1, warnVal: 118, limVal: 135 });
+                    body += `<text x="${mx}" y="242" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">PWR W</text>`;
+                    body += `<text x="${mx}" y="251" fill="#00c4f0" font-size="8" text-anchor="middle">LOSS ${d.secPowered ? d.lossW.toFixed(1) : '0.0'}W</text>`;
+                    drawCArcGauge(rx, 250, 25, d.pOut, 0, 150, { powered: d.secPowered, decimals: 1, warnVal: 105, limVal: 120 });
+
+                    // Bottom-Left Cyan Bracket Box (BUS & HOLDUP - DDR-120)
+                    body += `<path d="M 32 320 H 14 A 4 4 0 0 0 10 324 V 368 A 4 4 0 0 0 14 372 H 204 A 4 4 0 0 0 208 368 V 324 A 4 4 0 0 0 204 320 H 184" fill="none" stroke="#00c4f0" stroke-width="1.4"/>`;
+                    body += `<text x="109" y="323" fill="#00c4f0" font-size="9.5" font-weight="700" text-anchor="middle">BUS &amp; HOLDUP - DDR-120</text>`;
+                    body += `<text x="42" y="346" fill="#ffffff" font-size="13" font-weight="700" text-anchor="middle">${d.secPowered ? d.vOut.toFixed(1) : '0.0'}</text>`;
+                    body += `<text x="42" y="357" fill="#00c4f0" font-size="7.5" text-anchor="middle">MAIN 28V</text>`;
+                    if (d.vOut < 18) body += `<text x="42" y="368" fill="#f2b418" font-size="8.5" font-weight="700" text-anchor="middle">LOW</text>`;
+
+                    body += `<text x="109" y="346" fill="#ffffff" font-size="13" font-weight="700" text-anchor="middle">${d.holdupMs.toFixed(0)}</text>`;
+                    body += `<text x="109" y="357" fill="#00c4f0" font-size="7.5" text-anchor="middle">HOLDUP MS</text>`;
+
+                    body += `<text x="174" y="346" fill="#ffffff" font-size="13" font-weight="700" text-anchor="middle">${d.vAux > 0.8 ? d.vAux.toFixed(1) : '0.0'}</text>`;
+                    body += `<text x="174" y="357" fill="#00c4f0" font-size="7.5" text-anchor="middle">TIME 28V</text>`;
+                    if (d.vAux < 18) body += `<text x="174" y="368" fill="#f2b418" font-size="8.5" font-weight="700" text-anchor="middle">LOW</text>`;
+
+                    // Total Efficiency outside right of frame
+                    body += `<text x="244" y="346" fill="#ffffff" font-size="14" font-weight="700" text-anchor="middle">${d.secPowered ? d.effPct.toFixed(1) : '0.0'}</text>`;
+                    body += `<text x="244" y="362" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">TOTAL EFF</text>`;
+
+                    // Right Column Top Caution Banners (2x2)
+                    const drawBanner = (bx, by, bw, bh, line1, line2, active) => {
+                        body += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${active ? '#f2b418' : '#060606'}" stroke="${active ? '#f2b418' : '#2c2c2c'}" stroke-width="1.1"/>`;
+                        const tc = active ? '#000000' : '#4a4a4a';
+                        body += `<text x="${bx + bw / 2}" y="${by + 8.5}" fill="${tc}" font-size="7.8" font-weight="700" text-anchor="middle">${line1}</text>`;
+                        body += `<text x="${bx + bw / 2}" y="${by + 16.5}" fill="${tc}" font-size="7.8" font-weight="700" text-anchor="middle">${line2}</text>`;
+                    };
+                    drawBanner(286, 22, 108, 19, 'LOW INPUT V', 'UVLO < 9.0V', d.uvloOpen);
+                    drawBanner(400, 22, 108, 19, 'DC BUS OPEN', 'DC-OK LOW', d.dcOkOpen);
+                    drawBanner(286, 44, 108, 19, 'COLD START', 'INRUSH / RISE', d.inrushActive || d.riseActive);
+                    drawBanner(400, 44, 108, 19, 'OVERLOAD LIM', 'CC / OVP TRIP', d.ccPeak || d.ovpTrip);
+
+                    // Right Column Round Dials (r = 24)
+                    const rlx = 334;
+                    const rrx = 462;
+                    const rmx = 398;
+
+                    // Row 1: FET VDS % (Q5 / Q100)
+                    drawRoundDial(rlx, 96, 24, d.q5Pct, 0, 100, { powered: d.priPowered, decimals: 0, warnVal: 78, limVal: 90, scaleMid: 50, scaleMax: 100 });
+                    body += `<text x="${rmx}" y="93" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">FET VDS</text>`;
+                    body += `<text x="${rmx}" y="103" fill="#00c4f0" font-size="7.5" text-anchor="middle">Q5 / Q100 %</text>`;
+                    drawRoundDial(rrx, 96, 24, d.q100Pct, 0, 100, { powered: d.secPowered, decimals: 0, warnVal: 78, limVal: 90, scaleMid: 50, scaleMax: 100 });
+
+                    // Row 2: CLMP / S2 V (Q6 / Q101)
+                    drawRoundDial(rlx, 158, 24, d.q6V, 0, 100, { powered: d.priPowered, decimals: 0, warnVal: 80, limVal: 92, scaleMid: 50, scaleMax: 100 });
+                    body += `<text x="${rmx}" y="155" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">CLMP / S2</text>`;
+                    body += `<text x="${rmx}" y="165" fill="#00c4f0" font-size="7.5" text-anchor="middle">Q6 / Q101 V</text>`;
+                    drawRoundDial(rrx, 158, 24, d.q101V, 0, 200, { powered: d.secPowered, decimals: 0, warnVal: 160, limVal: 185, scaleMid: 100, scaleMax: 200 });
+
+                    // Boxed Digital Row: [ C5 % ]  CAP / VCC %  [ U1 % ]
+                    body += `<rect x="310" y="196" width="44" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                    if (d.secPowered) body += `<text x="350" y="207.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.c5Pct.toFixed(0)}</text>`;
+                    body += `<text x="${rmx}" y="207" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">CAP / VCC %</text>`;
+                    body += `<rect x="440" y="196" width="44" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                    if (d.priPowered) body += `<text x="480" y="207.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.u1Pct.toFixed(0)}</text>`;
+
+                    // Row 3: RIPPLE LF / HF (mVpp)
+                    drawRoundDial(rlx, 246, 24, d.rippleLf, 0, 50, { powered: d.secPowered, decimals: 1, warnVal: 35, limVal: 45, scaleMid: 25, scaleMax: 50 });
+                    body += `<text x="${rmx}" y="243" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">RIPPLE</text>`;
+                    body += `<text x="${rmx}" y="253" fill="#00c4f0" font-size="7.5" text-anchor="middle">LF / HF MV</text>`;
+                    drawRoundDial(rrx, 246, 24, d.rippleHf, 0, 100, { powered: d.secPowered, decimals: 1, warnVal: 75, limVal: 90, scaleMid: 50, scaleMax: 100 });
+
+                    // Below y=286 divider: Sub-labels A / B + XFMR T2 / CHOK LF1 + [ EFF% ] / [ LOAD% ]
+                    body += `<text x="294" y="300" fill="#00c4f0" font-size="9" font-weight="700">A</text>`;
+                    body += `<text x="500" y="300" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="end">B</text>`;
+                    drawRoundDial(rlx, 322, 23, d.t2TempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, scaleMid: 60, scaleMax: 120 });
+                    body += `<text x="${rmx}" y="319" fill="#00c4f0" font-size="9" font-weight="700" text-anchor="middle">MAG TEMP</text>`;
+                    body += `<text x="${rmx}" y="329" fill="#00c4f0" font-size="7.5" text-anchor="middle">T2 / LF1 C</text>`;
+                    drawRoundDial(rrx, 322, 23, d.lf1TempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, scaleMid: 60, scaleMax: 120 });
+
+                    body += `<rect x="310" y="356" width="46" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                    if (d.secPowered) body += `<text x="352" y="367.5" fill="#ffffff" font-size="11" font-weight="700" text-anchor="end">${d.effPct.toFixed(1)}</text>`;
+                    body += `<text x="${rmx}" y="367" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">EFF / LOAD %</text>`;
+                    body += `<rect x="440" y="356" width="46" height="15" fill="#000" stroke="#fff" stroke-width="1.2"/>`;
+                    if (d.secPowered) body += `<text x="482" y="367.5" fill="${d.loadPct > 98 ? '#f2b418' : '#ffffff'}" font-size="11" font-weight="700" text-anchor="end">${d.loadPct.toFixed(1)}</text>`;
+                } else {
+                    // SPLIT MODE COMPACT DDR-120A-24 SYNOPTIC (240x382 Left Pane)
+                    body += `<text x="28" y="13" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">PRI</text>`;
+                    body += `<text x="68" y="13" fill="#ffffff" font-size="8.5" font-weight="700" text-anchor="middle">DDR-120</text>`;
+                    body += `<text x="108" y="13" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">SEC</text>`;
+
+                    // 3 Compact C-arc rows (r = 17.5) with titles carried UP above the SEC left rim
+                    const slx = 22;
+                    const srx = 98;
+                    const smx = 69;
+                    drawCArcGauge(slx, 36, 17.5, d.vIn, 0, 16, { powered: d.priPowered, decimals: 1, refVal: 12.0, warnVal: 14.8, limVal: 15.6, boxW: 31 });
+                    body += `<text x="${smx}" y="25" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">V DC</text>`;
+                    drawCArcGauge(srx, 36, 17.5, d.vOut, 0, 32, { powered: d.secPowered, decimals: 1, refVal: 28.0, warnVal: 29.5, limVal: 31.0, boxW: 31 });
+
+                    drawCArcGauge(slx, 80, 17.5, d.priTempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, boxW: 31 });
+                    body += `<text x="${smx}" y="69" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">TEMP</text>`;
+                    drawCArcGauge(srx, 80, 17.5, d.secTempC, 0, 125, { powered: true, decimals: 0, warnVal: 85, limVal: 100, boxW: 31 });
+
+                    drawCArcGauge(slx, 124, 17.5, d.iIn, 0, 12, { powered: d.priPowered, decimals: 2, warnVal: 9.5, limVal: 11.0, tag: d.iInTag, boxW: 31 });
+                    body += `<text x="${smx}" y="113" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">AMPS</text>`;
+                    drawCArcGauge(srx, 124, 17.5, d.iOut, 0, 5.2, { powered: d.secPowered, decimals: 2, refVal: 3.6, warnVal: 3.8, limVal: 4.4, tag: d.iOutTag, boxW: 31 });
+
+                    // Digital PWR W row (y = 152)
+                    body += `<rect x="8" y="150" width="38" height="13" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                    if (d.priPowered) body += `<text x="43" y="160" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.pIn.toFixed(1)}</text>`;
+                    body += `<text x="${smx}" y="159.5" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">PWR W</text>`;
+                    body += `<rect x="92" y="150" width="38" height="13" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                    if (d.secPowered) body += `<text x="127" y="160" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.pOut.toFixed(1)}</text>`;
+
+                    // Vertical Parallel Tape Gauges (Photo 3 style)
+                    const drawVerticalTapePair = (yTop, h, title1, title2, valL, maxL, valR, maxR, pL, pR, dec = 0) => {
+                        const xL = 44;
+                        const xR = 94;
+                        const yBot = yTop + h;
+                        // Stems & top/bottom caps
+                        body += `<line x1="${xL}" y1="${yTop}" x2="${xL}" y2="${yBot}" stroke="#ffffff" stroke-width="1.3"/>`;
+                        body += `<line x1="${xL - 4}" y1="${yBot}" x2="${xL + 2}" y2="${yBot}" stroke="#ffffff" stroke-width="1.2"/>`;
+                        body += `<line x1="${xL - 4}" y1="${yTop}" x2="${xL + 2}" y2="${yTop}" stroke="#ff2a2a" stroke-width="1.8"/>`;
+                        body += `<line x1="${xL - 3}" y1="${yTop + h * 0.18}" x2="${xL + 1}" y2="${yTop + h * 0.18}" stroke="#f2b418" stroke-width="1.3"/>`;
+
+                        body += `<line x1="${xR}" y1="${yTop}" x2="${xR}" y2="${yBot}" stroke="#ffffff" stroke-width="1.3"/>`;
+                        body += `<line x1="${xR - 2}" y1="${yBot}" x2="${xR + 4}" y2="${yBot}" stroke="#ffffff" stroke-width="1.2"/>`;
+                        body += `<line x1="${xR - 2}" y1="${yTop}" x2="${xR + 4}" y2="${yTop}" stroke="#ff2a2a" stroke-width="1.8"/>`;
+                        body += `<line x1="${xR - 1}" y1="${yTop + h * 0.18}" x2="${xR + 3}" y2="${yTop + h * 0.18}" stroke="#f2b418" stroke-width="1.3"/>`;
+
+                        body += `<text x="69" y="${yTop + h * 0.45}" fill="#00c4f0" font-size="7.5" font-weight="700" text-anchor="middle">${title1}</text>`;
+                        if (title2) body += `<text x="69" y="${yTop + h * 0.78}" fill="#00c4f0" font-size="7" text-anchor="middle">${title2}</text>`;
+
+                        const fL = Math.max(0, Math.min(1, (Number(valL) || 0) / maxL));
+                        const pyL = yBot - fL * h;
+                        body += `<polygon points="${xL},${pyL} ${xL - 5},${pyL - 3} ${xL - 5},${pyL + 3}" fill="#ffffff"/>`;
+                        body += `<rect x="6" y="${pyL - 6.5}" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                        if (pL) body += `<text x="35" y="${pyL + 3}" fill="#ffffff" font-size="9" font-weight="700" text-anchor="end">${Number(valL).toFixed(dec)}</text>`;
+
+                        const fR = Math.max(0, Math.min(1, (Number(valR) || 0) / maxR));
+                        const pyR = yBot - fR * h;
+                        body += `<polygon points="${xR},${pyR} ${xR + 5},${pyR - 3} ${xR + 5},${pyR + 3}" fill="#ffffff"/>`;
+                        body += `<rect x="100" y="${pyR - 6.5}" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                        if (pR) body += `<text x="129" y="${pyR + 3}" fill="#ffffff" font-size="9" font-weight="700" text-anchor="end">${Number(valR).toFixed(dec)}</text>`;
+                    };
+
+                    drawVerticalTapePair(172, 30, 'FET VDS', 'Q5/Q100%', d.q5Pct, 100, d.q100Pct, 100, d.priPowered, d.secPowered, 0);
+                    drawVerticalTapePair(212, 30, 'CLMP/S2', 'VOLTS', d.q6V, 100, d.q101V, 200, d.priPowered, d.secPowered, 0);
+
+                    // [ C5% ] CAP/VCC [ U1% ] digital row (y = 250)
+                    body += `<rect x="8" y="250" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                    if (d.secPowered) body += `<text x="37" y="259.5" fill="#fff" font-size="9" font-weight="700" text-anchor="end">${d.c5Pct.toFixed(0)}</text>`;
+                    body += `<text x="69" y="259" fill="#00c4f0" font-size="7.2" font-weight="700" text-anchor="middle">CAP/VCC%</text>`;
+                    body += `<rect x="98" y="250" width="32" height="12" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                    if (d.priPowered) body += `<text x="127" y="259.5" fill="#fff" font-size="9" font-weight="700" text-anchor="end">${d.u1Pct.toFixed(0)}</text>`;
+
+                    drawVerticalTapePair(272, 30, 'RIPPLE', 'LF/HF MV', d.rippleLf, 50, d.rippleHf, 100, d.secPowered, d.secPowered, 1);
+
+                    // Right Sub-column of Left Pane (x = 138..236): 2x4 Annunciator Matrix + Circular LOAD % Dial
+                    body += `<text x="162" y="13" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">PRI 12V</text>`;
+                    body += `<text x="212" y="13" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">SEC 28V</text>`;
+
+                    const drawMatrixCell = (cx, cy, l1, l2, active) => {
+                        body += `<rect x="${cx}" y="${cy}" width="46" height="21" fill="${active ? '#f2b418' : '#050505'}" stroke="${active ? '#f2b418' : '#2c2c2c'}" stroke-width="1"/>`;
+                        const tc = active ? '#000000' : '#444444';
+                        body += `<text x="${cx + 23}" y="${cy + 9}" fill="${tc}" font-size="7" font-weight="700" text-anchor="middle">${l1}</text>`;
+                        body += `<text x="${cx + 23}" y="${cy + 17.5}" fill="${tc}" font-size="7" font-weight="700" text-anchor="middle">${l2}</text>`;
+                    };
+                    drawMatrixCell(139, 18, 'INRUSH', 'LIMIT', d.inrushActive);
+                    drawMatrixCell(189, 18, 'START', 'RISE', d.riseActive);
+                    drawMatrixCell(139, 42, 'UVLO', '< 9.0V', d.uvloOpen);
+                    drawMatrixCell(189, 42, 'DC-OK', 'OPEN', d.dcOkOpen);
+                    drawMatrixCell(139, 66, 'HARN', 'DROP', d.harnDrop);
+                    drawMatrixCell(189, 66, 'CC LIM', 'PEAK', d.ccPeak);
+                    drawMatrixCell(139, 90, 'PRI T', 'HIGH', d.hiTemp);
+                    drawMatrixCell(189, 90, 'OVP', 'TRIP', d.ovpTrip);
+
+                    // Circular FLAPS-style LOAD % Dial (cx = 188, cy = 176, r = 33)
+                    const lcx = 188;
+                    const lcy = 176;
+                    const lr = 33;
+                    for (let i = 0; i < 20; i++) {
+                        const ang = i * 18 - 90;
+                        const p1 = ddrPolar(lcx, lcy, lr - (i % 5 === 0 ? 5 : 3), ang);
+                        const p2 = ddrPolar(lcx, lcy, lr, ang);
+                        const col = i >= 14 && i <= 17 ? '#f2b418' : i > 17 ? '#ff2a2a' : '#ffffff';
+                        body += `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" x2="${p2.x.toFixed(2)}" y2="${p2.y.toFixed(2)}" stroke="${col}" stroke-width="${i % 5 === 0 ? '1.5' : '1'}"/>`;
+                    }
+                    body += `<text x="${lcx}" y="${lcy - 10}" fill="#00c4f0" font-size="8" font-weight="700" text-anchor="middle">LOAD %</text>`;
+                    const loadAng = -90 + Math.min(1.5, Math.max(0, d.loadPct / 100)) * 240;
+                    const pln = ddrPolar(lcx, lcy, lr - 4, loadAng);
+                    body += `<line x1="${lcx}" y1="${lcy}" x2="${pln.x.toFixed(2)}" y2="${pln.y.toFixed(2)}" stroke="#ffffff" stroke-width="1.8"/>`;
+                    body += `<circle cx="${lcx}" cy="${lcy}" r="2.2" fill="#ffffff"/>`;
+
+                    body += `<rect x="164" y="216" width="48" height="14" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                    if (d.secPowered) body += `<text x="208" y="226.5" fill="${d.loadPct > 98 ? '#f2b418' : '#ffffff'}" font-size="10" font-weight="700" text-anchor="end">${d.loadPct.toFixed(1)}</text>`;
+
+                    // Mag Temp & Efficiency summary below Load dial
+                    body += `<text x="188" y="246" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">MAG T2 / LF1 C</text>`;
+                    body += `<rect x="142" y="251" width="42" height="13" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                    body += `<text x="180" y="260.5" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.t2TempC.toFixed(0)}</text>`;
+                    body += `<rect x="192" y="251" width="42" height="13" fill="#000" stroke="#fff" stroke-width="1"/>`;
+                    body += `<text x="230" y="260.5" fill="#fff" font-size="9.5" font-weight="700" text-anchor="end">${d.lf1TempC.toFixed(0)}</text>`;
+
+                    body += `<text x="188" y="280" fill="#00c4f0" font-size="7.8" font-weight="700" text-anchor="middle">TOTAL EFF %</text>`;
+                    body += `<rect x="164" y="285" width="48" height="14" fill="#000" stroke="#fff" stroke-width="1.1"/>`;
+                    if (d.secPowered) body += `<text x="208" y="295.5" fill="#00f000" font-size="10" font-weight="700" text-anchor="end">${d.effPct.toFixed(1)}</text>`;
+
+                    // Bottom Compact Cyan Bracket Frame (BUS & HOLDUP - DDR-120)
+                    body += `<path d="M 28 318 H 10 A 4 4 0 0 0 6 322 V 370 A 4 4 0 0 0 10 374 H 228 A 4 4 0 0 0 232 370 V 322 A 4 4 0 0 0 228 318 H 210" fill="none" stroke="#00c4f0" stroke-width="1.3"/>`;
+                    body += `<text x="119" y="321" fill="#00c4f0" font-size="8.5" font-weight="700" text-anchor="middle">BUS &amp; HOLDUP - DDR-120</text>`;
+                    body += `<text x="44" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${d.secPowered ? d.vOut.toFixed(1) : '0.0'}</text>`;
+                    body += `<text x="44" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">MAIN 28V</text>`;
+                    if (d.vOut < 18) body += `<text x="44" y="366" fill="#f2b418" font-size="8" font-weight="700" text-anchor="middle">LOW</text>`;
+
+                    body += `<text x="119" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${d.holdupMs.toFixed(0)}</text>`;
+                    body += `<text x="119" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">HOLDUP MS</text>`;
+
+                    body += `<text x="194" y="344" fill="#ffffff" font-size="12" font-weight="700" text-anchor="middle">${d.vAux > 0.8 ? d.vAux.toFixed(1) : '0.0'}</text>`;
+                    body += `<text x="194" y="355" fill="#00c4f0" font-size="7" text-anchor="middle">TIME 28V</text>`;
+                    if (d.vAux < 18) body += `<text x="194" y="366" fill="#f2b418" font-size="8" font-weight="700" text-anchor="middle">LOW</text>`;
+                }
+
+                terminalNdDdrSvg.innerHTML = `<defs>${defs}</defs>${body}`;
+            };
+
+            const setTerminalNdViewMode = mode => {
+                terminalNdViewMode = ['nav', 'ddr', 'split'].includes(mode) ? mode : 'nav';
+                terminalNdDisplay.dataset.viewMode = terminalNdViewMode;
+                if (terminalNdDdrSvg) {
+                    terminalNdDdrSvg.removeAttribute('hidden');
+                }
+                renderTerminalNdDdr();
+                positionTerminalNdDirections();
+            };
+
+            const cycleTerminalNdViewMode = () => {
+                const order = ['nav', 'ddr', 'split'];
+                const next = order[(order.indexOf(terminalNdViewMode) + 1) % order.length];
+                setTerminalNdViewMode(next);
+            };
+
+            document.addEventListener('m2electrical', () => {
+                if (terminalNdViewMode !== 'nav') renderTerminalNdDdr();
+            });
+            document.addEventListener('m2terminalpower', () => {
+                if (terminalNdViewMode !== 'nav') renderTerminalNdDdr();
+            });
+            setInterval(() => {
+                if (terminalNdViewMode !== 'nav' && terminalNdDisplay.dataset.powered === 'true') {
+                    renderTerminalNdDdr();
+                }
+            }, 140);
             const animateTerminalNdCamera = timestamp => {
                 terminalNdCameraFrame = 0;
                 const elapsed = terminalNdCameraLastTimestamp ? Math.min(64, timestamp - terminalNdCameraLastTimestamp) : 16;
@@ -17282,16 +17871,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         ]);
                         const timestamp = performance.now();
                         const playbackClock = playbackTime(audio);
-                        const position = terminalNdPlanPosition(journey, key);
-                        if (terminalNdTravel?.mode === 'plan' && terminalNdTravel.key === key) {
-                            if (playbackClock + .12 < terminalNdTravel.playbackClock) {
-                                terminalNdTravel.key = '';
-                            } else if (modeSource === 'S' &&
-                                Math.abs(playbackClock - terminalNdTravel.playbackClock) > 0.8 &&
-                                Math.hypot(terminalNdTravel.x - position.point.x, terminalNdTravel.y - position.point.y) > 24) {
-                                terminalNdTravel.key = '';
-                            }
+                        if (terminalNdTravel?.mode === 'plan' && terminalNdTravel.key === key &&
+                            playbackClock + .12 < terminalNdTravel.playbackClock) {
+                            terminalNdTravel.key = '';
                         }
+                        const position = terminalNdPlanPosition(journey, key);
                         const path = terminalNdTravelMetrics(position.tail);
                         const remaining = Number.isFinite(journey.subRemaining)
                             ? journey.subRemaining
@@ -17301,9 +17885,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             : path.total / Math.max(0.25, Number(remaining) || 1);
                         let nextLegSpeed = null;
                         let nextLegCourse = null;
-                        if (journey.next) {
-                            const nextStar = terminalNdLegPoint(journey.next);
-                            const currentEnd = position.fullPath.points.at(-1) || star;
+                        if (journey.afterFollowing) {
+                            const nextStar = terminalNdLegPoint(journey.afterFollowing);
+                            const currentEnd = position.fullPath.points.at(-1) || (journey.next ? terminalNdLegPoint(journey.next) : star);
                             if (nextStar && currentEnd) {
                                 const dxNext = nextStar.x - currentEnd.x;
                                 const dyNext = nextStar.y - currentEnd.y;
@@ -17317,19 +17901,22 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         }
                         const currentLabel = terminalNdLegLabel(journey.current);
                         const nextLabel = journey.next ? terminalNdLegLabel(journey.next) : '';
+                        const currentCode = String(journey.current?.songCode || '').trim().toUpperCase();
+                        const currentSong = terminalNdSongs.get(currentCode);
+                        const songGroupKey = currentSong ? (currentSong.virtualOriginKey || currentSong.code) : currentCode;
                         const newTravel = !terminalNdTravel || terminalNdTravel.mode !== 'plan' || terminalNdTravel.key !== key;
                         if (newTravel) {
                             const canContinue = terminalNdTravel?.mode === 'plan' &&
                                 terminalNdTravel.modeSource === modeSource &&
-                                (modeSource === 'L' || (
-                                    (terminalNdTravel.nextLabel === currentLabel || terminalNdTravel.legLabel === currentLabel) &&
-                                    Math.hypot(terminalNdTravel.x - position.point.x, terminalNdTravel.y - position.point.y) <= 24
-                                ));
+                                (modeSource === 'L' ||
+                                    terminalNdTravel.songGroupKey === songGroupKey ||
+                                    (terminalNdTravel.nextLabel === currentLabel &&
+                                        Math.hypot(terminalNdTravel.x - position.point.x, terminalNdTravel.y - position.point.y) <= 24));
                             const previous = canContinue ? terminalNdTravel : null;
                             const start = previous ? { x: previous.x, y: previous.y } : position.point;
                             const heading = previous?.heading ?? terminalNdTravelHeading(position.tail);
                             terminalNdTravel = {
-                                mode: 'plan', modeSource, key, x: start.x, y: start.y,
+                                mode: 'plan', modeSource, songGroupKey, key, x: start.x, y: start.y,
                                 heading,
                                 path,
                                 fullPath: position.fullPath,
@@ -17453,7 +18040,12 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             }, true);
             document.addEventListener('seeked', event => {
-                if (event.target === terminalNdActiveAudio) {
+                const activeCurAudio = window.__npCurrentAudio?.();
+                if (event.target?.tagName === 'AUDIO' &&
+                    (event.target === terminalNdActiveAudio ||
+                        (event.target === activeCurAudio && event.target.__virtualSong &&
+                            event.target.__virtualSong === terminalNdActiveAudio?.__virtualSong))) {
+                    terminalNdActiveAudio = event.target;
                     if ((window.__npTerminalLegsActive?.() || terminalNdSoloStarted) && terminalNdTravel) {
                         terminalNdTravel.key = '';
                         terminalNdTravel.lastTimestamp = performance.now();
@@ -17466,6 +18058,19 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }, true);
             document.addEventListener('ended', event => {
                 if (event.target === terminalNdActiveAudio && !window.__npTerminalLegsActive?.()) {
+                    if (event.__virtualSongContinues) {
+                        const activeCurAudio = window.__npCurrentAudio?.();
+                        if (activeCurAudio && activeCurAudio !== terminalNdActiveAudio) {
+                            terminalNdActiveAudio = activeCurAudio;
+                        }
+                        if (terminalNdTravel) {
+                            terminalNdTravel.key = '';
+                            terminalNdTravel.lastTimestamp = performance.now();
+                        }
+                        moveTerminalNdHead(terminalNdActiveAudio);
+                        renderTerminalNdRoutes();
+                        return;
+                    }
                     terminalNdTravel = null;
                     terminalNdTravelLine.setAttribute('d', '');
                     renderTerminalNdRoutes();
@@ -18078,7 +18683,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         { title: 'DATA', value: '', field: '3L', ndToggle: 'data', valueRuns: toggleRuns(terminalNdDataOn) },
                         { title: 'ROTATE', value: '', field: '4L', ndToggle: 'rotate', valueRuns: toggleRuns(terminalNdRotateOn) },
                         actionEntry('', 'PROG>', { kind: 'folio', folio: { kind: 'prog', page: 1 } }, '2R'),
-                        actionEntry('', 'STEP>', { kind: 'nd-step' }, '3R')
+                        actionEntry('', 'STEP>', { kind: 'nd-step' }, '3R'),
+                        actionEntry('VIEW', 'ALTERNATE>', { kind: 'nd-view-alternate' }, '4R')
                     ]
                 };
             };
@@ -18852,6 +19458,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     renderTerminalNdCamera();
                     return;
                 }
+                if (action.kind === 'nd-view-alternate') {
+                    cycleTerminalNdViewMode();
+                    return;
+                }
                 if (action.kind === 'run-test') {
                     testRunning = true;
                     testSoundPowerFailed = false;
@@ -19078,7 +19688,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         renderFolio();
                         return;
                     }
-                    if (currentAudio && !currentAudio.paused) {
+                    const activeCurAudio = window.__npCurrentAudio?.();
+                    if (activeCurAudio && !activeCurAudio.paused) {
                         nextBtn.click();
                         return;
                     }
