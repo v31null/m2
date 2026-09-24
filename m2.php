@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '134';
+const M2_PAGE_CODE_VERSION = '140';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -5154,7 +5154,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
 
 
-
+        // delete not — seperate elektrikal from mekanikal sounds                 
         const PANEL_SOUND_GROUPS = {
             starterAmbient: ['177453744'],
             starterHold: ['111819169'],
@@ -5187,7 +5187,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             '755522096': [78221 / 44100, 222247 / 44100]
         });
         const PANEL_WAV_IDS = [...new Set(Object.values(PANEL_SOUND_GROUPS).flat())];
-
+                        // delete not — depricaten , legacie kode for to keep kompatabilitie , use .wav 
         const UI_SOUND_FILES = {
             chime: '/m/img/chime.mp3',
             arm: '/m/img/arm.mp3',
@@ -5207,7 +5207,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         const CONTROL_ASSET_FILES = [
             'ploff.png', 'plon.png', 'plpresstoon.png', 'plpresstooff.png',
             'sc.png', 'sd.png', 'st.png', 'knobswrap.png', 'knob.png',
-            'rotate.png', 'r2off.png', 'r2on.png', 'kboswrapforalign.png',
+            'rotate.png', 'r2off.png', 'r2on.png', 'r2onnoelec.png', 'kboswrapforalign.png',
             'lightforalignoff.png', 'lightforalignon.png'
         ];
         function fetchRequiredBlob(url) {
@@ -7402,7 +7402,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
             applyDragAngle() {
                 if (!this.powered) {
+                    this.renderedHandAngle = this.dragAngle;
                     this.manualHandAngle = this.dragAngle;
+                    this.handVelocity = 0;
+                    this.targetHand.setAttribute('transform', `rotate(${this.renderedHandAngle} 195 190)`);
                     return;
                 }
                 let start = -135 + this.dragCycle * 360;
@@ -7447,10 +7450,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.control.setPointerCapture(this.pointerId);
                     this.pointerAngle = rawAngle;
                     this.dragCycle = this.handCycle;
+                    if (!this.powered) {
+                        this.dragAngle = this.renderedHandAngle;
+                        this.manualHandAngle = this.renderedHandAngle;
+                        return;
+                    }
                     this.dragAngle = percent === null ?
                         this.nearestTurnAngle(rawAngle, this.renderedHandAngle) :
                         -135 + percent / 100 * 270 + this.dragCycle * 360;
-                    if (this.powered) this.onTarget(percent);
+                    this.onTarget(percent);
                     this.manualHandAngle = this.dragAngle;
                 });
                 this.control.addEventListener('pointermove', event => {
@@ -7470,6 +7478,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.pointerAngle = null;
                     this.dragAngle = null;
                     if (this.powered) this.manualHandAngle = null;
+                    else {
+                        this.manualHandAngle = this.renderedHandAngle;
+                        this.handVelocity = 0;
+                    }
                     this.releaseHandMotion = this.powered;
                 };
                 this.control.addEventListener('pointerup', release);
@@ -7796,13 +7808,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const handBase = -135 + 270 * activePercent / 100;
                 if (poweringUp) this.handCycle = Math.round((this.renderedHandAngle - handBase) / 360);
                 const handTarget = handBase + this.handCycle * 360;
-                if (this.pointerId === null && this.manualHandAngle !== null &&
-                    (this.powered || model.playing === true)) {
+                if (this.pointerId === null && this.manualHandAngle !== null && this.powered) {
                     this.manualHandAngle = null;
                     this.handVelocity = 0;
                 }
                 const physicalTarget = this.manualHandAngle ?? handTarget;
-                this.advanceOuterHand(physicalTarget, now);
+                if (this.powered) {
+                    this.advanceOuterHand(physicalTarget, now);
+                } else {
+                    this.handLastTime = now;
+                    this.handVelocity = 0;
+                }
                 this.releaseHandMotion = false;
                 this.requestedHandMotion = false;
                 const sectionTarget = this.sectionAngle(activeSection);
@@ -7814,7 +7830,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 this.targetHand.setAttribute('transform', `rotate(${this.renderedHandAngle} 195 190)`);
                 this.sectionHand.setAttribute('transform', `rotate(${this.renderedSectionAngle} 195 190)`);
-                panelSoundBank.driveHand('outerHand', this.renderedHandAngle, now);
+                if (this.powered || this.pointerId !== null) {
+                    panelSoundBank.driveHand('outerHand', this.renderedHandAngle, now);
+                }
                 this.activeReadout.render(activeSection, model.activeSeconds);
                 this.standbyReadout.render(model.targetSection, model.targetSeconds);
                 this.sectionRotor.setAttribute('transform', `rotate(${this.sectionMechanicalAngle})`);
@@ -7872,7 +7890,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         let manualStandbyBaseline = { section: 0, seconds: 0 };
         const terminalStandbyValue = () => {
             const fields = seekRadialDisplayFields(seekRadialStandbySeconds);
-            return `${String(Math.trunc(seekRadialStandbySection)).padStart(2, '0')}/${String(fields.minutes).padStart(3, '0')}.${String(fields.seconds).padStart(2, '0')}`;
+            return String(Math.trunc(seekRadialStandbySection)).padStart(2, '0') + '/' + String(fields.minutes).padStart(3, '0') + '.' + String(fields.seconds).padStart(2, '0');
         };
         window.__npTerminalLiveValues = () => ({
             speed: soundCircuit.playbackRate,
@@ -8519,11 +8537,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let lStartY = 0;
             let lPullHeight = 1;
 
+            const lMechanicallyOn = () => soundCircuit.coupling.position === 'ON';
             const syncLCursor = () => {
-                lb.classList.toggle('lInactive', !lIsOn());
-                lb.classList.toggle('lPopped', soundCircuit.coupling.position === 'OFF');
+                const active = lIsOn();
+                const mechOn = lMechanicallyOn();
+                lb.classList.toggle('lInactive', !active);
+                lb.classList.toggle('lPopped', !mechOn);
+                if (!lHolding) lb.style.color = active ? 'yellow' : 'white';
             };
             soundCircuit.coupling.addEventListener('change', syncLCursor);
+            soundElektroniksPower.addEventListener('change', syncLCursor);
             syncLCursor();
 
             const lCleanupHold = () => {
@@ -8535,13 +8558,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
 
             beginLHold = source => {
-                if (!lIsOn() || lHolding) return false;
+                if (!lMechanicallyOn() || lHolding) return false;
                 lHolding = true;
                 lHoldSource = source;
                 lArmed = false;
                 lb.style.color = '';
-                lb.classList.add('lFlashing');
-                panelSoundBank.startHeld('starterHold', 'L');
+                if (lIsOn()) {
+                    lb.classList.add('lFlashing');
+                    panelSoundBank.startHeld('starterHold', 'L');
+                }
                 return true;
             };
 
@@ -8565,7 +8590,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     lArmed = true;
                     panelSoundBank.stopHeld('starterHold', 'L');
                     lb.classList.remove('lFlashing');
-                    lb.classList.add('lArmed');
+                    if (lIsOn()) lb.classList.add('lArmed');
                 }
                 e.preventDefault();
             });
@@ -8587,10 +8612,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         panelSoundBank.play('starterReleaseMechanical');
                         panelSoundBank.play('starterDisconnect');
                     }
-                    lb.style.color = 'white';
-                } else {
-                    lb.style.color = 'yellow';
                 }
+                syncLCursor();
                 return completed;
             };
             lb.addEventListener('pointerup', e => {
@@ -8612,8 +8635,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 if (soundCircuit.coupling.position !== 'OFF') return;
                 if (!soundCircuit.coupling.setPosition('ON')) return;
-                lb.style.color = 'yellow';
-                driveReverbWithGears(Math.max(0, (soundCircuit.speed.value - 0.5) * 2));
+                syncLCursor();
+                if (lIsOn()) {
+                    driveReverbWithGears(Math.max(0, (soundCircuit.speed.value - 0.5) * 2));
+                }
                 panelSoundBank.play('starterEngage');
                 panelSoundBank.play('confirmationChime', { electrical: true });
             });
@@ -9001,7 +9026,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     const memberDuration = Number(member?.audio?.duration);
                     if (!Number.isFinite(memberStart) || !(memberDuration > 0)) return null;
                     const start = memberStart + Math.max(0, seconds);
-                    const end = memberStart + memberDuration;
+                    const end = leg.advance === 'Y' ? memberStart + memberDuration : duration;
                     if (start >= end) return null;
                     return { start, end, duration };
                 }
@@ -9735,7 +9760,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
 
             const turnRev = delta => {
-                if (lIsOn()) return false;
+                if (soundCircuit.coupling.position === 'ON') return false;
                 const before = soundCircuit.reverb.value;
                 if (!setRev(before + delta)) return false;
                 panelSoundBank.driveRotary('rAndV', 'mRev',
@@ -9783,7 +9808,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 () => endLHold('R'));
             if (mRev) mRev.addEventListener('wheel', e => {
                 e.preventDefault();
-                if (lIsOn()) return;
+                if (soundCircuit.coupling.position === 'ON') return;
                 turnRev(e.deltaY < 0 ? 0.05 : -0.05);
             }, {
                 passive: false
@@ -9970,7 +9995,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     try {
                         mR2.setPointerCapture(e.pointerId);
                     } catch (_) {}
-                    mR2.src = aimg('r2on.png');
+                    mR2.src = aimg(soundElektroniksPower.closed ? 'r2on.png' : 'r2onnoelec.png');
                     soundCircuit.pulseR2();
                     updateSpeedVisuals();
                     propagateSpeed();
@@ -9998,15 +10023,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let plActivationPending = false;
             let plActivationIntent = 0;
             const playing = () => !!(currentAudio && !currentAudio.paused);
+            const plLampPowered = () => playbackElektroniksPower.closed && soundCircuit.powerContact.closed;
             const paintPl = () => {
-                if (mPl && !plBusy && !plActivationPending) mPl.src = aimg(playing() ? PL.on : PL.off);
+                if (mPl && !plBusy && !plActivationPending) mPl.src = aimg((playing() && plLampPowered()) ? PL.on : PL.off);
             };
             const pressPl = () => {
                 if (!mPl || plBusy) return;
                 plActivationIntent++;
                 plActivationPending = false;
                 plBusy = true;
-                mPl.src = aimg(playing() ? PL.toOff : PL.toOn);
+                mPl.src = aimg((!playing() && plLampPowered()) ? PL.toOn : PL.toOff);
                 panelSoundBank.play('playControl');
                 setTimeout(() => {
                     plBusy = false;
@@ -10019,7 +10045,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const card = visibleCardFor(audio.closest('.card'));
                 const intent = ++plActivationIntent;
                 plActivationPending = true;
-                mPl.src = aimg(PL.toOn);
+                mPl.src = aimg(plLampPowered() ? PL.toOn : PL.toOff);
                 panelSoundBank.play('playControl');
                 setTimeout(() => {
                     if (intent !== plActivationIntent) return;
@@ -10118,7 +10144,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     combo: 'ER'
                 },
             ];
-            const curCombo = () => isrAt('I') ? 'IR' : isrAt('S') ? 'SR' : isrAt('E') ? 'ER' : isrAt('R') ? 'R' : '';
+            const curCombo = () => {
+                const pos = playbackCircuit?.isr.position || 'OFF';
+                return pos === 'I' ? 'IR' : pos === 'S' ? 'SR' : pos === 'E' ? 'ER' : pos === 'R' ? 'R' : '';
+            };
             const mISR = $('mISR');
             let isrCtl = null;
             if (mISR) isrCtl = knobs(mISR, ISR_STEPS, s => {
@@ -10245,7 +10274,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const mKR = $('mKR');
             paintKrSwitch = () => {
                 if (!mKR) return;
-                const s = krIsOn() ? ST.D : ST.C;
+                const s = playbackCircuit?.kr.position === 'ON' ? ST.D : ST.C;
                 mKR.src = aimg(s.f);
                 mKR.style.transform = 'translate(-49.2%, ' + s.ty + '%)';
                 mKR.dataset.m2SwitchCursor = s === ST.D ? 'left' : 'right';
@@ -10963,7 +10992,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         };
 
         (function() {
-            const PROVISIONAL_DC_WIRE_OHMS_PER_METER = 0.053;
+            const PROVISIONAL_DC_WIRE_OHMS_PER_METER = 0.0499;
             const PROVISIONAL_DC_WIRE_LENGTH_METERS = 0.2;
             const PROVISIONAL_DC_TRUNK_LENGTH_METERS = 0.5;
             const PROVISIONAL_DC_CONTACT_RESISTANCE_OHMS = 0.01;
@@ -11334,20 +11363,63 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
 
             class ElectricalConductor extends EventTarget {
+                static R_BASELINE_5C = 0.0499;
+                static ALPHA_CU = 0.00393;
+                static REF_TEMP_C = 5.0;
+
                 #connected = true;
 
                 constructor(name, from, to,
                     lengthMeters = PROVISIONAL_DC_WIRE_LENGTH_METERS,
-                    ohmsPerMeter = PROVISIONAL_DC_WIRE_OHMS_PER_METER) {
+                    ohmsPerMeter = PROVISIONAL_DC_WIRE_OHMS_PER_METER,
+                    options = {}) {
                     super();
                     if (!(from instanceof ElectricalTerminal) || !(to instanceof ElectricalTerminal)) {
                         throw new TypeError(name + ' requires two electrical terminals');
                     }
+                    const isOptionsObj = ohmsPerMeter && typeof ohmsPerMeter === 'object';
+                    const opts = isOptionsObj ? ohmsPerMeter : (options || {});
+                    const baseR = isOptionsObj
+                        ? (opts.rBaseline ?? PROVISIONAL_DC_WIRE_OHMS_PER_METER)
+                        : (Number.isFinite(Number(ohmsPerMeter)) ? Number(ohmsPerMeter) : PROVISIONAL_DC_WIRE_OHMS_PER_METER);
+
                     this.name = name;
                     this.from = from;
                     this.to = to;
-                    this.lengthMeters = lengthMeters;
-                    this.resistance = lengthMeters * ohmsPerMeter;
+                    this.lengthMeters = Number.isFinite(Number(lengthMeters)) ? Number(lengthMeters) : PROVISIONAL_DC_WIRE_LENGTH_METERS;
+                    this.rBaseline = baseR;
+                    this.alphaCu = opts.alphaCu ?? ElectricalConductor.ALPHA_CU;
+                    this.referenceTempC = opts.referenceTempC ?? ElectricalConductor.REF_TEMP_C;
+                    this.ambientTempC = opts.ambientTempC ?? ElectricalConductor.REF_TEMP_C;
+                    this.temperatureC = this.ambientTempC;
+                    this.thermalResistance = opts.thermalResistance ?? 5.0;
+                    this.current = 0;
+                    this.voltageDrop = 0;
+                    this.resistance = this.calculateResistance(this.temperatureC);
+                }
+
+                calculateResistance(tempC = this.temperatureC) {
+                    if (this.lengthMeters <= 0) return 1e-6;
+                    const deltaT = (Number.isFinite(tempC) ? tempC : this.ambientTempC) - this.referenceTempC;
+                    const factor = Math.max(0.1, 1.0 + this.alphaCu * deltaT);
+                    return this.lengthMeters * this.rBaseline * factor;
+                }
+
+                update(current = 0, dtSeconds = 0.016, ambientTempC = null) {
+                    if (ambientTempC !== null && Number.isFinite(Number(ambientTempC))) {
+                        this.ambientTempC = Number(ambientTempC);
+                    }
+                    const i = Number.isFinite(Number(current)) ? Math.abs(Number(current)) : 0;
+                    const dt = Number.isFinite(Number(dtSeconds)) && dtSeconds >= 0 ? Number(dtSeconds) : 0.016;
+                    this.current = i;
+                    const pJoule = i * i * this.resistance;
+                    const targetTemp = this.ambientTempC + pJoule * this.thermalResistance;
+                    const tauThermal = 10.0;
+                    const alpha = dt > 0 ? Math.min(1.0, dt / tauThermal) : 0;
+                    this.temperatureC += (targetTemp - this.temperatureC) * alpha;
+                    this.resistance = this.calculateResistance(this.temperatureC);
+                    this.voltageDrop = i * this.resistance;
+                    return this.resistance;
                 }
 
                 get connected() {
@@ -11421,26 +11493,62 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const DC_SOLVER_AUTHORITY = Symbol('DC CONTROL CIRCUIT SOLVER');
 
             class DcRelayCoil extends EventTarget {
+                static BASE_RESISTANCE = 280.0;
+                static ALPHA_CU = 0.00393;
+                static REF_TEMP_C = 5.0;
+                static MAX_DELTA_T = 32.0;
+                static THERMAL_TAU = 90.0;
+                static PULL_IN_DELAY = 0.010;
+                static RELEASE_DELAY = 0.008;
+
                 #energized = false;
                 #auxiliaryAuthority = Symbol('RELAY AUXILIARY CONTACTS');
                 #auxiliaries = [];
+                #armatureTimer = null;
 
                 constructor(name, {
                     ratedVoltage = 28,
                     resistance = 280,
+                    baseResistance = null,
                     pickupVoltage = 18,
-                    dropoutVoltage = 6
+                    dropoutVoltage = 6,
+                    alphaCu = DcRelayCoil.ALPHA_CU,
+                    referenceTempC = DcRelayCoil.REF_TEMP_C,
+                    ambientTempC = DcRelayCoil.REF_TEMP_C,
+                    maxDeltaT = DcRelayCoil.MAX_DELTA_T,
+                    thermalTau = DcRelayCoil.THERMAL_TAU,
+                    pullInDelay = DcRelayCoil.PULL_IN_DELAY,
+                    releaseDelay = DcRelayCoil.RELEASE_DELAY
                 } = {}) {
                     super();
                     this.name = name;
                     this.a1 = new ElectricalTerminal(this, 'A1');
                     this.a2 = new ElectricalTerminal(this, 'A2');
                     this.ratedVoltage = ratedVoltage;
-                    this.resistance = resistance;
+                    this.baseResistance = (baseResistance !== null && Number.isFinite(Number(baseResistance)) && Number(baseResistance) > 0)
+                        ? Number(baseResistance)
+                        : (Number.isFinite(Number(resistance)) && Number(resistance) > 0 ? Number(resistance) : 280);
+                    this.alphaCu = alphaCu;
+                    this.referenceTempC = referenceTempC;
+                    this.ambientTempC = ambientTempC;
+                    this.maxDeltaT = maxDeltaT;
+                    this.thermalTau = thermalTau;
+                    this.pullInDelay = pullInDelay;
+                    this.releaseDelay = releaseDelay;
+                    this.temperatureC = this.ambientTempC;
+                    this.resistance = this.calculateResistance(this.temperatureC);
                     this.pickupVoltage = pickupVoltage;
                     this.dropoutVoltage = dropoutVoltage;
                     this.voltage = 0;
                     this.current = 0;
+                    this.pullInTimer = 0;
+                    this.releaseTimer = 0;
+                    this.armatureClosed = false;
+                }
+
+                calculateResistance(tempC = this.temperatureC) {
+                    const deltaT = (Number.isFinite(tempC) ? tempC : this.ambientTempC) - this.referenceTempC;
+                    return this.baseResistance * Math.max(0.1, 1.0 + this.alphaCu * deltaT);
                 }
 
                 get energized() {
@@ -11459,22 +11567,18 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     return contact;
                 }
 
-                applyVoltage(voltage, authority = null) {
-                    if (authority !== DC_SOLVER_AUTHORITY) {
-                        throw new Error(
-                            'Coil voltage is determined by circuit continuity: ' + this.name
-                        );
+                #clearArmatureTimer() {
+                    if (this.#armatureTimer !== null) {
+                        clearTimeout(this.#armatureTimer);
+                        this.#armatureTimer = null;
                     }
-                    const nextVoltage = Number.isFinite(voltage) ? voltage : 0;
-                    this.voltage = nextVoltage;
-                    this.current = nextVoltage / this.resistance;
-                    const magnitude = Math.abs(nextVoltage);
-                    const nextEnergized = this.#energized
-                        ? magnitude >= this.dropoutVoltage
-                        : magnitude >= this.pickupVoltage;
-                    if (nextEnergized === this.#energized) return false;
+                }
 
+                #commitEnergizedState(nextEnergized) {
+                    this.#clearArmatureTimer();
+                    if (nextEnergized === this.#energized) return false;
                     this.#energized = nextEnergized;
+                    this.armatureClosed = nextEnergized;
                     this.#auxiliaries.forEach(({ contact, normallyClosed }) => {
                         contact.setClosed(
                             normallyClosed ? !nextEnergized : nextEnergized,
@@ -11483,6 +11587,99 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     });
                     this.dispatchEvent(new Event('statechange'));
                     return true;
+                }
+
+                applyVoltage(voltage, authority = null, dtSec = null) {
+                    let dt = dtSec;
+                    const isDirectStep = typeof authority === 'number';
+                    if (isDirectStep) {
+                        dt = authority;
+                    } else if (authority !== null && authority !== DC_SOLVER_AUTHORITY) {
+                        throw new Error(
+                            'Coil voltage is determined by circuit continuity: ' + this.name
+                        );
+                    }
+                    const stepDt = Number.isFinite(Number(dt)) && Number(dt) >= 0 ? Number(dt) : 0;
+
+                    const nextVoltage = Number.isFinite(voltage) ? voltage : 0;
+                    const magnitude = Math.abs(nextVoltage);
+                    this.voltage = nextVoltage;
+
+                    if (stepDt > 0) {
+                        const targetTemp = this.ambientTempC + this.maxDeltaT * Math.pow(magnitude / this.ratedVoltage, 2);
+                        const alpha = 1.0 - Math.exp(-stepDt / this.thermalTau);
+                        this.temperatureC += (targetTemp - this.temperatureC) * alpha;
+                        this.resistance = this.calculateResistance(this.temperatureC);
+                    }
+                    this.current = nextVoltage / this.resistance;
+
+                    if (isDirectStep) {
+                        this.#clearArmatureTimer();
+                        if (magnitude >= this.pickupVoltage) {
+                            this.releaseTimer = 0;
+                            this.pullInTimer += stepDt;
+                            if (this.pullInTimer >= this.pullInDelay) {
+                                return this.#commitEnergizedState(true);
+                            }
+                        } else if (magnitude < this.dropoutVoltage) {
+                            this.pullInTimer = 0;
+                            this.releaseTimer += stepDt;
+                            if (this.releaseTimer >= this.releaseDelay) {
+                                return this.#commitEnergizedState(false);
+                            }
+                        } else {
+                            this.pullInTimer = 0;
+                            this.releaseTimer = 0;
+                        }
+                        return false;
+                    }
+
+                    const targetEnergized = this.#energized
+                        ? magnitude >= this.dropoutVoltage
+                        : magnitude >= this.pickupVoltage;
+
+                    if (targetEnergized && !this.#energized) {
+                        this.releaseTimer = 0;
+                        this.pullInTimer += stepDt;
+                        if (this.pullInTimer >= this.pullInDelay) {
+                            return this.#commitEnergizedState(true);
+                        }
+                        if (this.#armatureTimer === null) {
+                            const remainingMs = Math.max(1, Math.ceil((this.pullInDelay - this.pullInTimer) * 1000));
+                            this.#armatureTimer = setTimeout(() => {
+                                this.#armatureTimer = null;
+                                if (Math.abs(this.voltage) >= this.pickupVoltage) {
+                                    this.pullInTimer = this.pullInDelay;
+                                    this.#commitEnergizedState(true);
+                                }
+                            }, remainingMs);
+                        }
+                        return false;
+                    }
+
+                    if (!targetEnergized && this.#energized) {
+                        this.pullInTimer = 0;
+                        this.releaseTimer += stepDt;
+                        if (this.releaseTimer >= this.releaseDelay) {
+                            return this.#commitEnergizedState(false);
+                        }
+                        if (this.#armatureTimer === null) {
+                            const remainingMs = Math.max(1, Math.ceil((this.releaseDelay - this.releaseTimer) * 1000));
+                            this.#armatureTimer = setTimeout(() => {
+                                this.#armatureTimer = null;
+                                if (Math.abs(this.voltage) < this.dropoutVoltage) {
+                                    this.releaseTimer = this.releaseDelay;
+                                    this.#commitEnergizedState(false);
+                                }
+                            }, remainingMs);
+                        }
+                        return false;
+                    }
+
+                    this.#clearArmatureTimer();
+                    this.pullInTimer = this.#energized ? this.pullInDelay : 0;
+                    this.releaseTimer = this.#energized ? 0 : this.releaseDelay;
+                    return false;
                 }
             }
 
@@ -11538,6 +11735,360 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             }
 
+            class DcConstantPowerLoad extends DcPoweredLoad {
+                #energized = false;
+                #ratedPower = 0;
+                #nominalVoltage = 28.0;
+                #minVoltage = 9.0;
+                #efficiency = 0.88;
+                #filterCapacitance = 47e-6;
+                #filterEsr = 0.5;
+                #capacitorVoltage = 0;
+                #filterInrushCurrent = 0;
+                #converterCurrent = 0;
+                #lastStepTime = null;
+
+                constructor(name, {
+                    ratedPower = null,
+                    resistance = null,
+                    nominalVoltage = 28.0,
+                    minVoltage = 9.0,
+                    efficiency = 0.88,
+                    filterCapacitance = 47e-6,
+                    filterEsr = 0.5,
+                    pickupVoltage = 18.0,
+                    dropoutVoltage = 9.0
+                } = {}) {
+                    const nomV = Number.isFinite(nominalVoltage) ? nominalVoltage : 28.0;
+                    const eff = Number.isFinite(efficiency) && efficiency > 0 ? efficiency : 0.88;
+                    const hasExplicitResistance = resistance !== null && resistance !== undefined && Number.isFinite(Number(resistance)) && Number(resistance) > 0;
+                    const hasExplicitPower = ratedPower !== null && ratedPower !== undefined && Number.isFinite(Number(ratedPower)) && Number(ratedPower) > 0;
+                    const rPower = hasExplicitResistance
+                        ? ((nomV * nomV / Number(resistance)) * eff)
+                        : (hasExplicitPower ? Number(ratedPower) : (nomV * nomV / 280) * eff);
+                    const initR = hasExplicitResistance
+                        ? Number(resistance)
+                        : (nomV * nomV / (rPower / eff));
+
+                    super(name, {
+                        resistance: initR,
+                        pickupVoltage,
+                        dropoutVoltage: Number.isFinite(minVoltage) ? minVoltage : dropoutVoltage
+                    });
+
+                    this.#ratedPower = hasExplicitPower && !hasExplicitResistance ? Number(ratedPower) : rPower;
+                    this.#nominalVoltage = nomV;
+                    this.#minVoltage = Number.isFinite(minVoltage) ? minVoltage : 9.0;
+                    this.#efficiency = eff;
+                    this.#filterCapacitance = Number.isFinite(filterCapacitance) ? filterCapacitance : 47e-6;
+                    this.#filterEsr = Number.isFinite(filterEsr) ? filterEsr : 0.5;
+                    this.dropoutVoltage = this.#minVoltage;
+                    this.pickupVoltage = Number.isFinite(pickupVoltage) ? pickupVoltage : 18.0;
+                    this.dissipationWatts = 0;
+                    this.resistance = initR;
+                }
+
+                get energized() {
+                    return this.#energized;
+                }
+
+                get ratedPower() {
+                    return this.#ratedPower;
+                }
+
+                set ratedPower(value) {
+                    const p = Number(value);
+                    if (Number.isFinite(p) && p > 0) {
+                        this.#ratedPower = p;
+                    }
+                }
+
+                get nominalVoltage() {
+                    return this.#nominalVoltage;
+                }
+
+                get minVoltage() {
+                    return this.#minVoltage;
+                }
+
+                get efficiency() {
+                    return this.#efficiency;
+                }
+
+                get filterCapacitance() {
+                    return this.#filterCapacitance;
+                }
+
+                get capacitorVoltage() {
+                    return this.#capacitorVoltage;
+                }
+
+                get filterInrushCurrent() {
+                    return this.#filterInrushCurrent;
+                }
+
+                get converterCurrent() {
+                    return this.#converterCurrent;
+                }
+
+                setResistance(resistance) {
+                    const next = Number(resistance);
+                    if (!Number.isFinite(next) || next <= 0) {
+                        throw new TypeError('Invalid load resistance: ' + this.name);
+                    }
+                    if (Math.abs(next - this.resistance) < 1e-9) return false;
+                    this.resistance = next;
+                    this.#ratedPower = (this.#nominalVoltage * this.#nominalVoltage / next) * this.#efficiency;
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
+                applyVoltage(voltage, authority = null, dtSec = null) {
+                    let dt = dtSec;
+                    const isDirectStep = typeof authority === 'number';
+                    if (isDirectStep) {
+                        dt = authority;
+                    } else if (authority && authority !== DC_SOLVER_AUTHORITY) {
+                        throw new Error('Load voltage is determined by circuit continuity: ' + this.name);
+                    }
+                    if (dt === null || dt === undefined) {
+                        if (this.#lastStepTime === null) {
+                            dt = 0;
+                            this.#lastStepTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                        } else {
+                            const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                            dt = Math.max(0, Math.min(0.5, (now - this.#lastStepTime) / 1000));
+                            this.#lastStepTime = now;
+                        }
+                    }
+
+                    const nextVoltage = Number.isFinite(voltage) ? voltage : 0;
+                    const absV = Math.abs(nextVoltage);
+
+                    let convCurrent = 0;
+                    if (absV >= this.#minVoltage) {
+                        convCurrent = this.#ratedPower / (this.#efficiency * absV);
+                    } else if (absV >= 4.5) {
+                        const iDropout = this.#ratedPower / (this.#efficiency * this.#minVoltage);
+                        convCurrent = iDropout * (absV / this.#minVoltage);
+                    } else {
+                        convCurrent = 0;
+                    }
+                    this.#converterCurrent = convCurrent;
+
+                    const rSteady = (this.#nominalVoltage * this.#nominalVoltage) / Math.max(0.01, this.#ratedPower / this.#efficiency);
+                    const rInrush = Math.max(2.0, rSteady / 4.0);
+                    const tauC = Math.max(0.004, this.#filterEsr * 4 * this.#filterCapacitance * 50);
+                    let inrushCurrent = 0;
+
+                    if (absV > 0) {
+                        const vDiff = absV - this.#capacitorVoltage;
+                        if (authority === DC_SOLVER_AUTHORITY && dt === 0 && this.#capacitorVoltage > 0) {
+                            inrushCurrent = this.#filterInrushCurrent;
+                        } else if (authority === DC_SOLVER_AUTHORITY && this.#capacitorVoltage > 0) {
+                            const frameDt = Math.max(dt, 0.025);
+                            inrushCurrent = (vDiff / rInrush) * Math.exp(-frameDt / tauC);
+                            this.#capacitorVoltage += vDiff * (1 - Math.exp(-frameDt / tauC));
+                        } else if (dt > 0) {
+                            inrushCurrent = (vDiff / rInrush) * Math.exp(-dt / tauC);
+                            this.#capacitorVoltage += vDiff * (1 - Math.exp(-dt / tauC));
+                        } else {
+                            inrushCurrent = vDiff / rInrush;
+                            if (authority === DC_SOLVER_AUTHORITY) {
+                                this.#capacitorVoltage = absV;
+                                inrushCurrent = 0;
+                            }
+                        }
+                    } else {
+                        if (dt > 0) {
+                            this.#capacitorVoltage *= Math.exp(-dt / 0.1);
+                        } else if (authority === DC_SOLVER_AUTHORITY) {
+                            this.#capacitorVoltage = 0;
+                        }
+                        inrushCurrent = 0;
+                    }
+                    this.#filterInrushCurrent = Math.max(0, inrushCurrent);
+
+                    const totalCurrent = convCurrent + this.#filterInrushCurrent;
+                    this.voltage = nextVoltage;
+                    this.current = nextVoltage < 0 ? -totalCurrent : totalCurrent;
+                    this.dissipationWatts = absV * convCurrent;
+
+                    let rEff;
+                    if (totalCurrent > 1e-6 && absV > 1e-4) {
+                        rEff = Math.max(0.05, absV / totalCurrent);
+                    } else {
+                        rEff = 1e7;
+                    }
+
+                    const prevR = this.resistance;
+                    this.resistance = rEff;
+
+                    const nextEnergized = this.#energized
+                        ? absV >= this.#minVoltage
+                        : absV >= this.pickupVoltage;
+                    const stateChanged = nextEnergized !== this.#energized;
+                    this.#energized = nextEnergized;
+                    if (stateChanged) {
+                        this.dispatchEvent(new Event('statechange'));
+                    }
+
+                    const relDeltaR = Math.abs(rEff - prevR) / (prevR || 1);
+                    return stateChanged || (this.#energized && relDeltaR > 0.01);
+                }
+            }
+
+            class DcFilamentLampLoad extends DcPoweredLoad {
+                #energized = false;
+                #thermalState = 0;
+                #nominalResistance = 2800;
+                #nominalVoltage = 28.0;
+                #coldRatio = 7.0;
+                #thermalTau = 0.015;
+                #lastStepTime = null;
+
+                constructor(name, {
+                    nominalResistance = 2800,
+                    resistance = null,
+                    nominalVoltage = 28.0,
+                    coldRatio = 7.0,
+                    thermalTau = 0.015,
+                    pickupVoltage = 12.0,
+                    dropoutVoltage = 4.0
+                } = {}) {
+                    const nomR = Number.isFinite(nominalResistance)
+                        ? nominalResistance
+                        : (Number.isFinite(resistance) ? resistance : 2800);
+                    const cRatio = Number.isFinite(coldRatio) && coldRatio > 0 ? coldRatio : 7.0;
+                    const initialColdR = Math.max(0.1, nomR / cRatio);
+
+                    super(name, {
+                        resistance: initialColdR,
+                        pickupVoltage,
+                        dropoutVoltage
+                    });
+
+                    this.#nominalResistance = nomR;
+                    this.#nominalVoltage = Number.isFinite(nominalVoltage) ? nominalVoltage : 28.0;
+                    this.#coldRatio = cRatio;
+                    this.#thermalTau = Number.isFinite(thermalTau) && thermalTau > 0 ? thermalTau : 0.015;
+                    this.#thermalState = 0;
+                    this.resistance = initialColdR;
+                    this.voltage = 0;
+                    this.current = 0;
+                }
+
+                get energized() {
+                    return this.#energized;
+                }
+
+                get thermalState() {
+                    return this.#thermalState;
+                }
+
+                get nominalResistance() {
+                    return this.#nominalResistance;
+                }
+
+                get nominalVoltage() {
+                    return this.#nominalVoltage;
+                }
+
+                get coldRatio() {
+                    return this.#coldRatio;
+                }
+
+                get coldResistance() {
+                    return this.#nominalResistance / this.#coldRatio;
+                }
+
+                get thermalTau() {
+                    return this.#thermalTau;
+                }
+
+                #calculateHotResistance(absV) {
+                    if (absV <= 0) return this.coldResistance;
+                    const vRatio = absV / this.#nominalVoltage;
+                    const rHot = this.#nominalResistance * Math.pow(vRatio, 0.45);
+                    return Math.max(this.coldResistance, rHot);
+                }
+
+                setResistance(resistance) {
+                    const next = Number(resistance);
+                    if (!Number.isFinite(next) || next <= 0) {
+                        throw new TypeError('Invalid load resistance: ' + this.name);
+                    }
+                    if (Math.abs(next - this.#nominalResistance) < 1e-9) return false;
+                    this.#nominalResistance = next;
+                    const hotR = this.#calculateHotResistance(Math.abs(this.voltage));
+                    const coldR = this.coldResistance;
+                    this.resistance = coldR + this.#thermalState * (hotR - coldR);
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
+                applyVoltage(voltage, authority = null, dtSec = null) {
+                    let dt = dtSec;
+                    if (typeof authority === 'number') {
+                        dt = authority;
+                    } else if (authority && authority !== DC_SOLVER_AUTHORITY) {
+                        throw new Error('Load voltage is determined by circuit continuity: ' + this.name);
+                    }
+
+                    if (dt === null || dt === undefined) {
+                        if (this.#lastStepTime === null) {
+                            dt = 0;
+                            this.#lastStepTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                        } else {
+                            const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+                            dt = Math.max(0, Math.min(0.5, (now - this.#lastStepTime) / 1000));
+                            this.#lastStepTime = now;
+                        }
+                    }
+
+                    const nextVoltage = Number.isFinite(voltage) ? voltage : 0;
+                    const absV = Math.abs(nextVoltage);
+
+                    const coldR = this.coldResistance;
+                    const hotR = this.#calculateHotResistance(absV);
+                    const targetThermal = absV > 0 ? 1.0 : 0;
+                    if (dt > 0) {
+                        const heatFactor = 1 - Math.exp(-dt / this.#thermalTau);
+                        this.#thermalState += (targetThermal - this.#thermalState) * heatFactor;
+                    }
+                    const rEff = Math.max(0.1, coldR + this.#thermalState * (hotR - coldR));
+
+                    const prevR = this.resistance;
+                    this.resistance = rEff;
+                    this.voltage = nextVoltage;
+                    this.current = nextVoltage / rEff;
+
+                    const nextEnergized = this.#energized
+                        ? absV >= this.dropoutVoltage
+                        : absV >= this.pickupVoltage;
+                    const stateChanged = nextEnergized !== this.#energized;
+                    this.#energized = nextEnergized;
+                    if (stateChanged) {
+                        this.dispatchEvent(new Event('statechange'));
+                    }
+
+                    const relDeltaR = Math.abs(rEff - prevR) / (prevR || 1);
+                    return stateChanged || (this.#energized && relDeltaR > 0.01);
+                }
+            }
+
+            if (typeof window !== 'undefined') {
+                window.ElectricalTerminal = ElectricalTerminal;
+                window.ElectricalContact = ElectricalContact;
+                window.ElectricalConductor = ElectricalConductor;
+                window.DcRelayCoil = DcRelayCoil;
+                window.DcPoweredLoad = DcPoweredLoad;
+                window.DcConstantPowerLoad = DcConstantPowerLoad;
+                window.DcFilamentLampLoad = DcFilamentLampLoad;
+                window.DcSource = DcSource;
+                window.DC_SOLVER_AUTHORITY = DC_SOLVER_AUTHORITY;
+            }
+
             class DcControlCircuit extends EventTarget {
                 #solving = false;
                 #solveAgain = false;
@@ -11555,6 +12106,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     this.contacts = [];
                     this.coils = [];
                     this.loads = [];
+                    this.breakers = [];
                     this.fault = null;
                     this.potentials = new Map();
                 }
@@ -11985,42 +12537,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 : openCircuitVolts;
                             let regulatedCurrent = equivalentConductance * regulatedVoltage;
 
-                            if (passes === 1 && dtSec > 0 && startupVoltageFactor >= 0.99) {
-                                if (regulatedCurrent > deratedCurrentLimit) {
-                                    const excessNorm = (regulatedCurrent - deratedCurrentLimit) /
-                                        Math.max(0.1, deratedPeakLimit - deratedCurrentLimit);
-                                    this.source.peakEnergySec = Math.min(
-                                        3.5,
-                                        this.source.peakEnergySec + dtSec * Math.max(1.0, excessNorm)
-                                    );
-                                } else if (this.source.peakEnergySec > 0) {
-                                    const loadRatio = Math.max(0, Math.min(1, regulatedCurrent / deratedCurrentLimit));
-                                    const recoveryTimeSec = loadRatio <= 0.40
-                                        ? (6.0 + (loadRatio / 0.40) * 4.0)
-                                        : (10.0 + ((loadRatio - 0.40) / 0.60) * 90.0);
-                                    const coolRate = 3.0 / recoveryTimeSec;
-                                    this.source.peakEnergySec = Math.max(0, this.source.peakEnergySec - dtSec * coolRate);
-                                }
-                            }
-
-                            if (regulatedCurrent > deratedCurrentLimit) {
-                                if (this.source.overloadStartedAt === null) {
-                                    this.source.overloadStartedAt = now - this.source.peakEnergySec * 1000;
-                                }
-                                this.source.overloadElapsedMs = Math.max(
-                                    this.source.peakEnergySec * 1000,
-                                    now - this.source.overloadStartedAt
-                                );
-                            } else {
-                                this.source.overloadStartedAt = null;
-                                this.source.overloadElapsedMs = this.source.peakEnergySec * 1000;
-                                if (this.source.peakEnergySec <= 0) {
-                                    this.#clearProtectionTimer();
-                                    this.#clearAutoRecoveryTimer();
-                                } else {
-                                    this.#scheduleProtectionTick(250);
-                                }
-                            }
 
                             const inPeakWindow = this.source.overloadElapsedMs < this.source.peakDurationMs &&
                                 this.source.peakEnergySec < 3.0;
@@ -12118,13 +12634,88 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             this.source.mode = mode;
 
                             this.loads.forEach(load => {
-                                if (load.applyVoltage(this.voltageBetween(load.a1, load.a2), DC_SOLVER_AUTHORITY)) {
+                                const loadDt = passes <= 2 ? Math.max(dtSec, 0.060) : 0;
+                                if (load.applyVoltage(this.voltageBetween(load.a1, load.a2), DC_SOLVER_AUTHORITY, loadDt)) {
                                     this.#solveAgain = true;
                                 }
                             });
 
-                            const isDeadShort = startupVoltageFactor >= 0.99 && limiting && effectiveVoltage < DDR120A24_SHORT_CIRCUIT_VOLTS;
-                            const isSustainedDeepOverload = startupVoltageFactor >= 0.99 && (
+                            if (this.#solveAgain && passes < 8) {
+                                continue;
+                            }
+
+                            if (dtSec > 0 && startupVoltageFactor >= 0.99) {
+                                if (regulatedCurrent > deratedCurrentLimit) {
+                                    const excessNorm = (regulatedCurrent - deratedCurrentLimit) /
+                                        Math.max(0.1, deratedPeakLimit - deratedCurrentLimit);
+                                    this.source.peakEnergySec = Math.min(
+                                        3.5,
+                                        this.source.peakEnergySec + dtSec * Math.max(1.0, excessNorm)
+                                    );
+                                } else if (this.source.peakEnergySec > 0) {
+                                    const loadRatio = Math.max(0, Math.min(1, regulatedCurrent / deratedCurrentLimit));
+                                    const recoveryTimeSec = loadRatio <= 0.40
+                                        ? (6.0 + (loadRatio / 0.40) * 4.0)
+                                        : (10.0 + ((loadRatio - 0.40) / 0.60) * 90.0);
+                                    const coolRate = 3.0 / recoveryTimeSec;
+                                    this.source.peakEnergySec = Math.max(0, this.source.peakEnergySec - dtSec * coolRate);
+                                }
+                            }
+
+                            if (regulatedCurrent > deratedCurrentLimit) {
+                                if (this.source.overloadStartedAt === null) {
+                                    this.source.overloadStartedAt = now - this.source.peakEnergySec * 1000;
+                                }
+                                this.source.overloadElapsedMs = Math.max(
+                                    this.source.peakEnergySec * 1000,
+                                    now - this.source.overloadStartedAt
+                                );
+                            } else {
+                                this.source.overloadStartedAt = null;
+                                this.source.overloadElapsedMs = this.source.peakEnergySec * 1000;
+                                if (this.source.peakEnergySec <= 0) {
+                                    this.#clearProtectionTimer();
+                                    this.#clearAutoRecoveryTimer();
+                                } else {
+                                    this.#scheduleProtectionTick(250);
+                                }
+                            }
+
+                            if (dtSec > 0) {
+                                this.conductors.forEach(conductor => {
+                                    const iCond = conductor.conductive
+                                        ? Math.abs(this.voltageBetween(conductor.from, conductor.to) / conductor.resistance)
+                                        : 0;
+                                    conductor.update(iCond, dtSec, this.source.ambientTempC);
+                                });
+                            }
+
+                            let branchTrippedInPass = false;
+                            let anyBreakerHeating = false;
+                            if (Array.isArray(this.breakers) && this.breakers.length > 0) {
+                                this.breakers.forEach(breaker => {
+                                    const actualPoleCurrent = breaker.measureCurrent();
+                                    const prospectivePoleCurrent = (startupVoltageFactor >= 0.99 && voltageScale > 1e-4)
+                                        ? (actualPoleCurrent / voltageScale)
+                                        : actualPoleCurrent;
+                                    const evalCurrent = (prospectivePoleCurrent >= breaker.magneticTripMultiplier * breaker.ratedCurrent)
+                                        ? prospectivePoleCurrent
+                                        : actualPoleCurrent;
+                                    if (breaker.stepThermal(evalCurrent, dtSec)) {
+                                        branchTrippedInPass = true;
+                                        this.#solveAgain = true;
+                                    }
+                                    if (breaker.thermalEnergy > 0 && !breaker.tripped && actualPoleCurrent > breaker.ratedCurrent) {
+                                        anyBreakerHeating = true;
+                                    }
+                                });
+                            }
+                            if (anyBreakerHeating) {
+                                this.#scheduleProtectionTick(100);
+                            }
+
+                            const isDeadShort = !branchTrippedInPass && startupVoltageFactor >= 0.99 && limiting && effectiveVoltage < DDR120A24_SHORT_CIRCUIT_VOLTS;
+                            const isSustainedDeepOverload = !branchTrippedInPass && startupVoltageFactor >= 0.99 && (
                                 !inPeakWindow &&
                                 regulatedCurrent > this.source.overloadCeilingCurrent &&
                                 (effectiveVoltage < 18.0 || this.source.overloadElapsedMs >= this.source.ccShutdownMs)
@@ -12154,11 +12745,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 this.fault = null;
                             }
                         } while (this.#solveAgain);
-                    } finally {
                         this.source.updateThermalAndStressState(dtSec);
+                        this.dispatchEvent(new Event('solved'));
+                    } finally {
                         this.#solving = false;
                     }
-                    this.dispatchEvent(new Event('solved'));
                     return !this.source.tripped;
                 }
 
@@ -12278,6 +12869,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         ]))
                     };
                 }
+            }
+
+            if (typeof window !== 'undefined') {
+                window.DcControlCircuit = DcControlCircuit;
             }
 
             class DcDeviceRegistry {
@@ -12605,7 +13200,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         }
                     });
                     const maximumCurrent = this.circuit.loads.reduce((sum, load) =>
-                        sum + this.circuit.source.nominalVoltage / load.resistance, 0);
+                        sum + this.circuit.source.nominalVoltage / (load.nominalResistance || load.resistance), 0);
                     if (maximumCurrent > this.circuit.source.currentLimit) {
                         faults.push({
                             device: this.circuit.source.name,
@@ -12682,18 +13277,30 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
                 ))
                 .register('lamp', (spec, context) => {
-                    const lamp = context.circuit.addLoad(new DcPoweredLoad(
+                    const lamp = context.circuit.addLoad(new DcFilamentLampLoad(
                         spec.name || spec.id,
-                        { resistance: spec.resistance }
+                        {
+                            nominalResistance: spec.nominalResistance || spec.resistance || 2800,
+                            nominalVoltage: spec.nominalVoltage || 28.0,
+                            coldRatio: spec.coldRatio || 7.0,
+                            thermalTau: spec.thermalTau || 0.015
+                        }
                     ));
                     context.wire((spec.name || spec.id) + ' FEED', context.supply, lamp.a1);
                     context.wire((spec.name || spec.id) + ' RETURN', lamp.a2, context.returnTerminal);
                     return lamp;
                 })
                 .register('elektroniks-unit', (spec, context) => {
-                    const unit = context.circuit.addLoad(new DcPoweredLoad(
+                    const unit = context.circuit.addLoad(new DcConstantPowerLoad(
                         spec.name || spec.id,
-                        { resistance: spec.resistance }
+                        {
+                            resistance: spec.resistance,
+                            ratedPower: spec.ratedPower,
+                            nominalVoltage: spec.nominalVoltage || 28.0,
+                            minVoltage: spec.minVoltage || 9.0,
+                            efficiency: spec.efficiency || 0.88,
+                            filterCapacitance: spec.filterCapacitance || 47e-6
+                        }
                     ));
                     context.wire((spec.name || spec.id) + ' FEED', context.supply, unit.a1);
                     context.wire((spec.name || spec.id) + ' RETURN', unit.a2, context.returnTerminal);
@@ -12712,40 +13319,159 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             class DcStrobeEmitter extends EventTarget {
                 #illuminated = false;
                 #offTimer = null;
+                #rechargeTimer = null;
 
-                constructor(name, load) {
+                constructor(name, loadOrOptions = null, options = {}) {
                     super();
                     this.name = name;
-                    this.load = load;
-                    load.addEventListener('statechange', () => {
-                        if (!load.energized) this.extinguish();
-                        this.dispatchEvent(new Event('powerchange'));
-                    });
+                    const hasLoad = loadOrOptions && typeof loadOrOptions.setResistance === 'function';
+                    const opts = hasLoad ? (options || {}) : (loadOrOptions || {});
+                    this.load = hasLoad ? loadOrOptions : null;
+                    this.idleResistance = Number(opts.idleResistance) || 35000.0;
+                    this.pulseResistance = Number(opts.pulseResistance) || 350.0;
+                    this.rechargeResistance = Number(opts.rechargeResistance) || 1120.0;
+                    this.flashDurationMs = Number(opts.flashDurationMs) || 50.0;
+                    this.rechargeTauMs = Number(opts.rechargeTauMs) || 60.0;
+                    this.state = 'IDLE';
+                    this.stateTimerMs = 0;
+                    this.resistance = this.idleResistance;
+                    this.#voltage = 0;
+                    this.#current = 0;
+
+                    if (this.load) {
+                        this.load.setResistance(this.idleResistance);
+                        this.load.addEventListener('statechange', () => {
+                            if (!this.load.energized) this.extinguish();
+                            this.dispatchEvent(new Event('powerchange'));
+                        });
+                    }
+                }
+
+                #voltage = 0;
+                #current = 0;
+
+                get voltage() {
+                    return this.load ? this.load.voltage : this.#voltage;
+                }
+
+                set voltage(val) {
+                    this.#voltage = Number(val) || 0;
+                }
+
+                get current() {
+                    return this.load ? this.load.current : this.#current;
+                }
+
+                set current(val) {
+                    this.#current = Number(val) || 0;
                 }
 
                 get powered() {
-                    return this.load.energized;
+                    return this.load ? this.load.energized : (this.#voltage > 0.5);
                 }
 
                 get illuminated() {
                     return this.#illuminated;
                 }
 
+                set illuminated(val) {
+                    this.#illuminated = Boolean(val);
+                }
+
+                #applyLoadResistance(r) {
+                    const nextR = Math.max(1.0, Number(r) || this.idleResistance);
+                    this.resistance = nextR;
+                    if (this.load) {
+                        this.load.setResistance(nextR);
+                    }
+                }
+
+                triggerFlash(durationMs = this.flashDurationMs) {
+                    this.flashDurationMs = Number(durationMs) || this.flashDurationMs;
+                    this.state = 'PULSE';
+                    this.stateTimerMs = 0;
+                    this.#illuminated = true;
+                    this.#applyLoadResistance(this.pulseResistance);
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
                 flash(duration) {
                     if (!this.powered) return false;
                     if (this.#offTimer !== null) clearTimeout(this.#offTimer);
+                    if (this.#rechargeTimer !== null) clearTimeout(this.#rechargeTimer);
                     this.#offTimer = null;
+                    this.#rechargeTimer = null;
+                    const pulseMs = Number(duration) || this.flashDurationMs;
+                    this.flashDurationMs = pulseMs;
+                    this.state = 'PULSE';
+                    this.stateTimerMs = 0;
+                    this.#applyLoadResistance(this.pulseResistance);
                     this.#setIlluminated(true);
                     this.#offTimer = setTimeout(() => {
                         this.#offTimer = null;
+                        this.state = 'RECHARGE';
+                        this.stateTimerMs = 0;
+                        this.#applyLoadResistance(this.rechargeResistance);
                         this.#setIlluminated(false);
-                    }, duration);
+                        this.#rechargeTimer = setTimeout(() => {
+                            this.#rechargeTimer = null;
+                            this.state = 'IDLE';
+                            this.stateTimerMs = 0;
+                            this.#applyLoadResistance(this.idleResistance);
+                            this.dispatchEvent(new Event('change'));
+                        }, this.rechargeTauMs);
+                    }, pulseMs);
                     return true;
+                }
+
+                step(dtSeconds = 0.016, voltage = null) {
+                    const v = voltage !== null ? Math.max(0, Number(voltage) || 0) : (this.load ? Math.abs(this.load.voltage) : 28.0);
+                    this.#voltage = v;
+                    const dtMs = Math.max(0, (Number(dtSeconds) || 0) * 1000.0);
+                    this.stateTimerMs += dtMs;
+
+                    if (v <= 0.5) {
+                        this.#illuminated = false;
+                        this.#current = 0;
+                        this.#applyLoadResistance(this.idleResistance);
+                        return;
+                    }
+
+                    if (this.state === 'PULSE') {
+                        this.#applyLoadResistance(this.pulseResistance);
+                        this.#illuminated = true;
+                        if (this.stateTimerMs >= this.flashDurationMs) {
+                            this.state = 'RECHARGE';
+                            this.#illuminated = false;
+                            this.stateTimerMs = 0;
+                        }
+                    } else if (this.state === 'RECHARGE') {
+                        const alpha = 1.0 - Math.exp(-this.stateTimerMs / this.rechargeTauMs);
+                        const rInterp = this.pulseResistance + (this.idleResistance - this.pulseResistance) * alpha;
+                        this.#applyLoadResistance(rInterp);
+                        this.#illuminated = false;
+                        if (this.stateTimerMs >= 5 * this.rechargeTauMs) {
+                            this.state = 'IDLE';
+                            this.#applyLoadResistance(this.idleResistance);
+                        }
+                    } else {
+                        this.state = 'IDLE';
+                        this.#applyLoadResistance(this.idleResistance);
+                        this.#illuminated = false;
+                    }
+
+                    this.#current = v / this.resistance;
                 }
 
                 extinguish() {
                     if (this.#offTimer !== null) clearTimeout(this.#offTimer);
+                    if (this.#rechargeTimer !== null) clearTimeout(this.#rechargeTimer);
                     this.#offTimer = null;
+                    this.#rechargeTimer = null;
+                    this.state = 'IDLE';
+                    this.stateTimerMs = 0;
+                    this.#applyLoadResistance(this.idleResistance);
                     return this.#setIlluminated(false);
                 }
 
@@ -12762,19 +13488,24 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #cycleTimer = null;
                 #timers = new Set();
                 #running = false;
-            #panelWord = '000000000';
+                #panelWord = '000000000';
                 #warning = false;
                 #cycleNumber = 0;
 
-                constructor(circuit, controlLoad, loads, readPanelState) {
+                constructor(circuit = null, controlLoad = null, loads = {}, readPanelState = null) {
                     super();
                     this.name = 'A5 LIGHTING CONTROL UNIT';
                     this.circuit = circuit;
                     this.controlLoad = controlLoad;
-                    this.loads = loads;
-                    this.readPanelState = readPanelState;
+                    this.controllerLoad = controlLoad;
+                    this.loads = loads || {};
+                    this.readPanelState = typeof readPanelState === 'function'
+                        ? readPanelState
+                        : () => ({ pl: false, isr: 'OFF', k: 'OFF', kr: 'OFF', m: 'C', l: 'OFF' });
                     this.flashRate = 40;
                     this.cycleDuration = 60000 / this.flashRate;
+                    this.periodMs = this.cycleDuration;
+                    this.elapsedMs = 0;
                     this.safeCurrentLimit = 3.2;
                     this.pattern = Object.freeze({
                         bitOrder: Object.freeze(['PL', 'ISR2', 'ISR1', 'ISR0', 'K', 'KR', 'M1', 'M0', 'L']),
@@ -12786,28 +13517,41 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         oddTopDelay: 260,
                         warningGap: 80
                     });
+                    const createStrobe = (label, entry) => {
+                        if (entry instanceof DcStrobeEmitter) return entry;
+                        if (entry && entry.load) return new DcStrobeEmitter(label, entry.load);
+                        return new DcStrobeEmitter(label, entry);
+                    };
                     this.strobes = Object.freeze({
-                        top: new DcStrobeEmitter('H2 TOP MAIN BUS RED STROBE', loads.top.load),
-                        left: new DcStrobeEmitter('H3 LEFT PLAYBACK WHITE STROBE', loads.left.load),
-                        right: new DcStrobeEmitter('H4 RIGHT PLAYBACK WHITE STROBE', loads.right.load),
-                        bottomLeft: new DcStrobeEmitter('H5 BOTTOM LEFT CURRENT GREEN STROBE', loads.bottomLeft.load),
-                        bottomRight: new DcStrobeEmitter('H6 BOTTOM RIGHT PANEL CODE RED STROBE', loads.bottomRight.load)
+                        top: createStrobe('H2 TOP MAIN BUS RED STROBE', this.loads.top),
+                        left: createStrobe('H3 LEFT PLAYBACK WHITE STROBE', this.loads.left),
+                        right: createStrobe('H4 RIGHT PLAYBACK WHITE STROBE', this.loads.right),
+                        bottomLeft: createStrobe('H5 BOTTOM LEFT CURRENT GREEN STROBE', this.loads.bottomLeft),
+                        bottomRight: createStrobe('H6 BOTTOM RIGHT PANEL CODE RED STROBE', this.loads.bottomRight)
                     });
                     Object.values(this.strobes).forEach(strobe => {
                         strobe.addEventListener('change', () => this.dispatchEvent(new Event('change')));
                         strobe.addEventListener('powerchange', () => this.dispatchEvent(new Event('change')));
                     });
-                    loads.top.addEventListener('change', () => this.#synchronizeRunState());
-                    controlLoad.addEventListener('statechange', () => this.#synchronizeRunState());
-                    circuit.addEventListener('solved', () => this.#synchronizeRunState());
-                    circuit.transaction(() => {
-                        loads.top.setActive(true);
-                        loads.left.setActive(true);
-                        loads.right.setActive(true);
-                        loads.bottomLeft.setActive(true);
-                        loads.bottomRight.setActive(true);
-                    });
-                    this.#synchronizeRunState();
+                    if (this.loads.top && typeof this.loads.top.addEventListener === 'function') {
+                        this.loads.top.addEventListener('change', () => this.#synchronizeRunState());
+                    }
+                    if (controlLoad && typeof controlLoad.addEventListener === 'function') {
+                        controlLoad.addEventListener('statechange', () => this.#synchronizeRunState());
+                    }
+                    if (circuit && typeof circuit.addEventListener === 'function') {
+                        circuit.addEventListener('solved', () => this.#synchronizeRunState());
+                    }
+                    if (circuit && typeof circuit.transaction === 'function' && this.loads.top && typeof this.loads.top.setActive === 'function') {
+                        circuit.transaction(() => {
+                            this.loads.top.setActive(true);
+                            this.loads.left.setActive(true);
+                            this.loads.right.setActive(true);
+                            this.loads.bottomLeft.setActive(true);
+                            this.loads.bottomRight.setActive(true);
+                        });
+                        this.#synchronizeRunState();
+                    }
                 }
 
                 get running() {
@@ -12822,7 +13566,32 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     return this.#warning;
                 }
 
+                step(dtSeconds = 0.016, voltage = 28.0) {
+                    const prevElapsed = this.elapsedMs;
+                    const dtMs = (Number(dtSeconds) || 0) * 1000;
+                    this.elapsedMs = (this.elapsedMs + dtMs) % this.periodMs;
+                    if (this.elapsedMs <= dtMs + 1e-3 || this.elapsedMs < prevElapsed) {
+                        this.strobes.top.triggerFlash(24);
+                        this.strobes.bottomLeft.triggerFlash(58);
+                    } else if (Math.abs(this.elapsedMs - 750) < dtMs) {
+                        this.strobes.left.triggerFlash(44);
+                        this.strobes.right.triggerFlash(44);
+                        this.strobes.bottomRight.triggerFlash(58);
+                    }
+                    Object.values(this.strobes).forEach(strobe => strobe.step(dtSeconds, voltage));
+                    if (this.circuit && typeof this.circuit.solve === 'function') {
+                        this.circuit.solve();
+                    }
+                }
+
+                getTotalCurrent() {
+                    const strobeSum = Object.values(this.strobes).reduce((sum, s) => sum + Math.abs(s.current || 0), 0);
+                    const ctrlCurrent = this.controlLoad ? Math.abs(this.controlLoad.current || 0) : 0;
+                    return strobeSum + ctrlCurrent;
+                }
+
                 #synchronizeRunState() {
+                    if (!this.controlLoad || !this.circuit) return;
                     if (this.controlLoad.energized && !this.circuit.source.tripped) this.start();
                     else this.stop();
                 }
@@ -12849,14 +13618,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
 
                 #beginCycle() {
-                    if (!this.#running || !this.controlLoad.energized || this.circuit.source.tripped) {
+                    if (!this.#running || (this.controlLoad && !this.controlLoad.energized) || (this.circuit && this.circuit.source.tripped)) {
                         this.stop();
                         return;
                     }
                     this.#cycleNumber++;
                     const panelState = this.readPanelState();
                     this.#panelWord = this.#encodePanelWord(panelState);
-                    this.#warning = this.circuit.source.current >= this.safeCurrentLimit;
+                    this.#warning = this.circuit ? (this.circuit.source.current >= this.safeCurrentLimit) : false;
                     const evenCycle = this.#cycleNumber % 2 === 0;
                     this.#schedule(0, () => {
                         this.strobes.left.flash(44);
@@ -12921,16 +13690,19 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         flashRate: this.flashRate,
                         cycleDuration: this.cycleDuration,
                         safeCurrentLimit: this.safeCurrentLimit,
-                        powered: this.controlLoad.energized,
+                        powered: this.controlLoad ? this.controlLoad.energized : true,
                         warning: this.#warning,
                         panelWord: this.#panelWord,
                         pattern: this.pattern,
+                        totalCurrent: this.getTotalCurrent(),
                         strobes: Object.fromEntries(Object.entries(this.strobes).map(
                             ([id, strobe]) => [id, {
+                                state: strobe.state,
                                 powered: strobe.powered,
                                 illuminated: strobe.illuminated,
-                                voltage: strobe.load.voltage,
-                                current: strobe.load.current
+                                voltage: strobe.voltage,
+                                current: strobe.current,
+                                resistance: strobe.resistance
                             }]
                         ))
                     };
@@ -13008,45 +13780,173 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 #authority = Symbol('DC BRANCH CIRCUIT BREAKER');
                 #conducting = false;
 
-                constructor(name, circuit, poleIds, lampResistance = 1400) {
+                constructor(name, circuit = null, poleIds = ['main'], optionsOrLampResistance = 1400) {
                     super();
+                    const opts = (optionsOrLampResistance && typeof optionsOrLampResistance === 'object')
+                        ? optionsOrLampResistance
+                        : { lampResistance: Number(optionsOrLampResistance) || 1400 };
                     this.name = name;
                     this.circuit = circuit;
-                    this.primaryPole = poleIds[0];
-                    this.poles = new Map(poleIds.map(id => [
-                        id,
-                        circuit.addContact(new ElectricalContact(
-                            `${name} ${id.toUpperCase()} POLE`,
+                    this.ratedCurrent = Number(opts.ratedCurrent) || 1.0;
+                    this.magneticTripMultiplier = Number(opts.magneticTripMultiplier) || 10.0;
+                    this.thermalTauSeconds = Number(opts.thermalTauSeconds) || 20.0;
+                    this.coolingTauSeconds = Number(opts.coolingTauSeconds) || 40.0;
+                    this.lampResistance = Number(opts.lampResistance) || 1400;
+
+                    this.tripped = false;
+                    this.tripReason = null;
+                    this.thermalEnergy = 0.0;
+                    this.current = 0.0;
+
+                    const validPoles = Array.isArray(poleIds) && poleIds.length ? poleIds : ['main'];
+                    this.primaryPole = validPoles[0];
+                    this.poles = new Map(validPoles.map(id => {
+                        const contact = new ElectricalContact(
+                            name + ' ' + String(id).toUpperCase() + ' POLE',
                             true,
                             this.#authority
-                        ))
-                    ]));
-                    this.lamp = circuit.addLoad(new DcPoweredLoad(
-                        `${name} INTERNAL THREE-BAR LAMP`,
-                        { resistance: lampResistance }
-                    ));
+                        );
+                        if (circuit && typeof circuit.addContact === 'function') {
+                            circuit.addContact(contact);
+                        }
+                        return [id, contact];
+                    }));
+                    const lampLoad = new DcFilamentLampLoad(
+                        name + ' INTERNAL THREE-BAR LAMP',
+                        {
+                            nominalResistance: this.lampResistance,
+                            nominalVoltage: 28.0,
+                            coldRatio: 7.0,
+                            thermalTau: 0.015
+                        }
+                    );
+                    this.lamp = (circuit && typeof circuit.addLoad === 'function')
+                        ? circuit.addLoad(lampLoad)
+                        : lampLoad;
                     this.connectedPoles = new Set();
                     this.lampConnected = false;
                     this.lamp.addEventListener('statechange', () => this.synchronize());
+                    if (circuit && Array.isArray(circuit.breakers)) {
+                        circuit.breakers.push(this);
+                    }
                 }
 
                 get closed() {
-                    return [...this.poles.values()].every(contact => contact.closed);
+                    return !this.tripped && [...this.poles.values()].every(contact => contact.closed);
+                }
+
+                set closed(val) {
+                    const next = Boolean(val);
+                    this.poles.forEach(contact => contact.setClosed(next, this.#authority));
                 }
 
                 get conducting() {
+                    if (!this.circuit) return this.closed && !this.tripped;
                     return this.#conducting;
+                }
+
+                measureCurrent() {
+                    if (!this.circuit || typeof this.circuit.voltageBetween !== 'function') {
+                        return this.current;
+                    }
+                    let sum = 0;
+                    this.poles.forEach(contact => {
+                        if (contact.conductive) {
+                            sum += Math.abs(this.circuit.voltageBetween(contact.line, contact.load) / contact.resistance);
+                        }
+                    });
+                    this.current = sum;
+                    return sum;
+                }
+
+                stepThermal(current = null, dtSeconds = 0.016) {
+                    const dt = Number.isFinite(Number(dtSeconds)) && Number(dtSeconds) >= 0 ? Number(dtSeconds) : 0.016;
+                    if (!this.closed || this.tripped) {
+                        this.current = 0;
+                        if (dt > 0) {
+                            this.thermalEnergy = Math.max(0, this.thermalEnergy * Math.exp(-dt / this.coolingTauSeconds));
+                        }
+                        return false;
+                    }
+
+                    const measured = current !== null ? Math.abs(Number(current) || 0) : this.measureCurrent();
+                    this.current = measured;
+
+                    if (measured >= this.magneticTripMultiplier * this.ratedCurrent) {
+                        this.trip('MAGNETIC_TRIP');
+                        return true;
+                    }
+
+                    if (measured > this.ratedCurrent) {
+                        if (dt > 0) {
+                            const ratio = measured / this.ratedCurrent;
+                            const dTheta = ((ratio * ratio) - 1.0) * (dt / this.thermalTauSeconds);
+                            this.thermalEnergy += dTheta;
+                            if (this.thermalEnergy >= 1.0) {
+                                this.trip('THERMAL_TRIP');
+                                return true;
+                            }
+                        }
+                    } else if (dt > 0) {
+                        this.thermalEnergy = Math.max(0, this.thermalEnergy * Math.exp(-dt / this.coolingTauSeconds));
+                    }
+
+                    return false;
+                }
+
+                trip(reason = 'OVERLOAD') {
+                    if (this.tripped) return false;
+                    this.tripped = true;
+                    this.tripReason = reason;
+                    this.current = 0;
+                    const closePoles = () => {
+                        this.poles.forEach(contact => contact.setClosed(false, this.#authority));
+                    };
+                    if (this.circuit && typeof this.circuit.transaction === 'function') {
+                        this.circuit.transaction(closePoles);
+                    } else {
+                        closePoles();
+                    }
+                    if (!this.circuit && this.lamp) {
+                        this.lamp.applyVoltage(0, DC_SOLVER_AUTHORITY, 0.016);
+                    }
+                    this.synchronize();
+                    this.dispatchEvent(new CustomEvent('trip', { detail: { reason } }));
+                    this.dispatchEvent(new Event('change'));
+                    return true;
+                }
+
+                reset() {
+                    if (this.current >= this.ratedCurrent) {
+                        this.trip('RESET_INTO_FAULT');
+                        return false;
+                    }
+                    this.tripped = false;
+                    this.tripReason = null;
+                    this.thermalEnergy = 0.0;
+                    const openPoles = () => {
+                        this.poles.forEach(contact => contact.setClosed(true, this.#authority));
+                    };
+                    if (this.circuit && typeof this.circuit.transaction === 'function') {
+                        this.circuit.transaction(openPoles);
+                    } else {
+                        openPoles();
+                    }
+                    this.synchronize();
+                    this.dispatchEvent(new Event('reset'));
+                    this.dispatchEvent(new Event('change'));
+                    return true;
                 }
 
                 connectPole(id, supply, returnTerminal, wire) {
                     const contact = this.poles.get(id);
-                    if (!contact) throw new Error(`Unknown breaker pole ${this.name}:${id}`);
-                    if (this.connectedPoles.has(id)) throw new Error(`Breaker pole already connected ${this.name}:${id}`);
-                    wire(`${this.name} ${id.toUpperCase()} FEED`, supply, contact.line);
+                    if (!contact) throw new Error('Unknown breaker pole ' + this.name + ':' + id);
+                    if (this.connectedPoles.has(id)) throw new Error('Breaker pole already connected ' + this.name + ':' + id);
+                    wire(this.name + ' ' + id.toUpperCase() + ' FEED', supply, contact.line);
                     this.connectedPoles.add(id);
                     if (id === this.primaryPole && !this.lampConnected) {
-                        wire(`${this.name} INTERNAL LAMP FEED`, contact.load, this.lamp.a1);
-                        wire(`${this.name} INTERNAL LAMP RETURN`, this.lamp.a2, returnTerminal);
+                        wire(this.name + ' INTERNAL LAMP FEED', contact.load, this.lamp.a1);
+                        wire(this.name + ' INTERNAL LAMP RETURN', this.lamp.a2, returnTerminal);
                         this.lampConnected = true;
                     }
                     return contact.load;
@@ -13054,17 +13954,26 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
                 setClosed(closed) {
                     const next = Boolean(closed);
-                    if (next === this.closed) return false;
-                    this.circuit.transaction(() => {
+                    if (next) {
+                        this.tripped = false;
+                        this.tripReason = null;
+                    }
+                    if (next === this.closed && !this.tripped) return false;
+                    const mutate = () => {
                         this.poles.forEach(contact => contact.setClosed(next, this.#authority));
-                    });
+                    };
+                    if (this.circuit && typeof this.circuit.transaction === 'function') {
+                        this.circuit.transaction(mutate);
+                    } else {
+                        mutate();
+                    }
                     this.synchronize();
                     this.dispatchEvent(new Event('change'));
                     return true;
                 }
 
                 synchronize() {
-                    const next = this.closed && this.lamp.energized && this.lamp.current > 0;
+                    const next = this.closed && !this.tripped && (this.circuit ? (this.lamp.energized && this.lamp.current > 0) : true);
                     if (next === this.#conducting) return false;
                     this.#conducting = next;
                     this.dispatchEvent(new Event('statechange'));
@@ -13072,13 +13981,19 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
 
                 snapshot() {
-                    return {
+                    return Object.freeze({
+                        name: this.name,
+                        ratedCurrent: this.ratedCurrent,
                         closed: this.closed,
                         conducting: this.conducting,
-                        lampVoltage: this.lamp.voltage,
-                        lampCurrent: this.lamp.current,
+                        tripped: this.tripped,
+                        tripReason: this.tripReason,
+                        thermalEnergy: this.thermalEnergy,
+                        current: this.current,
+                        lampVoltage: this.closed ? this.lamp.voltage : 0,
+                        lampCurrent: this.closed ? this.lamp.current : 0,
                         poles: Object.fromEntries([...this.poles].map(([id, contact]) => [id, contact.closed]))
-                    };
+                    });
                 }
             }
 
@@ -13159,6 +14074,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             }
 
+            if (typeof window !== 'undefined') {
+                window.DcBranchCircuitBreaker = DcBranchCircuitBreaker;
+                window.DcStrobeEmitter = DcStrobeEmitter;
+                window.LightingControlUnit = LightingControlUnit;
+                window.DcControlCircuit = DcControlCircuit;
+            }
+            // delete not — ‘tis imperitiv ‘ere for Us to obey þe laws fysikes , i.e./ M. maxwell alongside laws Þermo‑dynamikses — changes ‘ere subjekt to verifikation
             class PageControlBus {
                 #pagePowerAuthority = Symbol('PAGE MASTER SWITCH');
                 #kR3ContactAuthority = Symbol('K R3 ANALOG CONTACT');
@@ -13229,9 +14151,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         false,
                         this.#timeBusContactAuthority
                     ));
-                    const readieLamp = circuit.addLoad(new DcPoweredLoad(
+                    const readieLamp = circuit.addLoad(new DcFilamentLampLoad(
                         'H1 READIE LAMP',
-                        { resistance: 2800 }
+                        {
+                            nominalResistance: 2800,
+                            nominalVoltage: 28.0,
+                            coldRatio: 7.0,
+                            thermalTau: 0.015
+                        }
                     ));
 
                     this.tier1 = new ElectricallyStartedLoadStage(
@@ -13259,7 +14186,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
                     let breakerWireNumber = 0;
                     const breakerWire = (name, from, to) => wire(
-                        `breaker${++breakerWireNumber}`,
+                        'breaker' + (++breakerWireNumber),
                         name,
                         from,
                         to
@@ -13287,37 +14214,37 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     });
                     const branchBreakers = {
                         pageControl: new DcBranchCircuitBreaker(
-                            'CB-P0 PAGE CONTROL', circuit, ['control']
+                            'CB-P0 PAGE CONTROL', circuit, ['control'], { ratedCurrent: 1.5 }
                         ),
                         mainSense: new DcBranchCircuitBreaker(
-                            'CB-A0 MAIN ELEKTRONIKS BUS SENSE', circuit, ['main']
+                            'CB-A0 MAIN ELEKTRONIKS BUS SENSE', circuit, ['main'], { ratedCurrent: 0.5 }
                         ),
                         panel: new DcBranchCircuitBreaker(
-                            'CB-A1 PANEL CONTROLLER', circuit, ['main']
+                            'CB-A1 PANEL CONTROLLER', circuit, ['main'], { ratedCurrent: 0.5 }
                         ),
                         playback: new DcBranchCircuitBreaker(
-                            'CB-A2 PLAYBACK CONTROLLER', circuit, ['main', 'r3']
+                            'CB-A2 PLAYBACK CONTROLLER', circuit, ['main', 'r3'], { ratedCurrent: 1.5 }
                         ),
                         sound: new DcBranchCircuitBreaker(
-                            'CB-A3 SOUND CONTROLLER', circuit, ['main']
+                            'CB-A3 SOUND CONTROLLER', circuit, ['main'], { ratedCurrent: 0.75 }
                         ),
                         archive: new DcBranchCircuitBreaker(
-                            'CB-A4 ARCHIVE CONTROLLER', circuit, ['control']
+                            'CB-A4 ARCHIVE CONTROLLER', circuit, ['control'], { ratedCurrent: 0.75 }
                         ),
                         lighting: new DcBranchCircuitBreaker(
-                            'CB-A5 LIGHTING CONTROL UNIT', circuit, ['control', 'l', 'obs']
+                            'CB-A5 LIGHTING CONTROL UNIT', circuit, ['control', 'l', 'obs'], { ratedCurrent: 1.5 }
                         ),
                         time: new DcBranchCircuitBreaker(
-                            'CB-TIME TIME BUS', circuit, ['time']
+                            'CB-TIME TIME BUS', circuit, ['time'], { ratedCurrent: 0.5 }
                         ),
                         terminalBus: new DcBranchCircuitBreaker(
-                            'CB-TERMINAL TERMINAL BUS', circuit, ['main']
+                            'CB-TERMINAL TERMINAL BUS', circuit, ['main'], { ratedCurrent: 2.0 }
                         ),
                         terminalKontroller: new DcBranchCircuitBreaker(
-                            'CB-A8 TERMINAL KONTROLLER', circuit, ['main']
+                            'CB-A8 TERMINAL KONTROLLER', circuit, ['main'], { ratedCurrent: 1.0 }
                         ),
                         dysPlayKontroller: new DcBranchCircuitBreaker(
-                            'CB-A9 DYS PLAY KONTROLLER', circuit, ['main']
+                            'CB-A9 DYS PLAY KONTROLLER', circuit, ['main'], { ratedCurrent: 1.0 }
                         )
                     };
                     const breakerSupplies = {
@@ -13473,19 +14400,19 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         ]
                     });
                     const equipmentLoads = netlist.install([
-                        { id: 'mainSystemsLoad', type: 'elektroniks-unit', name: 'A0 MAIN ELEKTRONIKS BUS SENSE', supply: 'mainSense', return: 'dc', resistance: 28000 },
-                        { id: 'panelSystemsLoad', type: 'elektroniks-unit', name: 'A1 PANEL CONTROLLER', supply: 'panel', return: 'dc', resistance: 560 },
-                        { id: 'playbackSystemsLoad', type: 'elektroniks-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'playback', return: 'dc', resistance: 560 },
-                        { id: 'planComputerLoad', type: 'elektroniks-unit', name: 'A2 PLAN COMPUTER AND STORAGE', supply: 'playback', return: 'dc', resistance: 28 / 0.7 },
-                        { id: 'soundSystemsLoad', type: 'elektroniks-unit', name: 'A3 SOUND CONTROLLER', supply: 'sound', return: 'dc', resistance: 280 },
-                        { id: 'archiveSystemsLoad', type: 'elektroniks-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'page', resistance: 1120 },
-                        { id: 'lightingSystemsLoad', type: 'elektroniks-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'page', resistance: 1120 }
+                        { id: 'mainSystemsLoad', type: 'elektroniks-unit', name: 'A0 MAIN ELEKTRONIKS BUS SENSE', supply: 'mainSense', return: 'dc', resistance: 28000, ratedPower: 0.028 },
+                        { id: 'panelSystemsLoad', type: 'elektroniks-unit', name: 'A1 PANEL CONTROLLER', supply: 'panel', return: 'dc', resistance: 560, ratedPower: 1.4 },
+                        { id: 'playbackSystemsLoad', type: 'elektroniks-unit', name: 'A2 PLAYBACK CONTROLLER', supply: 'playback', return: 'dc', resistance: 560, ratedPower: 1.4 },
+                        { id: 'planComputerLoad', type: 'elektroniks-unit', name: 'A2 PLAN COMPUTER AND STORAGE', supply: 'playback', return: 'dc', resistance: 28 / 0.7, ratedPower: 19.6 },
+                        { id: 'soundSystemsLoad', type: 'elektroniks-unit', name: 'A3 SOUND CONTROLLER', supply: 'sound', return: 'dc', resistance: 280, ratedPower: 2.8 },
+                        { id: 'archiveSystemsLoad', type: 'elektroniks-unit', name: 'A4 ARCHIVE CONTROLLER', supply: 'archive', return: 'page', resistance: 1120, ratedPower: 0.7 },
+                        { id: 'lightingSystemsLoad', type: 'elektroniks-unit', name: 'A5 LIGHTING CONTROL UNIT', supply: 'lightingControl', return: 'page', resistance: 1120, ratedPower: 0.7 }
                     ]);
                     const terminalLoads = netlist.install([
-                        { id: 'terminalTextDisplayLoad', type: 'elektroniks-unit', name: 'A8 TEXT LCD AND BACKLIGHT', supply: 'terminalKontroller', return: 'terminal', resistance: 28 / 0.4 },
-                        { id: 'terminalKeyScannerLoad', type: 'elektroniks-unit', name: 'A8 KEY SCANNER', supply: 'terminalKontroller', return: 'terminal', resistance: 28 / 0.1 },
-                        { id: 'ndDisplayLoad', type: 'elektroniks-unit', name: 'A9 ND LCD AND BACKLIGHT', supply: 'dysPlayKontroller', return: 'terminal', resistance: 28 / 0.4 },
-                        { id: 'ndGraphicsControllerLoad', type: 'elektroniks-unit', name: 'A9 GRAPHICS CONTROLLER', supply: 'dysPlayKontroller', return: 'terminal', resistance: 28 / 0.2 }
+                        { id: 'terminalTextDisplayLoad', type: 'elektroniks-unit', name: 'A8 TEXT LCD AND BACKLIGHT', supply: 'terminalKontroller', return: 'terminal', resistance: 28 / 0.4, ratedPower: 11.2 },
+                        { id: 'terminalKeyScannerLoad', type: 'elektroniks-unit', name: 'A8 KEY SCANNER', supply: 'terminalKontroller', return: 'terminal', resistance: 28 / 0.1, ratedPower: 2.8 },
+                        { id: 'ndDisplayLoad', type: 'elektroniks-unit', name: 'A9 ND LCD AND BACKLIGHT', supply: 'dysPlayKontroller', return: 'terminal', resistance: 28 / 0.4, ratedPower: 11.2 },
+                        { id: 'ndGraphicsControllerLoad', type: 'elektroniks-unit', name: 'A9 GRAPHICS CONTROLLER', supply: 'dysPlayKontroller', return: 'terminal', resistance: 28 / 0.2, ratedPower: 5.6 }
                     ]);
                     const activityLoads = netlist.install([
                         { id: 'playbackActivityLoad', type: 'switched-load', name: 'A2-L PLAYBACK MEDIA LOAD', supply: 'playback', return: 'dc', resistance: 560 },
@@ -13493,9 +14420,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         { id: 'archiveActivityLoad', type: 'switched-load', name: 'A4-L ARCHIVE WORK LOAD', supply: 'archive', return: 'dc', resistance: 280 / 3 }
                     ]);
                     const timeBusLoads = netlist.install([
-                        { id: 'timeActiveDisplay', type: 'lamp', name: 'H7 TIME BUS ACTIVE DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
-                        { id: 'timeStandbyDisplay', type: 'lamp', name: 'H8 TIME BUS STANDBY DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
-                        { id: 'timeDcAmpsDisplay', type: 'lamp', name: 'H9 TIME BUS DC AMPS DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
+                        { id: 'timeActiveDisplay', type: 'resistive-load', name: 'H7 TIME BUS ACTIVE DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
+                        { id: 'timeStandbyDisplay', type: 'resistive-load', name: 'H8 TIME BUS STANDBY DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
+                        { id: 'timeDcAmpsDisplay', type: 'resistive-load', name: 'H9 TIME BUS DC AMPS DISPLAY', supply: 'time', return: 'dc', resistance: 28000 },
+                        { id: 'timeBusConverter', type: 'elektroniks-unit', name: 'TIME BUS EC4SAW-24S05N 5 V DC-DC', supply: 'time', return: 'dc', resistance: 280, ratedPower: 2.5, nominalVoltage: 28.0, minVoltage: 9.0, efficiency: 0.84, filterCapacitance: 47e-6 },
                         { id: 'mainSeekSensor', type: 'analog-input', name: 'T1 TIME BUS MAIN SEEK SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
                         { id: 'sectionSensor', type: 'analog-input', name: 'T2 TIME BUS SECTION SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
                         { id: 'timeSensor', type: 'analog-input', name: 'T3 TIME BUS TIME SENSOR', supply: 'time', return: 'dc', resistance: 56000, powerContact: timeBusPower },
@@ -13517,11 +14445,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         setInput: timeBusLoads.setInput
                     });
                     const lightingLoads = netlist.install([
-                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'lightingControl', return: 'page', resistance: 5600 },
-                        { id: 'leftPlaybackStrobe', type: 'switched-load', name: 'H3 LEFT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 5600 },
-                        { id: 'rightPlaybackStrobe', type: 'switched-load', name: 'H4 RIGHT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 5600 },
-                        { id: 'bottomLeftCurrentStrobe', type: 'switched-load', name: 'H5 BOTTOM LEFT CURRENT GREEN STROBE POWER SUPPLY', supply: 'lightingL', return: 'page', resistance: 5600 },
-                        { id: 'bottomRightPanelStrobe', type: 'switched-load', name: 'H6 BOTTOM RIGHT PANEL CODE RED STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 5600 }
+                        { id: 'topMainBusStrobe', type: 'switched-load', name: 'H2 TOP MAIN BUS RED STROBE POWER SUPPLY', supply: 'lightingControl', return: 'page', resistance: 35000 },
+                        { id: 'leftPlaybackStrobe', type: 'switched-load', name: 'H3 LEFT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 35000 },
+                        { id: 'rightPlaybackStrobe', type: 'switched-load', name: 'H4 RIGHT PLAYBACK WHITE STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 35000 },
+                        { id: 'bottomLeftCurrentStrobe', type: 'switched-load', name: 'H5 BOTTOM LEFT CURRENT GREEN STROBE POWER SUPPLY', supply: 'lightingL', return: 'page', resistance: 35000 },
+                        { id: 'bottomRightPanelStrobe', type: 'switched-load', name: 'H6 BOTTOM RIGHT PANEL CODE RED STROBE POWER SUPPLY', supply: 'lightingObs', return: 'page', resistance: 35000 }
                     ]);
                     const powerBridges = [
                         [equipmentLoads.mainSystemsLoad, pageMainSystemsPower],
@@ -14050,8 +14978,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             try {
                                 this.archiveButton.setPointerCapture(event.pointerId);
                             } catch (_) {}
-                            this.archiveButton.src = ASSET['r2on.png'] ||
-                                m2VersionedAssetUrl('/m/img/r2on.png');
+                            const r2Sprite = (this.bus.pagePower.closed && !this.bus.circuit.source.tripped) ? 'r2on.png' : 'r2onnoelec.png';
+                            this.archiveButton.src = ASSET[r2Sprite] ||
+                                m2VersionedAssetUrl('/m/img/' + r2Sprite);
                         });
                         const releaseArchiveButton = () => {
                             this.archiveButton.src = ASSET['r2off.png'] ||
@@ -14374,14 +15303,25 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     }
                 });
                 const syncAmbientSound = () => {
-                    if (bus.pagePower.closed && (bus.selector.position === 'L' || bus.selector.position === 'OBS')) {
+                    const ambientEnergized = bus.pagePower.closed &&
+                        !bus.circuit.source.tripped &&
+                        bus.circuit.source.current > 0 &&
+                        (bus.selector.position === 'L' || bus.selector.position === 'OBS') &&
+                        (bus.schematic.coils.tier2.energized || bus.schematic.coils.tier3.energized);
+                    if (ambientEnergized) {
                         panelSoundBank.startHeld('starterAmbient');
-                    } else if (!bus.pagePower.closed) {
-                        panelSoundBank.stopAll();
+                    } else {
+                        panelSoundBank.stopHeld('starterAmbient');
+                        if (!bus.pagePower.closed || bus.circuit.source.tripped || bus.circuit.source.current <= 0) {
+                            panelSoundBank.stopElectrical();
+                        }
                     }
                 };
                 bus.selector.addEventListener('change', syncAmbientSound);
                 bus.pagePower.addEventListener('change', syncAmbientSound);
+                bus.circuit.addEventListener('solved', syncAmbientSound);
+                bus.schematic.coils.tier2.addEventListener('statechange', syncAmbientSound);
+                bus.schematic.coils.tier3.addEventListener('statechange', syncAmbientSound);
                 panelSoundBank.load('177453744').then(syncAmbientSound).catch(() => {});
 
                 const stageTelemetry = stage => freezeTelemetry({
@@ -14742,6 +15682,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 return left.length - right.length || (left < right ? -1 : left > right ? 1 : 0);
             }).map(song => ({ ...song, code: song.url.toUpperCase() }));
             const songCards = songsByUrl;
+            const virtualGroups = new Map();
+            songCards.forEach(song => {
+                if (!song.virtualOriginKey) return;
+                if (!virtualGroups.has(song.virtualOriginKey)) virtualGroups.set(song.virtualOriginKey, []);
+                virtualGroups.get(song.virtualOriginKey).push(song);
+            });
+            virtualGroups.forEach(members => {
+                members.sort((a, b) => a.virtualIndex - b.virtualIndex);
+                const codes = members.map(m => m.code);
+                members.forEach(m => { m.virtualMembers = codes; });
+            });
             const terminalNd = document.querySelector('#mTerminalNd .mTerminalNdWorld');
             const terminalNdHead = document.getElementById('mTerminalNdHead');
             const terminalNdHash = (value, seed) => {
@@ -14906,7 +15857,20 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (!leg || leg.type !== 'song') return [leg];
                 const code = String(leg.songCode || '').trim().toUpperCase();
                 const song = terminalNdSongs.get(code);
-                if (!song || !song.ndSections?.length || leg.advance === 'Y') return [leg];
+                if (!song || leg.advance === 'Y') return [leg];
+                if (song.virtualMembers?.length > 1) {
+                    const startIdx = Math.max(0, song.virtualMembers.indexOf(code));
+                    if (startIdx >= song.virtualMembers.length - 1) return [leg];
+                    return song.virtualMembers.slice(startIdx).map((memberCode, idx) => ({
+                        ...leg,
+                        songCode: memberCode,
+                        section: undefined,
+                        time: idx === 0 ? leg.time : '',
+                        seconds: idx === 0 ? terminalNdLegSeconds(leg) : 0,
+                        advance: 'Y'
+                    }));
+                }
+                if (!song.ndSections?.length) return [leg];
                 const startSec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(leg)));
                 if (startSec >= song.ndSections.length) return [leg];
                 const expanded = [];
@@ -15267,7 +16231,176 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const rate = Math.max(0.05, Number(audio.playbackRate) || 1);
                 const nowTime = playbackTime(audio);
                 const fullDuration = playbackDuration(audio) || song.duration || 0;
-                if (!routing.k || song.virtualOriginKey || !song.ndSections?.length) {
+                if (song.virtualMembers?.length > 1) {
+                    const members = song.virtualMembers;
+                    const activeIdx = Math.max(0, Math.min(
+                        members.length - 1,
+                        Number.isFinite(audio?.__virtualIndex) ? audio.__virtualIndex : Math.max(0, members.indexOf(code))
+                    ));
+                    const activeCode = members[activeIdx] || code;
+                    const activeSong = terminalNdSongs.get(activeCode) || song;
+                    const memberDuration = Math.max(0.01, Number(audio.duration) || activeSong.duration || 1);
+                    const memberNowTime = Math.max(0, Math.min(memberDuration, Number(audio.currentTime) || 0));
+                    const segFraction = Math.max(0, Math.min(1, memberNowTime / memberDuration));
+                    const subDuration = Math.max(0.05, memberDuration / rate);
+                    const subRemaining = Math.max(0.01, (memberDuration - memberNowTime) / rate);
+                    const currentMemberLeg = {
+                        type: 'song',
+                        songCode: activeCode,
+                        seconds: 0,
+                        advance: 'Y'
+                    };
+                    if (routing.krPermissive) {
+                        return {
+                            label: activeCode,
+                            krHold: true,
+                            routeLegs: [],
+                            etaEntries: [[activeCode, subRemaining]],
+                            journey: {
+                                current: currentMemberLeg,
+                                next: null,
+                                following: null,
+                                afterFollowing: null,
+                                repeatPending: false,
+                                holdRepeat: false,
+                                lastRepeat: true,
+                                firstLeg: true,
+                                iteration: 0,
+                                completedLegs: 0,
+                                fraction: segFraction,
+                                subDuration,
+                                subRemaining
+                            }
+                        };
+                    }
+                    if (routing.k && (routing.isr === 'I' || routing.isr === 'S')) {
+                        return {
+                            label: activeCode,
+                            krHold: false,
+                            routeLegs: [],
+                            etaEntries: [[activeCode, subRemaining]],
+                            journey: null
+                        };
+                    }
+                    const remainingLegs = members.slice(activeIdx).map(mCode => ({
+                        type: 'song',
+                        songCode: mCode,
+                        seconds: 0,
+                        advance: 'Y'
+                    }));
+                    if (activeIdx === members.length - 1) {
+                        if (routing.isr === 'OFF') {
+                            remainingLegs.push({
+                                type: 'song',
+                                songCode: members[0],
+                                seconds: 0,
+                                advance: 'Y'
+                            });
+                        } else if (routing.isr === 'R' && (routing.m === 'D' || routing.m === 'U')) {
+                            const adjLeg = terminalNdAdjacentCardLeg(audio, routing.m === 'D' ? 1 : -1);
+                            if (adjLeg) remainingLegs.push(adjLeg);
+                        }
+                    }
+                    const etaEntries = [];
+                    if (remainingLegs.length === 1) {
+                        etaEntries.push([activeCode, subRemaining]);
+                    } else {
+                        etaEntries.push([activeCode, 0]);
+                        let cumEta = subRemaining;
+                        for (let i = 1; i < remainingLegs.length; i++) {
+                            const legLabel = terminalNdLegLabel(remainingLegs[i]);
+                            if (legLabel) etaEntries.push([legLabel, cumEta]);
+                            const mSong = terminalNdSongs.get(remainingLegs[i].songCode);
+                            cumEta += Math.max(0, (mSong?.duration || 0) / rate);
+                        }
+                    }
+                    const journey = remainingLegs.length >= 2 ? {
+                        current: remainingLegs[0],
+                        next: remainingLegs[1],
+                        following: remainingLegs[1],
+                        afterFollowing: remainingLegs[2] || null,
+                        repeatPending: false,
+                        holdRepeat: false,
+                        lastRepeat: true,
+                        firstLeg: activeIdx === 0,
+                        iteration: 0,
+                        completedLegs: activeIdx,
+                        fraction: segFraction,
+                        subDuration,
+                        subRemaining
+                    } : null;
+                    return {
+                        label: activeCode,
+                        krHold: false,
+                        routeLegs: remainingLegs,
+                        etaEntries,
+                        journey
+                    };
+                }
+                if (!routing.k || !song.ndSections?.length) {
+                    const safeDur = Math.max(0.01, fullDuration);
+                    const fullFraction = Math.max(0, Math.min(1, nowTime / safeDur));
+                    const subDuration = Math.max(0.05, safeDur / rate);
+                    const subRemaining = Math.max(0.01, (safeDur - nowTime) / rate);
+                    const currentWholeLeg = {
+                        type: 'song',
+                        songCode: code,
+                        seconds: 0,
+                        advance: 'Y'
+                    };
+                    if (routing.isr === 'OFF') {
+                        return {
+                            label: code,
+                            krHold: true,
+                            routeLegs: [],
+                            etaEntries: [[code, Math.max(0, fullDuration - nowTime) / rate]],
+                            journey: {
+                                current: currentWholeLeg,
+                                next: null,
+                                following: null,
+                                afterFollowing: null,
+                                repeatPending: false,
+                                holdRepeat: false,
+                                lastRepeat: true,
+                                firstLeg: true,
+                                iteration: 0,
+                                completedLegs: 0,
+                                fraction: fullFraction,
+                                subDuration,
+                                subRemaining
+                            }
+                        };
+                    }
+                    if (routing.isr === 'R' && (routing.m === 'D' || routing.m === 'U')) {
+                        const adjLeg = terminalNdAdjacentCardLeg(audio, routing.m === 'D' ? 1 : -1);
+                        if (adjLeg) {
+                            const remainingLegs = [currentWholeLeg, adjLeg];
+                            return {
+                                label: code,
+                                krHold: false,
+                                routeLegs: remainingLegs,
+                                etaEntries: [
+                                    [code, 0],
+                                    [terminalNdLegLabel(adjLeg), Math.max(0, fullDuration - nowTime) / rate]
+                                ],
+                                journey: {
+                                    current: currentWholeLeg,
+                                    next: adjLeg,
+                                    following: adjLeg,
+                                    afterFollowing: null,
+                                    repeatPending: false,
+                                    holdRepeat: false,
+                                    lastRepeat: true,
+                                    firstLeg: true,
+                                    iteration: 0,
+                                    completedLegs: 0,
+                                    fraction: fullFraction,
+                                    subDuration,
+                                    subRemaining
+                                }
+                            };
+                        }
+                    }
                     return {
                         label: code,
                         krHold: false,
@@ -15397,7 +16530,59 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 const code = String(journey.current.songCode || '').trim().toUpperCase();
                 const song = terminalNdSongs.get(code);
-                if (!song || !song.ndSections?.length || journey.current.advance === 'Y') return journey;
+                if (!song || journey.current.advance === 'Y') return journey;
+                if (song.virtualMembers?.length > 1) {
+                    const members = song.virtualMembers;
+                    const startIdx = Math.max(0, members.indexOf(code));
+                    if (startIdx >= members.length - 1) return journey;
+                    const activeIdx = Math.max(startIdx, Math.min(
+                        members.length - 1,
+                        Number.isFinite(audio?.__virtualIndex) ? audio.__virtualIndex : startIdx
+                    ));
+                    const activeCode = members[activeIdx] || code;
+                    const activeSong = terminalNdSongs.get(activeCode) || song;
+                    const secOffset = activeIdx === startIdx ? Math.max(0, terminalNdLegSeconds(journey.current)) : 0;
+                    const memberDuration = Math.max(0.01, Number(audio?.duration) || activeSong.duration || 1);
+                    const memberNowTime = Math.max(0, Math.min(memberDuration, Number(audio?.currentTime) || 0));
+                    const segStart = secOffset;
+                    const segEnd = Math.max(segStart + 0.01, memberDuration);
+                    const subFraction = Math.max(0, Math.min(1, (memberNowTime - segStart) / (segEnd - segStart)));
+                    const rate = Math.max(0.05, Number(audio?.playbackRate) || 1);
+                    const subDuration = Math.max(0.05, (segEnd - segStart) / rate);
+                    const subRemaining = Math.max(0.01, (segEnd - memberNowTime) / rate);
+                    const currentSubLeg = {
+                        ...journey.current,
+                        songCode: activeCode,
+                        section: undefined,
+                        seconds: secOffset,
+                        advance: 'Y'
+                    };
+                    const hasMoreMembers = activeIdx < members.length - 1;
+                    const nextSubLeg = hasMoreMembers
+                        ? { ...journey.current, songCode: members[activeIdx + 1], section: undefined, time: '', seconds: 0, advance: 'Y' }
+                        : (journey.repeatPending
+                            ? { ...journey.current, songCode: members[startIdx], section: undefined, seconds: Math.max(0, terminalNdLegSeconds(journey.current)), advance: 'Y' }
+                            : journey.next);
+                    const afterNextSubLeg = hasMoreMembers
+                        ? (activeIdx + 2 < members.length
+                            ? { ...journey.current, songCode: members[activeIdx + 2], section: undefined, time: '', seconds: 0, advance: 'Y' }
+                            : (journey.repeatPending
+                                ? { ...journey.current, songCode: members[startIdx], section: undefined, seconds: Math.max(0, terminalNdLegSeconds(journey.current)), advance: 'Y' }
+                                : journey.following))
+                        : journey.afterFollowing;
+                    return {
+                        ...journey,
+                        current: currentSubLeg,
+                        next: nextSubLeg,
+                        following: hasMoreMembers ? nextSubLeg : journey.following,
+                        afterFollowing: afterNextSubLeg,
+                        repeatPending: hasMoreMembers ? false : journey.repeatPending,
+                        fraction: subFraction,
+                        subDuration,
+                        subRemaining
+                    };
+                }
+                if (!song.ndSections?.length) return journey;
                 const startSec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(journey.current)));
                 if (startSec >= song.ndSections.length) return journey;
                 const t = audio ? playbackTime(audio) : 0;
@@ -15723,6 +16908,35 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 for (const row of window.__npTerminalLegsEtaRows?.() || []) {
                     const code = String(row.leg?.songCode || '').trim().toUpperCase();
                     const song = terminalNdSongs.get(code);
+                    if (song?.virtualMembers?.length > 1 && row.leg?.advance !== 'Y') {
+                        const members = song.virtualMembers;
+                        const startIdx = Math.max(0, members.indexOf(code));
+                        let cumulative = Number(row.seconds) || 0;
+                        const activeIdx = (row.seconds === 0 && Number.isFinite(terminalNdActiveAudio?.__virtualIndex))
+                            ? terminalNdActiveAudio.__virtualIndex : -1;
+                        const memberLocalNow = Number(terminalNdActiveAudio?.currentTime) || 0;
+                        for (let idx = startIdx; idx < members.length; idx++) {
+                            const mCode = members[idx];
+                            const mSong = terminalNdSongs.get(mCode);
+                            const mDur = Number(mSong?.duration) || 0;
+                            if (row.seconds === 0 && activeIdx >= startIdx) {
+                                if (idx < activeIdx) continue;
+                                if (idx === activeIdx) {
+                                    const rem = idx === members.length - 1 ? Math.max(0, mDur - memberLocalNow) / rate : 0;
+                                    if (!values.has(mCode)) values.set(mCode, rem);
+                                    cumulative = Math.max(0, mDur - memberLocalNow) / rate;
+                                } else {
+                                    if (!values.has(mCode)) values.set(mCode, cumulative);
+                                    cumulative += Math.max(0, mDur / rate);
+                                }
+                            } else {
+                                if (!values.has(mCode)) values.set(mCode, cumulative);
+                                const offset = idx === startIdx ? Math.max(0, terminalNdLegSeconds(row.leg)) : 0;
+                                cumulative += Math.max(0, (mDur - offset) / rate);
+                            }
+                        }
+                        continue;
+                    }
                     if (song?.ndSections?.length && row.leg?.advance !== 'Y') {
                         const startSec = Math.max(1, Math.min(song.ndSections.length, terminalNdLegSectionNumber(row.leg)));
                         let cumulative = Number(row.seconds) || 0;
@@ -15818,10 +17032,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const rawJourney = window.__npTerminalLegsJourney?.();
                 const journey = terminalNdResolveJourney(rawJourney, terminalNdActiveAudio);
                 const active = rawActive.map((leg, idx) => {
-                    if (idx === 0 && leg?.type === 'song' && leg.advance !== 'Y' && journey?.current?.type === 'song' &&
-                        String(leg.songCode || '').trim().toUpperCase() === String(journey.current.songCode || '').trim().toUpperCase() &&
-                        Number(journey.current.section) > terminalNdLegSectionNumber(leg)) {
-                        return { ...leg, section: journey.current.section, seconds: journey.current.seconds || 0 };
+                    if (idx === 0 && leg?.type === 'song' && leg.advance !== 'Y' && journey?.current?.type === 'song') {
+                        const legCode = String(leg.songCode || '').trim().toUpperCase();
+                        const curCode = String(journey.current.songCode || '').trim().toUpperCase();
+                        const legSong = terminalNdSongs.get(legCode);
+                        if (legSong?.virtualMembers?.length > 1 && legSong.virtualMembers.includes(curCode) &&
+                            legSong.virtualMembers.indexOf(curCode) > legSong.virtualMembers.indexOf(legCode)) {
+                            return { ...leg, songCode: curCode, seconds: journey.current.seconds || 0 };
+                        }
+                        if (legCode === curCode && Number(journey.current.section) > terminalNdLegSectionNumber(leg)) {
+                            return { ...leg, section: journey.current.section, seconds: journey.current.seconds || 0 };
+                        }
                     }
                     return leg;
                 });
@@ -16045,6 +17266,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             const moveTerminalNdHead = audio => {
                 const rawJourney = window.__npTerminalLegsJourney?.();
+                const modeSource = rawJourney ? 'L' : 'S';
                 const solo = !rawJourney ? terminalNdSoloDescriptor(audio) : null;
                 if (solo?.label && solo.label !== terminalNdActiveLabel) {
                     terminalNdActiveLabel = solo.label;
@@ -16055,14 +17277,21 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     const star = terminalNdLegPoint(journey.current);
                     if (star) {
                         const key = JSON.stringify([
-                            journey.current, journey.next, journey.following, journey.afterFollowing,
+                            modeSource, journey.current, journey.next, journey.following, journey.afterFollowing,
                             journey.iteration, journey.completedLegs, journey.lastRepeat
                         ]);
                         const timestamp = performance.now();
                         const playbackClock = playbackTime(audio);
-                        if (terminalNdTravel?.mode === 'plan' && terminalNdTravel.key === key &&
-                            playbackClock + .12 < terminalNdTravel.playbackClock) terminalNdTravel.key = '';
                         const position = terminalNdPlanPosition(journey, key);
+                        if (terminalNdTravel?.mode === 'plan' && terminalNdTravel.key === key) {
+                            if (playbackClock + .12 < terminalNdTravel.playbackClock) {
+                                terminalNdTravel.key = '';
+                            } else if (modeSource === 'S' &&
+                                Math.abs(playbackClock - terminalNdTravel.playbackClock) > 0.8 &&
+                                Math.hypot(terminalNdTravel.x - position.point.x, terminalNdTravel.y - position.point.y) > 24) {
+                                terminalNdTravel.key = '';
+                            }
+                        }
                         const path = terminalNdTravelMetrics(position.tail);
                         const remaining = Number.isFinite(journey.subRemaining)
                             ? journey.subRemaining
@@ -16086,13 +17315,21 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 }
                             }
                         }
+                        const currentLabel = terminalNdLegLabel(journey.current);
+                        const nextLabel = journey.next ? terminalNdLegLabel(journey.next) : '';
                         const newTravel = !terminalNdTravel || terminalNdTravel.mode !== 'plan' || terminalNdTravel.key !== key;
                         if (newTravel) {
-                            const previous = terminalNdTravel?.mode === 'plan' ? terminalNdTravel : null;
+                            const canContinue = terminalNdTravel?.mode === 'plan' &&
+                                terminalNdTravel.modeSource === modeSource &&
+                                (modeSource === 'L' || (
+                                    (terminalNdTravel.nextLabel === currentLabel || terminalNdTravel.legLabel === currentLabel) &&
+                                    Math.hypot(terminalNdTravel.x - position.point.x, terminalNdTravel.y - position.point.y) <= 24
+                                ));
+                            const previous = canContinue ? terminalNdTravel : null;
                             const start = previous ? { x: previous.x, y: previous.y } : position.point;
                             const heading = previous?.heading ?? terminalNdTravelHeading(position.tail);
                             terminalNdTravel = {
-                                mode: 'plan', key, x: start.x, y: start.y,
+                                mode: 'plan', modeSource, key, x: start.x, y: start.y,
                                 heading,
                                 path,
                                 fullPath: position.fullPath,
@@ -16106,7 +17343,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                                 catchingUp: !!previous && Math.hypot(start.x - position.point.x, start.y - position.point.y) > 4.5,
                                 reversal: previous?.reversal || null,
                                 audio, iteration: journey.iteration,
-                                legLabel: terminalNdLegLabel(journey.current), playbackClock,
+                                legLabel: currentLabel, nextLabel, playbackClock,
                                 elapsed: 0, lastTimestamp: timestamp
                             };
                             if (previous && previous.legLabel !== terminalNdTravel.legLabel) {
@@ -16525,6 +17762,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     database.close();
                 }
             };
+            // delete not — lsk6 is mainly for kontrols , line 13 , 0 index , for skratch‑pad
             const globalFolio = () => ({
                 name: 'GLOBAL',
                 entries: [
@@ -17154,8 +18392,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 entries: [
                     actionEntry('', '<FLUSH', { kind: 'flush-videos', mode: 'current' }, '1L'),
                     actionEntry('', '<FLUSH ALL', { kind: 'flush-videos', mode: 'all' }, '2L'),
-                    actionEntry('', '<FLUSH ALL Y', { kind: 'flush-videos', mode: 'yes' }, '1R'),
-                    actionEntry('', '<FLUSH ALL N', { kind: 'flush-videos', mode: 'no' }, '2R')
+                    actionEntry('', 'FLUSH ALL Y>', { kind: 'flush-videos', mode: 'yes' }, '1R'),
+                    actionEntry('', 'FLUSH ALL N>', { kind: 'flush-videos', mode: 'no' }, '2R')
                 ]
             });
             const saveLegsFolio = () => ({
@@ -18171,23 +19409,22 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
             };
             terminal.addEventListener('click', event => {
-                if (!terminalInputPowered) return;
                 const special = event.target.closest('[data-terminal-special]');
                 if (special && terminal.contains(special)) {
                     document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalKey' }));
-                    dispatchSpecial(special.dataset.terminalSpecial);
+                    if (terminalInputPowered) dispatchSpecial(special.dataset.terminalSpecial);
                     return;
                 }
                 const key = event.target.closest('.mTerminalKey');
                 if (key && terminal.contains(key)) {
                     document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalKey' }));
-                    dispatchKey(key.textContent.trim());
+                    if (terminalInputPowered) dispatchKey(key.textContent.trim());
                     return;
                 }
                 const selector = event.target.closest('.mLSK[data-terminal-field]');
                 if (!selector || !terminal.contains(selector)) return;
                 document.dispatchEvent(new CustomEvent('m2terminalsound', { detail: 'terminalLsk' }));
-                dispatchSelector(selector.dataset.terminalField);
+                if (terminalInputPowered) dispatchSelector(selector.dataset.terminalField);
             });
             let settingsSongId = '';
             document.addEventListener('m2songchange', event => {
