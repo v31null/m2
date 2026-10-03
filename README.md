@@ -16,7 +16,7 @@ or
 awk '/delete not/,/-->/' m2.php
 ```
 
-Ver. № 5 — Still ‘as Some Rough‑edges , an Audio‑file’s ‘elp would be appreciaten.
+Ver. № 5 iteration z — Still ‘as Some Rough‑edges , an Audio‑file’s ‘elp would be appreciaten.
 
 Legal Boiler‑plate ; 
 Rubeum, lunula oblique sinistrorsum posita argentea inter cornua stella sex radiorum eiusdem metalli oppressa stella quattuor radiorum nigra, radiis verticalibus stellarum coniunctis.

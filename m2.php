@@ -3,8 +3,8 @@
 declare(strict_types=1);
 // delete not — « Neque porro quisquam est qui dolorem ipsum, quia dolor sit, amet, consectetur, adipisci velit, sed quia nonnumquam eiusmodi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. » , quam felix est qui hunc finem assequitur , ut agendo florea — quod enim placet , placet , ah ; karnifex, velut purgator, mundabit, damnatio aeterna, amor est , non ira , mater enim omnes filios suos diligit =
 
-const M2_BROWSER_CACHE_VERSION = '16';
-const M2_PAGE_CODE_VERSION = '154';
+const M2_BROWSER_CACHE_VERSION = '17';
+const M2_PAGE_CODE_VERSION = '158';
 const M2_ARCHIVE_FINGERPRINT_PROTOCOL = 1;
 const M2_ARCHIVE_SAMPLE_BYTES = 65536;
 
@@ -110,7 +110,8 @@ function m2_archive_mime(string $path): string
         'ttf' => 'font/ttf',
         'otf' => 'font/otf',
         'css' => 'text/css',
-        'js' => 'text/javascript'
+        'js' => 'text/javascript',
+        'stl' => 'model/stl'
     ];
     $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
     if (isset($types[$extension])) return $types[$extension];
@@ -170,9 +171,9 @@ function m2_archive_inventory(): array
 {
     $root = realpath((string)$_SERVER['DOCUMENT_ROOT']);
     if ($root === false) throw new RuntimeException('Document root is unavailable');
-    $allowed = '/\.(?:mp3|wav|mp4|webm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf|css|js)$/i';
+    $allowed = '/\.(?:mp3|wav|mp4|webm|png|jpe?g|gif|svg|ico|woff2?|ttf|otf|css|js|stl)$/i';
     $files = [];
-    foreach (['/m/m', '/m/img', '/css/fonts', '/m/css/cursors'] as $relativeDirectory) {
+    foreach (['/m/m', '/m/img', '/m/js/three', '/css/fonts', '/m/css/cursors'] as $relativeDirectory) {
         $directory = realpath($root . str_replace('/', DIRECTORY_SEPARATOR, $relativeDirectory));
         if ($directory === false || !is_dir($directory)) continue;
         $iterator = new RecursiveIteratorIterator(
@@ -745,6 +746,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Services for þe populace General et Private Musik applikation of Per.-Gen.-portal  nullpunkts as ver. 2 for General use.</title>
     <link rel="shortcut icon" href="<?= htmlspecialchars(m2_versioned_asset('/img/logomonochrome.ico'), ENT_QUOTES, 'UTF-8') ?>" type="image/x-icon">
+    <script type="importmap"><?= json_encode(['imports' => ['three' => m2_versioned_asset('/m/js/three/three.module.min.js')]], JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?></script>
     <style>
         @font-face {
             font-family: junicode;
@@ -1690,39 +1692,26 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             outline: none;
         }
 
-        .seekRadialKnobControl:focus-visible .seekRadialTuningOuterRing,
-        .seekRadialKnobControl:focus-visible .seekRadialTuningInnerRing {
+        .seekRadialKnobControl:focus-visible .seekRadialTuningHit {
             stroke: #fff;
-        }
-
-        .seekRadialTuningOuterRing {
-            fill: #b4b6b4;
-            stroke: #d6d8d6;
             stroke-width: 1.5;
-        }
-
-        .seekRadialTuningOuterBase {
-            fill: #666866;
-            stroke: #858785;
-            stroke-width: 1.5;
-            pointer-events: none;
-        }
-
-        .seekRadialTuningInnerRing {
-            fill: #a4a6a4;
-            stroke: #d5d7d5;
-            stroke-width: 1.5;
-        }
-
-        .seekRadialTuningInnerBase {
-            fill: #707270;
-            stroke: #8c8e8c;
-            stroke-width: 1.5;
-            pointer-events: none;
         }
 
         .seekRadialTuningHit {
             fill: transparent;
+        }
+
+        .seekRadialTuningModel {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            pointer-events: none;
+        }
+
+        .seekRadialTuningModel > canvas {
+            position: absolute;
+            display: block;
+            pointer-events: none;
         }
 
         #rBar {
@@ -1845,6 +1834,20 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
         .mKControlFace .mKnob2 {
             margin: 0;
+        }
+
+        .mKnob,
+        .mKnob2 {
+            position: relative;
+        }
+
+        .mKnob2 > canvas,
+        .mKnob > canvas,
+        .mKnobsWrap .mKdial > canvas,
+        .pageBusKnob > canvas {
+            position: absolute;
+            display: block;
+            pointer-events: none;
         }
 
 
@@ -2400,10 +2403,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             position: absolute;
             left: 50%;
             top: 50%;
-            width: auto;
             height: var(--knob-h);
+            aspect-ratio: 102 / 115;
+            background: url('<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>') center / contain no-repeat;
             transform: translate(-49.5%, -55.2%) rotate(0deg);
-            transform-origin: 50% 50%;
+            transform-origin: 49.5% 55.2%;
             cursor: var(--m2-cursor-pointer);
             touch-action: none;
         }
@@ -2748,6 +2752,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             align-items: flex-start;
             gap: 2px;
             overflow-x: auto;
+            zoom: var(--m2-terminal-scale, 1);
         }
 
         #mTerminal {
@@ -3265,7 +3270,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
     <div id="loaderOverlay" style="position:fixed;inset:0;background:black;z-index:99999;display:flex;align-items:center;justify-content:center;">
         <div id="pageBusControl" class="pageBusControl" role="application" tabindex="0" aria-label="Page control bus selector" aria-busy="true">
             <div class="pageBusDial">
-                <img id="pageBusKnob" class="pageBusKnob" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/knob.png'), ENT_QUOTES, 'UTF-8') ?>" draggable="false" alt="">
+                <span id="pageBusKnob" class="pageBusKnob"></span>
             </div>
             <img id="pageBusLight" class="pageBusLight" src="<?= htmlspecialchars(m2_versioned_asset('/m/img/lightforalignoff.png'), ENT_QUOTES, 'UTF-8') ?>" draggable="false" alt="READIE">
             <div id="pageBusInstrument" class="pageBusInstrument" role="group" aria-label="Page control electrical instruments">
@@ -3506,38 +3511,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     <filter id="seekRadialHandShadow" x="-30%" y="-30%" width="160%" height="160%">
                         <feDropShadow dx="2" dy="2" stdDeviation="1.5" flood-color="#000" flood-opacity=".85"/>
                     </filter>
-                    <mask id="seekRadialTuningOuterScoopMask" x="-42" y="-42" width="84" height="84" maskUnits="userSpaceOnUse">
-                        <rect x="-42" y="-42" width="84" height="84" fill="#000"/>
-                        <circle cx="0" cy="0" r="37" fill="#fff"/>
-                        <g fill="#000">
-                            <circle cx="0" cy="-37" r="3.7"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(30)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(60)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(90)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(120)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(150)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(180)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(210)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(240)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(270)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(300)"/>
-                            <circle cx="0" cy="-37" r="3.7" transform="rotate(330)"/>
-                        </g>
-                    </mask>
-                    <mask id="seekRadialTuningInnerScoopMask" x="-30" y="-30" width="60" height="60" maskUnits="userSpaceOnUse">
-                        <rect x="-30" y="-30" width="60" height="60" fill="#000"/>
-                        <circle cx="0" cy="0" r="24" fill="#fff"/>
-                        <g fill="#000">
-                            <circle cx="0" cy="-24" r="3.6"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(45)"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(90)"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(135)"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(180)"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(225)"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(270)"/>
-                            <circle cx="0" cy="-24" r="3.6" transform="rotate(315)"/>
-                        </g>
-                    </mask>
                 </defs>
                 <g id="seekRadialGauge">
                     <circle class="seekRadialBezelOuter" cx="195" cy="190" r="171"/>
@@ -3566,21 +3539,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         <rect class="seekRadialButtonCap" x="92" y="656" width="64" height="38" rx="4"/>
                         <text class="seekRadialButtonCopy" x="124" y="684">SET</text>
                     </g>
-                    <g transform="translate(296 709) scale(1.7)">
-                        <circle class="seekRadialTuningOuterBase" cx="0" cy="0" r="39"/>
+                    <g transform="translate(296 709) scale(2.55)">
                         <g id="seekRadialSectionKnob" class="seekRadialKnobControl" tabindex="0" role="slider" aria-label="Standby section" aria-valuemin="0" aria-valuemax="99" aria-valuenow="0">
-                            <circle class="seekRadialTuningHit" cx="0" cy="0" r="39"/>
-                            <g id="seekRadialSectionRotor">
-                                <circle class="seekRadialTuningOuterRing" cx="0" cy="0" r="37" mask="url(#seekRadialTuningOuterScoopMask)"/>
-                            </g>
+                            <circle class="seekRadialTuningHit" cx="2" cy="-1" r="28.5"/>
                         </g>
-                        <circle class="seekRadialTuningInnerBase" cx="0" cy="0" r="26"/>
                         <g id="seekRadialTimeKnob" class="seekRadialKnobControl" tabindex="0" role="slider" aria-label="Standby time" aria-valuemin="0" aria-valuemax="59939" aria-valuenow="0" aria-valuetext="1:01">
-                            <circle class="seekRadialTuningHit" cx="0" cy="0" r="26"/>
-                            <g id="seekRadialTimeRotor">
-                                <circle class="seekRadialTuningInnerRing" cx="0" cy="0" r="24" mask="url(#seekRadialTuningInnerScoopMask)"/>
-                            </g>
+                            <circle class="seekRadialTuningHit" cx="2" cy="-1" r="22"/>
                         </g>
+                        <foreignObject x="-28" y="-31" width="60" height="60" pointer-events="none"><div xmlns="http://www.w3.org/1999/xhtml" id="seekRadialTuningModel" class="seekRadialTuningModel"></div></foreignObject>
                     </g>
                 </g>
             </svg>
@@ -3820,8 +3786,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 this.circuit = circuit;
                 this.closed = circuit.initialClosed !== false;
                 this.conducting = false;
+                this.bound = false;
                 this.render();
-                this.host.addEventListener('click', () => this.setClosed(!this.closed));
+                this.host.addEventListener('click', () => this.host.dispatchEvent(new CustomEvent('breakercommand', {
+                    bubbles: true,
+                    detail: {
+                        id: this.circuit.id,
+                        closed: !this.closed,
+                        members: [...this.circuit.members]
+                    }
+                })));
             }
 
             render() {
@@ -3848,22 +3822,14 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 this.synchronizeState();
             }
 
-            setClosed(closed, emit = true) {
+            setClosed(closed) {
                 const next = Boolean(closed);
+                const audible = this.bound;
+                this.bound = true;
                 if (next === this.closed) return false;
                 this.closed = next;
                 this.synchronizeState();
-                if (emit) {
-                    panelSoundBank.play('circuitBreaker');
-                    this.host.dispatchEvent(new CustomEvent('breakercommand', {
-                        bubbles: true,
-                        detail: {
-                            id: this.circuit.id,
-                            closed: this.closed,
-                            members: [...this.circuit.members]
-                        }
-                    }));
-                }
+                if (audible) panelSoundBank.play('circuitBreaker');
                 return true;
             }
 
@@ -4273,6 +4239,181 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             return Object.freeze(value);
         };
 
+        const subscribeChange = (target, apply) => {
+            let queued = false;
+            const run = () => {
+                queued = false;
+                apply();
+            };
+            target.addEventListener('change', () => {
+                if (queued) return;
+                queued = true;
+                if (document.hidden) setTimeout(run, 0);
+                else requestAnimationFrame(run);
+            });
+        };
+
+        const topKnobModel = (() => {
+            const PIXELS_PER_MM_PER_KNOB_HEIGHT = 49.4 / (115 * 12);
+            const MODELS = Object.freeze({
+                rotor: Object.freeze({ url: '/m/img/rotor.stl', pivot: [-221.4946, 136.2918, 386.9], pointer: 0, diameter: 24 }),
+                knob: Object.freeze({ url: '/m/img/knob.stl', pivot: [0, 0, 9.5], pointer: 180 }),
+                tuningOuter: Object.freeze({ url: '/m/img/tuningouter.stl', pivot: [25, 24.6, 13.5], pointer: 0 }),
+                tuningInner: Object.freeze({ url: '/m/img/tuninginner.stl', pivot: [25, 24.6, 13.5], pointer: 0 })
+            });
+            const FACES = Object.freeze({
+                rotate: Object.freeze({ parts: Object.freeze(['rotor']), centre: [0.5, 0.5], pointer: 0 }),
+                knob: Object.freeze({ parts: Object.freeze(['knob']), centre: [50.4 / 102, 63.3 / 115], pointer: 210.5 }),
+                tuning: Object.freeze({ parts: Object.freeze(['tuningOuter', 'tuningInner']), centre: [0.5, 0.5], pointer: 0, unitsPerMm: 27 / 8.2672 })
+            });
+            const views = new Map();
+            const meshes = new Map();
+            const loads = new Map();
+            let stagePromise = null;
+            let stage = null;
+            const draw = view => {
+                const face = FACES[view.face];
+                const element = view.element;
+                const boxWidth = element.clientWidth;
+                const boxHeight = element.clientHeight;
+                const unitsPerMm = face.unitsPerMm ||
+                    (parseFloat(getComputedStyle(element).getPropertyValue('--knob-h')) || 27) * PIXELS_PER_MM_PER_KNOB_HEIGHT;
+                const reach = Math.max(...face.parts.map(part => meshes.get(part).userData.reach));
+                const rect = element.getBoundingClientRect();
+                const ratio = window.devicePixelRatio || 1;
+                const devicePerUnit = (boxWidth > 0 ? rect.width / boxWidth : 1) * ratio;
+                const size = Math.max(1, Math.round(2 * (reach * unitsPerMm + 1) * devicePerUnit));
+                const extent = size / devicePerUnit;
+                const snap = (local, origin) => {
+                    const device = origin * ratio + local * devicePerUnit;
+                    return local + (Math.round(device) - device) / devicePerUnit;
+                };
+                const style = view.canvas.style;
+                style.width = style.height = extent + 'px';
+                style.left = snap(face.centre[0] * boxWidth - extent / 2, rect.left) + 'px';
+                style.top = snap(face.centre[1] * boxHeight - extent / 2, rect.top) + 'px';
+                if (view.canvas.width !== size) {
+                    view.canvas.width = size;
+                    view.canvas.height = size;
+                }
+                const camera = stage.camera;
+                camera.left = camera.bottom = -extent / 2 / unitsPerMm;
+                camera.right = camera.top = extent / 2 / unitsPerMm;
+                camera.updateProjectionMatrix();
+                meshes.forEach((mesh, name) => {
+                    const index = face.parts.indexOf(name);
+                    mesh.visible = index >= 0;
+                    if (index >= 0) {
+                        mesh.rotation.z = -(view.angles[index] + face.pointer - MODELS[name].pointer) * Math.PI / 180;
+                    }
+                });
+                stage.renderer.setSize(size, size, false);
+                stage.renderer.render(stage.scene, camera);
+                const context = view.canvas.getContext('2d');
+                context.clearRect(0, 0, size, size);
+                context.drawImage(stage.renderer.domElement, 0, 0);
+            };
+            const mount = view => {
+                view.mounted = true;
+                view.element.removeAttribute('data-bg');
+                view.element.style.backgroundImage = 'none';
+                view.element.style.transform = view.base;
+                view.element.append(view.canvas);
+                const observer = new ResizeObserver(() => draw(view));
+                observer.observe(view.element);
+                const host = view.element.closest('svg');
+                if (host) observer.observe(host);
+                draw(view);
+            };
+            const ready = face => FACES[face].parts.every(part => meshes.has(part));
+            window.addEventListener('resize', () => views.forEach(view => {
+                if (view.mounted) draw(view);
+            }));
+            const createStage = () => stagePromise || (stagePromise = Promise.all([
+                import('three'),
+                import(m2VersionedAssetUrl('/m/js/three/STLLoader.js'))
+            ]).then(([THREE, { STLLoader }]) => {
+                const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+                renderer.setClearColor(0x000000, 0);
+                const scene = new THREE.Scene();
+                const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 100);
+                camera.position.set(0, 0, 50);
+                camera.lookAt(0, 0, 0);
+                const fill = new THREE.HemisphereLight(0xffffff, 0x808080, 4);
+                fill.position.set(0, 0, 1);
+                scene.add(fill);
+                const pageTop = new THREE.DirectionalLight(0xffffff, 4);
+                pageTop.position.set(0, Math.cos(Math.PI / 6), Math.sin(Math.PI / 6));
+                scene.add(pageTop);
+                return { THREE, loader: new STLLoader(), renderer, scene, camera };
+            }));
+            const loadModel = name => {
+                if (loads.has(name)) return loads.get(name);
+                const model = MODELS[name];
+                const pending = createStage().then(created => created.loader
+                    .loadAsync(m2VersionedAssetUrl(model.url))
+                    .then(geometry => {
+                        const THREE = created.THREE;
+                        geometry.translate(-model.pivot[0], -model.pivot[1], -model.pivot[2]);
+                        const positions = geometry.getAttribute('position');
+                        let reach = 0;
+                        for (let i = 0; i < positions.count; i++) {
+                            reach = Math.max(reach, Math.hypot(positions.getX(i), positions.getY(i)));
+                        }
+                        if (model.diameter) {
+                            const factor = model.diameter / (2 * reach);
+                            geometry.scale(factor, factor, factor);
+                            reach *= factor;
+                        }
+                        const material = { roughness: 0.55, metalness: 0.05 };
+                        if (geometry.hasColors) {
+                            const colors = geometry.getAttribute('color');
+                            const linear = new THREE.Color();
+                            for (let i = 0; i < colors.count; i++) {
+                                linear.fromBufferAttribute(colors, i).convertSRGBToLinear();
+                                colors.setXYZ(i, linear.r, linear.g, linear.b);
+                            }
+                            material.vertexColors = true;
+                        } else {
+                            material.color = 0xa0a0a0;
+                        }
+                        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial(material));
+                        mesh.userData.reach = reach;
+                        created.scene.add(mesh);
+                        meshes.set(name, mesh);
+                        stage = created;
+                        views.forEach(view => {
+                            if (!view.mounted && ready(view.face)) mount(view);
+                        });
+                    }))
+                    .catch(error => console.error(error));
+                loads.set(name, pending);
+                return pending;
+            };
+            return {
+                paint(element, angle, face, base = '') {
+                    if (!element) return;
+                    const angles = [].concat(angle);
+                    let view = views.get(element);
+                    if (!view) {
+                        view = { element, face, base, canvas: document.createElement('canvas'), angles, mounted: false };
+                        views.set(element, view);
+                    }
+                    view.angles = angles;
+                    if (view.mounted) {
+                        draw(view);
+                    } else if (ready(face)) {
+                        mount(view);
+                    } else {
+                        if (FACES[face].parts.length === 1) {
+                            element.style.transform = (base + ' rotate(' + angles[0] + 'deg)').trim();
+                        }
+                        FACES[face].parts.forEach(loadModel);
+                    }
+                }
+            };
+        })();
+
         const publishReadOnlyWindow = (name, value) => {
             const descriptor = Object.getOwnPropertyDescriptor(window, name);
             if (descriptor && !descriptor.configurable) return false;
@@ -4569,11 +4710,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             #value;
             #electricalInput = null;
 
-            constructor(name, value, { power = null, referenceVoltage = 5 } = {}) {
+            constructor(name, value, { power = null, referenceVoltage = 5, signalFloor = 0, signalCeiling = referenceVoltage } = {}) {
                 super();
                 this.name = name;
                 this.power = power;
                 this.referenceVoltage = referenceVoltage;
+                this.signalFloor = signalFloor;
+                this.signalCeiling = signalCeiling;
                 this.#value = value;
                 power?.addEventListener('change', () => this.dispatchEvent(new Event('change')));
             }
@@ -4589,11 +4732,25 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             get signalVoltage() {
                 return this.#electricalInput
                     ? this.#electricalInput.signalVoltage
-                    : (this.powered ? this.#value * this.referenceVoltage : 0);
+                    : (this.powered ? this.signalFloor + this.#value * (this.signalCeiling - this.signalFloor) : 0);
+            }
+
+            get signalFault() {
+                if (!this.powered || this.signalFloor <= 0) return false;
+                const signal = this.signalVoltage;
+                return signal < this.signalFloor / 2 ||
+                    signal > (this.signalCeiling + this.referenceVoltage) / 2;
+            }
+
+            get effectiveValue() {
+                if (!this.powered || this.signalFault) return null;
+                const span = this.signalCeiling - this.signalFloor;
+                return Math.max(0, Math.min(1, (this.signalVoltage - this.signalFloor) / span));
             }
 
             get state() {
                 if (!this.powered) return 'OPEN';
+                if (this.signalFault) return 'FAULT';
                 return this.#electricalInput?.state || 'POWERED';
             }
 
@@ -4772,11 +4929,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             version: 1,
             validate: commandPayloadIsObject
         }));
-        elektroniksCommands.define('PANEL.MECHANICAL.PLAY', {
-            version: 1,
-            validate: payload => commandPayloadIsObject(payload) &&
-                typeof payload.name === 'string' && payload.name.length > 0
-        });
         elektroniksCommands.define('SOUND.UI.PLAY', {
             version: 1,
             validate: payload => commandPayloadIsObject(payload) &&
@@ -4831,16 +4983,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 super();
                 this.name = 'SOUND ELEKTRONIKS UNIT';
                 this.powerContact = powerContact;
-                this.volume = new AnalogControl('VOLUME', 1, { power: powerContact });
-                this.speed = new AnalogControl('SPEED', 0.5, { power: powerContact });
-                this.reverb = new AnalogControl('REVERB', 0, { power: powerContact });
+                const liveZero = { power: powerContact, signalFloor: 0.5, signalCeiling: 4.5 };
+                this.volume = new AnalogControl('VOLUME', 1, liveZero);
+                this.speed = new AnalogControl('SPEED', 0.5, liveZero);
+                this.reverb = new AnalogControl('REVERB', 0, liveZero);
                 this.coupling = new ElektroniksSelector(
                     'L COUPLING', ['OFF', 'ON'], 'ON', { power: powerContact }
                 );
                 this.bus = bus;
                 this.bus.register(
                     'SOUND.SPEED.CENTRE',
-                    () => this.speed.setValue(0.5),
+                    () => driveR2Reset(),
                     () => this.powerContact.closed
                 );
                 this.bus.register(
@@ -4880,11 +5033,31 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 return true;
             }
 
-            get playbackRate() {
-                const y = (0.5 - this.speed.value) * 100;
+            static rateAt(control) {
+                const y = (0.5 - control) * 100;
                 const x = Math.abs(y);
                 const delta = x <= 10 ? 0.01 * x : 0.1 + 0.01 * (x - 10) + Math.pow(x - 10, 2) / 900;
                 return Math.max(0.05, y >= 0 ? 1 + delta : 1 - delta);
+            }
+
+            get limp() {
+                return this.volume.signalFault || this.speed.signalFault || this.reverb.signalFault;
+            }
+
+            get outputVolume() {
+                return this.volume.effectiveValue ?? 0;
+            }
+
+            get outputSpeed() {
+                return this.speed.effectiveValue ?? 0.5;
+            }
+
+            get outputReverb() {
+                return this.reverb.effectiveValue ?? 0;
+            }
+
+            get playbackRate() {
+                return SoundElektroniksUnit.rateAt(this.outputSpeed);
             }
 
             pulseR2() {
@@ -5158,10 +5331,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         const setTimeBusSetClosed = closed => timeBusInputs?.setInput?.setClosed(closed) || false;
         const timeBusSetIsActive = () => !!timeBusInputs?.setInput?.active;
         const soundCircuit = new SoundElektroniksUnit(elektroniksBus, soundElektroniksPower);
-        elektroniksBus.register(
-            'PANEL.MECHANICAL.PLAY',
-            payload => driveMechanicalSound(payload.name)
-        );
         const archiveCircuit = new ArchiveElektroniksUnit(
             elektroniksBus,
             archiveElektroniksPower,
@@ -5200,6 +5369,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     sound: {
                         powered: soundElektroniksPower.closed,
                         active: soundCircuit.active,
+                        limp: soundCircuit.limp,
+                        faults: ['volume', 'speed', 'reverb'].filter(name => soundCircuit[name].signalFault),
                         coupling: soundCircuit.coupling.effectivePosition,
                         volume: soundCircuit.volume.value,
                         speed: soundCircuit.speed.value,
@@ -5382,7 +5553,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     source.loopStart = PANEL_SOUND_LOOPS[id][0];
                     source.loopEnd = PANEL_SOUND_LOOPS[id][1];
                 }
-                level.gain.value = gain * (electrical ? soundCircuit.volume.value : 1);
+                level.gain.value = gain * (electrical ? soundCircuit.outputVolume : 1);
                 const filter = lowpass === null ? null : ctx.createBiquadFilter();
                 if (filter) {
                     filter.type = 'lowpass';
@@ -5730,7 +5901,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 active.forEach(slot => {
                     if (slot.stopping || !slot.electrical) return;
                     slot.gain.gain.setTargetAtTime(
-                        slot.baseGain * soundCircuit.volume.value,
+                        slot.baseGain * soundCircuit.outputVolume,
                         context.currentTime,
                         0.01
                     );
@@ -5806,6 +5977,12 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
         const M2_ARCHIVE_FIXED_ASSETS = [
             '/img/logomonochrome.ico',
+            '/m/js/three/three.module.min.js',
+            '/m/js/three/STLLoader.js',
+            '/m/img/rotor.stl',
+            '/m/img/knob.stl',
+            '/m/img/tuningouter.stl',
+            '/m/img/tuninginner.stl',
             '/css/fonts/JunicodeVF-Roman.woff2',
             '/css/fonts/JunicodeVF-Italic.woff2',
             '/css/fonts/nullpunktsenergiefont-Regular.ttf',
@@ -6116,7 +6293,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         }
 
         function playMechanicalSound(name) {
-            return elektroniksBus.transmit('PANEL.MECHANICAL.PLAY', { name }, 'PAGE PANEL').handled;
+            return driveMechanicalSound(name);
         }
 
         function driveElectricalSound(name) {
@@ -6239,14 +6416,13 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             const revTime = document.getElementById('revTime');
             const revFill = document.getElementById('revFill');
             const revDot = document.getElementById('revDot');
-            const reverb = soundCircuit.reverb.value;
+            const reverb = soundCircuit.outputReverb;
             if (revDot) revDot.style.top = ((1 - reverb) * 100) + '%';
             if (revFill) {
                 revFill.style.top = ((1 - reverb) * 100) + '%';
                 revFill.style.height = (reverb * 100) + '%';
             }
             if (revTime) revTime.textContent = Math.round(reverb * 100) + '%';
-            renderRevKnob();
             if (wetGain && dryGain && audioCtx && wetInputGain && convolver) {
                 const time = audioCtx.currentTime;
                 const retarget = (param, value) => {
@@ -6479,8 +6655,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 if (!audio.paused) audio.pause();
                 return Promise.resolve(false);
             }
-            document.dispatchEvent(new CustomEvent('m2songchange', { detail: audio }));
             playbackCircuit?.energizePl();
+            if (playbackCircuit && !playbackCircuit.plContact.active) return Promise.resolve(false);
+            document.dispatchEvent(new CustomEvent('m2songchange', { detail: audio }));
             try {
                 const result = audio.play();
                 if (!result || typeof result.catch !== 'function') return Promise.resolve(true);
@@ -6766,7 +6943,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             currentAudio = audio;
             setActiveVirtualMember(audio);
             loadAudio(audio);
-            audio.volume = soundCircuit.volume.value;
+            audio.volume = soundCircuit.outputVolume;
             audio.playbackRate = soundCircuit.playbackRate;
             return switchingCard;
         }
@@ -6813,7 +6990,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             currentAudio = audio;
             setActiveVirtualMember(audio);
             loadAudio(audio);
-            audio.volume = soundCircuit.volume.value;
+            audio.volume = soundCircuit.outputVolume;
             audio.playbackRate = soundCircuit.playbackRate;
             audio.loop = false;
             const apply = () => {
@@ -7336,8 +7513,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 this.sectionHand = svg.querySelector('#seekRadialSectionHand');
                 this.sectionKnob = svg.querySelector('#seekRadialSectionKnob');
                 this.timeKnob = svg.querySelector('#seekRadialTimeKnob');
-                this.sectionRotor = svg.querySelector('#seekRadialSectionRotor');
-                this.timeRotor = svg.querySelector('#seekRadialTimeRotor');
+                this.tuningModel = svg.querySelector('#seekRadialTuningModel');
+                this.paintedTuning = null;
                 this.activeReadout = new SeekRadialReadout(svg.querySelector('#seekRadialActiveDigits'), 'Active position');
                 this.standbyReadout = new SeekRadialReadout(svg.querySelector('#seekRadialStandbyDigits'), 'Standby target');
                 this.pointerId = null;
@@ -7630,12 +7807,18 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 });
             }
 
+            paintTuning() {
+                const angles = [this.sectionMechanicalAngle, this.timeMechanicalAngle];
+                if (this.paintedTuning?.[0] === angles[0] && this.paintedTuning[1] === angles[1]) return;
+                this.paintedTuning = angles;
+                topKnobModel.paint(this.tuningModel, angles, 'tuning');
+            }
+
             rotateKnob(kind, steps) {
                 const increment = kind === 'section' ? 12 : 8;
                 const property = kind === 'section' ? 'sectionMechanicalAngle' : 'timeMechanicalAngle';
-                const rotor = kind === 'section' ? this.sectionRotor : this.timeRotor;
                 this[property] = ((this[property] + steps * increment) % 360 + 360) % 360;
-                rotor.setAttribute('transform', `rotate(${this[property]})`);
+                this.paintTuning();
                 return steps * increment;
             }
 
@@ -7906,8 +8089,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 this.activeReadout.render(activeSection, model.activeSeconds);
                 this.standbyReadout.render(model.targetSection, model.targetSeconds);
-                this.sectionRotor.setAttribute('transform', `rotate(${this.sectionMechanicalAngle})`);
-                this.timeRotor.setAttribute('transform', `rotate(${this.timeMechanicalAngle})`);
+                this.paintTuning();
                 this.sectionKnob.setAttribute('aria-valuemax', String(model.sectionCount || 0));
                 this.sectionKnob.setAttribute('aria-valuenow', String(model.targetSection || 0));
                 this.timeKnob.setAttribute('aria-valuemax', String(Math.max(0, Math.floor(model.targetLimitSeconds || 0))));
@@ -7986,8 +8168,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             return true;
         };
         window.__npTerminalManualStandby = () => ({ ...manualStandbyBaseline });
-        let renderSpeedKnob = () => {},
-            renderRevKnob = () => {},
+        let driveR2Reset = () => false,
+            renderSpeedKnob = () => {},
             renderVolKnob = () => {},
             paintKSwitch = () => {},
             paintKrSwitch = () => {},
@@ -8305,26 +8487,18 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
         function setKrMode(on) {
             const next = on ? 'ON' : 'OFF';
-            if (!playbackCircuit || !playbackCircuit.kr.setPosition(next)) {
-                paintKrSwitch();
-                return false;
-            }
+            if (!playbackCircuit || !playbackCircuit.kr.setPosition(next)) return false;
             if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
             else clearKrSectionLoop();
-            paintKrSwitch();
             return true;
         }
 
         function setLrcMode(on) {
             const next = on ? 'ON' : 'OFF';
-            if (!playbackCircuit || !playbackCircuit.k.setPosition(next)) {
-                paintKSwitch();
-                return false;
-            }
+            if (!playbackCircuit || !playbackCircuit.k.setPosition(next)) return false;
             kBtn.style.color = kIsOn() ? 'white' : 'yellow';
             if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
             else clearKrSectionLoop();
-            paintKSwitch();
             return true;
         }
 
@@ -8575,8 +8749,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
         function updateSpeedVisuals() {
             renderSpeedKnob();
             if (lIsOn()) {
-                soundCircuit.reverb.setValue(Math.min(1, Math.pow(Math.max(0, 1 - soundCircuit.playbackRate), 2 / 3)));
-                updateReverbVisuals();
+                soundCircuit.reverb.setValue(Math.min(1, Math.pow(Math.max(0, 1 - SoundElektroniksUnit.rateAt(soundCircuit.speed.value)), 2 / 3)));
             }
         }
 
@@ -8789,7 +8962,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 playbackCircuit?.dropPl();
                 return;
             }
-            playbackCircuit?.energizePl();
+            if (playbackCircuit && !playbackCircuit.plContact.active) {
+                e.target.pause();
+                return;
+            }
             playbackCircuit?.setActivity(e.target, true);
             soundCircuit.setActivity(e.target, true);
             e.target.playbackRate = soundCircuit.playbackRate;
@@ -8851,7 +9027,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             if (e.target.tagName !== 'AUDIO') return;
             playbackCircuit?.setActivity(e.target, false);
             soundCircuit.setActivity(e.target, false);
-            if (e.target === currentAudio && !e.target.ended) playbackCircuit?.dropPl();
+            if (e.target === currentAudio && e.target.paused && !e.target.ended) playbackCircuit?.dropPl();
             pBtn.textContent = '▶';
             const media = activeMediaForCard(e.target.closest('.card'));
             const v = media?.matches('video[data-sync="true"]') ? media : null;
@@ -8943,7 +9119,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             currentAudio = a;
             setActiveVirtualMember(a);
             loadAudio(a);
-            a.volume = soundCircuit.volume.value;
+            a.volume = soundCircuit.outputVolume;
             a.playbackRate = soundCircuit.playbackRate;
             a.loop = false;
             pBtn.textContent = '||';
@@ -9542,6 +9718,10 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
         };
         playbackElektroniksPower.addEventListener('change', applyPlaybackCircuitPower);
+        playbackCircuit.plContact.addEventListener('change', () => {
+            if (playbackCircuit.plContact.active || !currentAudio || currentAudio.paused) return;
+            currentAudio.pause();
+        });
         applyPlaybackCircuitPower();
         const applySoundCircuitPower = () => {
             const powered = soundCircuit.powerContact.closed;
@@ -9636,7 +9816,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     currentAudio = a;
                     setActiveVirtualMember(a);
                     loadAudio(a);
-                    a.volume = soundCircuit.volume.value;
+                    a.volume = soundCircuit.outputVolume;
                     a.playbackRate = soundCircuit.playbackRate;
                     pBtn.textContent = '||';
                     playAudio(a, 'next card');
@@ -9657,7 +9837,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     currentAudio = a;
                     setActiveVirtualMember(a);
                     loadAudio(a);
-                    a.volume = soundCircuit.volume.value;
+                    a.volume = soundCircuit.outputVolume;
                     a.playbackRate = soundCircuit.playbackRate;
                     pBtn.textContent = '||';
                     playAudio(a, 'previous card');
@@ -9735,10 +9915,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
 
             const mVol = $('mVol');
-            let volumeUpdateQueued = false;
             let manualVolumeBaseline = Math.cbrt(soundCircuit.volume.value);
             const renderVol = () => {
-                if (mVol) mVol.style.transform = 'rotate(' + (Math.cbrt(soundCircuit.volume.value) * 305) + 'deg)';
+                topKnobModel.paint(mVol, Math.cbrt(soundCircuit.volume.value) * 305, 'knob');
             };
             const setVol = (lin, source = 'manual') => {
                 if (source === 'manual' && volumeGearMotion) {
@@ -9748,14 +9927,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 lin = Math.max(0, Math.min(1, lin));
                 if (!soundCircuit.volume.setValue(Math.pow(lin, 3))) return false;
                 if (source === 'manual') manualVolumeBaseline = lin;
-                if (!volumeUpdateQueued) {
-                    volumeUpdateQueued = true;
-                    requestAnimationFrame(() => {
-                        volumeUpdateQueued = false;
-                        propagateVolume();
-                        renderVol();
-                    });
-                }
                 return true;
             };
             let volumeGearMotion = null;
@@ -9812,21 +9983,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
 
             const mRev = $('mRev');
-            let reverbUpdateQueued = false;
             const renderRev = () => {
-                if (mRev) mRev.style.transform = 'rotate(' + (soundCircuit.reverb.value * 305) + 'deg)';
+                topKnobModel.paint(mRev, soundCircuit.reverb.value * 305, 'knob');
             };
             const setRev = v => {
-                if (!soundCircuit.reverb.setValue(v)) return false;
-                renderRev();
-                if (!reverbUpdateQueued) {
-                    reverbUpdateQueued = true;
-                    requestAnimationFrame(() => {
-                        reverbUpdateQueued = false;
-                        updateReverbVisuals();
-                    });
-                }
-                return true;
+                return soundCircuit.reverb.setValue(v);
             };
 
 
@@ -9888,7 +10049,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
 
             const mSpd = $('mSpd');
-            let speedUpdateQueued = false;
             const speedRateAt = control => {
                 const y = (0.5 - control) * 100;
                 const x = Math.abs(y);
@@ -9897,7 +10057,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             let manualSpeedBaseline = speedRateAt(soundCircuit.speed.value);
             const renderSpd = () => {
-                if (mSpd) mSpd.style.transform = 'rotate(' + ((0.5 - soundCircuit.speed.value) * 360) + 'deg)';
+                topKnobModel.paint(mSpd, (0.5 - soundCircuit.speed.value) * 360, 'rotate');
             };
             const setSpd = (p, source = 'manual') => {
                 if (source === 'manual' && speedGearMotion) {
@@ -9906,14 +10066,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
                 if (!soundCircuit.speed.setValue(p)) return false;
                 if (source === 'manual') manualSpeedBaseline = speedRateAt(p);
-                if (!speedUpdateQueued) {
-                    speedUpdateQueued = true;
-                    requestAnimationFrame(() => {
-                        speedUpdateQueued = false;
-                        updateSpeedVisuals();
-                        propagateSpeed();
-                    });
-                }
                 return true;
             };
             let speedGearMotion = null;
@@ -9928,7 +10080,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     if (speedRateAt(middle) > bounded) lower = middle;
                     else upper = middle;
                 }
-                const to = (lower + upper) / 2;
+                return driveSpeedGear((lower + upper) / 2, source);
+            };
+            const driveSpeedGear = (to, source) => {
                 if (speedGearMotion?.to === to) return true;
                 const from = soundCircuit.speed.value;
                 if (Math.abs(to - from) < 0.000001) return true;
@@ -9981,7 +10135,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             let sectionWindowUpdateQueued = false;
             let manualSectionWindowBaseline = Math.round(playbackCircuit.sectionWindow.value * SECTION_WINDOW_MAX_SECONDS);
             const renderR3 = () => {
-                if (mR3) mR3.style.transform = 'rotate(' + ((playbackCircuit.sectionWindow.value * 305) - 152.5) + 'deg)';
+                topKnobModel.paint(mR3, (playbackCircuit.sectionWindow.value * 305) - 152.5, 'rotate');
             };
             const setR3 = (value, source = 'manual') => {
                 if (source === 'manual' && sectionWindowGearMotion) {
@@ -10000,7 +10154,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         collageAudio = null;
                         collageSegEnd = null;
                         if (krFeedEnergized()) syncKrSectionLoop(currentAudio);
-                        renderR3();
                     });
                 }
                 return true;
@@ -10068,10 +10221,6 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     } catch (_) {}
                     mR2.src = aimg(soundElektroniksPower.closed ? 'r2on.png' : 'r2onnoelec.png');
                     soundCircuit.pulseR2();
-                    updateSpeedVisuals();
-                    propagateSpeed();
-                    renderSpd();
-                    window.__npTerminalResetGlobal?.();
                     panelSoundBank.play('resetControl');
                     panelSoundBank.play('confirmationChime', { electrical: true });
                 });
@@ -10139,21 +10288,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             paintPl();
 
 
-            function knobs(el, steps, onStep, sound) {
-                let i = 0;
+            function knobs(el, steps, currentIndex, requestStep, sound) {
                 const paint = () => {
-                    el.style.transform = 'translate(-49.5%, -55.2%) rotate(' + steps[i].deg + 'deg)';
+                    topKnobModel.paint(el, steps[currentIndex()].deg, 'knob', 'translate(-49.5%, -55.2%)');
                 };
                 const step = dir => {
+                    const i = currentIndex();
                     const n = Math.max(0, Math.min(steps.length - 1, i + dir));
-                    if (n !== i) {
-                        i = n;
-                        (sound || click)();
-                        paint();
-                        onStep(steps[i], i);
-                        return true;
-                    }
-                    return false;
+                    if (n === i || !requestStep(steps[n], n)) return false;
+                    (sound || click)();
+                    return true;
                 };
                 el.addEventListener('click', () => step(-1));
                 el.addEventListener('contextmenu', e => {
@@ -10168,23 +10312,17 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 });
                 paint();
                 return {
-                    sync: combo => {
-                        const n = steps.findIndex(s => s.combo === combo);
-                        if (n >= 0) {
-                            i = n;
-                            paint();
-                        }
-                    },
+                    paint,
                     drive: combo => new Promise(resolve => {
                         const target = steps.findIndex(s => s.combo === combo);
-                        if (target < 0 || target === i) {
+                        if (target < 0 || target === currentIndex()) {
                             resolve(target >= 0);
                             return;
                         }
-                        const direction = target > i ? 1 : -1;
+                        const direction = target > currentIndex() ? 1 : -1;
                         const advance = () => {
-                            if (i === target || !step(direction)) {
-                                resolve(i === target);
+                            if (currentIndex() === target || !step(direction)) {
+                                resolve(currentIndex() === target);
                                 return;
                             }
                             window.setTimeout(advance, 120);
@@ -10221,53 +10359,44 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             };
             const mISR = $('mISR');
             let isrCtl = null;
-            if (mISR) isrCtl = knobs(mISR, ISR_STEPS, s => {
-                const position = s.combo === 'IR' ? 'I' : s.combo === 'SR' ? 'S' : s.combo === 'ER' ? 'E' : s.combo === 'R' ? 'R' : 'OFF';
-                setIsrPosition(position);
-            }, () => panelSoundBank.play('isrRelease'));
+            if (mISR) {
+                isrCtl = knobs(mISR, ISR_STEPS, () => Math.max(0, ISR_STEPS.findIndex(s => s.combo === curCombo())), s => {
+                    const position = s.combo === 'IR' ? 'I' : s.combo === 'SR' ? 'S' : s.combo === 'ER' ? 'E' : s.combo === 'R' ? 'R' : 'OFF';
+                    return setIsrPosition(position);
+                }, () => panelSoundBank.play('isrRelease'));
+                subscribeChange(playbackCircuit.isr, isrCtl.paint);
+            }
             window.__npTerminalSetIsr = position => isrCtl?.drive(position === 'I' ? 'IR' : position === 'S' ? 'SR' : position === 'E' ? 'ER' : position === 'R' ? 'R' : '') || Promise.resolve(false);
 
 
-            function switchControl(img, states, onChange, sound, reverseClicks) {
-                let i = states.findIndex(s => s.def);
-                if (i < 0) i = 0;
+            function switchControl(img, states, currentName, requestState, sound, reverseClicks) {
+                const currentIndex = () => Math.max(0, states.findIndex(s => s.name === currentName()));
                 const paint = () => {
+                    const i = currentIndex();
                     img.src = aimg(states[i].f);
                     img.style.transform = 'translate(-49.2%, ' + states[i].ty + '%)';
                     img.dataset.m2SwitchCursor = i === 0 ? 'left' : i === states.length - 1 ? 'right' : 'both';
                 };
                 const setIdx = n => {
                     n = Math.max(0, Math.min(states.length - 1, n));
-                    if (n !== i) {
-                        i = n;
-                        (sound || arm)();
-                        paint();
-                        onChange(states[i], i);
-                    }
+                    if (n === currentIndex() || !requestState(states[n], n)) return;
+                    (sound || arm)();
                 };
                 const leftDir = reverseClicks ? +1 : -1;
-                img.addEventListener('click', () => setIdx(i + leftDir));
+                img.addEventListener('click', () => setIdx(currentIndex() + leftDir));
                 img.addEventListener('contextmenu', e => {
                     e.preventDefault();
-                    setIdx(i - leftDir);
+                    setIdx(currentIndex() - leftDir);
                 });
                 img.addEventListener('wheel', e => {
                     e.preventDefault();
                     e.stopPropagation();
-                    setIdx(i + (e.deltaY < 0 ? +1 : -1));
+                    setIdx(currentIndex() + (e.deltaY < 0 ? +1 : -1));
                 }, {
                     passive: false
                 });
                 paint();
-                return {
-                    sync: name => {
-                        const n = states.findIndex(state => state.name === name);
-                        if (n >= 0) {
-                            i = n;
-                            paint();
-                        }
-                    }
-                };
+                return { paint };
             }
             const ST = {
                 D: {
@@ -10296,17 +10425,15 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 {
                     f: ST.C.f,
                     ty: ST.C.ty,
-                    name: 'C',
-                    def: true
+                    name: 'C'
                 },
                 {
                     f: ST.U.f,
                     ty: ST.U.ty,
                     name: 'U'
                 },
-            ], s => {
-                playbackCircuit.m.setPosition(s.name);
-            }, () => panelSoundBank.play('modeSwitch'), true);
+            ], () => playbackCircuit.m.position, s => playbackCircuit.m.setPosition(s.name), () => panelSoundBank.play('modeSwitch'), true);
+            if (navCtl) subscribeChange(playbackCircuit.m, navCtl.paint);
 
 
             const mK = $('mK');
@@ -10370,14 +10497,24 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
 
             renderSpeedKnob = renderSpd;
-            renderRevKnob = renderRev;
+            driveR2Reset = () => {
+                window.__npTerminalResetGlobal?.();
+                return driveSpeedGear(0.5, 'reset');
+            };
             renderVolKnob = renderVol;
+            subscribeChange(soundCircuit.volume, renderVol);
+            subscribeChange(soundCircuit.reverb, renderRev);
+            subscribeChange(soundCircuit.speed, updateSpeedVisuals);
+            subscribeChange(playbackCircuit.sectionWindow, renderR3);
+            subscribeChange(playbackCircuit.k, paintKSwitch);
+            subscribeChange(playbackCircuit.kr, paintKrSwitch);
             mSyncControls = () => {
                 renderSpd();
                 renderRev();
                 renderVol();
-                if (isrCtl) isrCtl.sync(curCombo());
-                if (navCtl) navCtl.sync(playbackCircuit.m.position);
+                renderR3();
+                isrCtl?.paint();
+                navCtl?.paint();
                 paintKSwitch();
                 paintKrSwitch();
                 paintPl();
@@ -10417,15 +10554,18 @@ $ndSongDurations = m2_nd_song_durations(array_map(
 
         const propagateVolume = () => {
             document.querySelectorAll('audio').forEach(a => {
-                a.volume = soundCircuit.volume.value;
+                a.volume = soundCircuit.outputVolume;
             });
             Object.entries(uiAudio).forEach(([name, audio]) => {
                 if (ELECTRICAL_SOUND_NAMES.has(name) || name === 'firealarm') {
-                    audio.volume = soundCircuit.volume.value;
+                    audio.volume = soundCircuit.outputVolume;
                 }
             });
             panelSoundBank.updateVolume();
         };
+        subscribeChange(soundCircuit.volume, propagateVolume);
+        subscribeChange(soundCircuit.speed, propagateSpeed);
+        subscribeChange(soundCircuit.reverb, updateReverbVisuals);
 
         window.addEventListener('DOMContentLoaded', () => {
             propagateVolume();
@@ -10457,7 +10597,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         currentAudio = a;
                         setActiveVirtualMember(a);
                         loadAudio(a);
-                        a.volume = soundCircuit.volume.value;
+                        a.volume = soundCircuit.outputVolume;
                         a.playbackRate = soundCircuit.playbackRate;
                         try { a.currentTime = 0; } catch (e) {}
                         updateLoopState();
@@ -10631,6 +10771,21 @@ $ndSongDurations = m2_nd_song_durations(array_map(
             }
         }
 
+        const terminalPair = document.querySelector('.mTerminalPair');
+        const scaleTerminalPair = () => {
+            const bodyStyle = getComputedStyle(document.body);
+            const room = document.body.clientWidth - parseFloat(bodyStyle.paddingLeft) - parseFloat(bodyStyle.paddingRight);
+            terminalPair.style.setProperty('--m2-terminal-scale', String(Math.min(1, room / 1666)));
+        };
+        new ResizeObserver(scaleTerminalPair).observe(document.body);
+        scaleTerminalPair();
+        const toggleTerminalPairAttached = () => {
+            const attached = terminalPair.style.position === 'fixed';
+            terminalPair.style.position = attached ? '' : 'fixed';
+            terminalPair.style.bottom = attached ? '' : '-11px';
+            terminalPair.style.zIndex = attached ? '' : '999999999';
+        };
+
         document.addEventListener('keydown', e => {
             if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
                 e.preventDefault();
@@ -10644,6 +10799,11 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 return;
             }
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+            if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'f' || e.key === 'F')) {
+                e.preventDefault();
+                toggleTerminalPairAttached();
+                return;
+            }
             if (!currentAudio) return;
             const key = e.key;
             if (key >= '0' && key <= '9') {
@@ -11047,7 +11207,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     currentAudio = audio;
                     setActiveVirtualMember(audio);
                     loadAudio(currentAudio);
-                    currentAudio.volume = soundCircuit.volume.value;
+                    currentAudio.volume = soundCircuit.outputVolume;
                     currentAudio.playbackRate = soundCircuit.playbackRate;
                 }
                 queuePhysicalSeek(currentAudio, time);
@@ -13330,12 +13490,16 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 constructor(name, circuit, supply, returnTerminal, powerContact, {
                     resistance = 56000,
                     referenceVoltage = 5,
+                    signalFloor = 0,
+                    signalCeiling = referenceVoltage,
                     wire
                 } = {}) {
                     super();
                     this.name = name;
                     this.powerContact = powerContact;
                     this.referenceVoltage = referenceVoltage;
+                    this.signalFloor = signalFloor;
+                    this.signalCeiling = signalCeiling;
                     this.load = circuit.addLoad(new DcPoweredLoad(
                         name + ' EXCITATION LOAD', { resistance }
                     ));
@@ -13355,7 +13519,9 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 }
 
                 get signalVoltage() {
-                    return this.state === 'POWERED' ? this.#value * this.referenceVoltage : 0;
+                    return this.state === 'POWERED'
+                        ? this.signalFloor + this.#value * (this.signalCeiling - this.signalFloor)
+                        : 0;
                 }
 
                 get voltage() {
@@ -13496,6 +13662,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                             return: returnName,
                             resistance,
                             referenceVoltage: device.referenceVoltage,
+                            signalFloor: device.signalFloor,
+                            signalCeiling: device.signalCeiling,
                             powerContact: device.power
                         });
                         device.bindElectricalInput(input);
@@ -13526,6 +13694,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         return: options.return || 'dc',
                         resistance: options.resistance || 56000,
                         referenceVoltage: control.referenceVoltage,
+                        signalFloor: control.signalFloor,
+                        signalCeiling: control.signalCeiling,
                         powerContact: control.power
                     });
                     control.bindElectricalInput(input);
@@ -13625,6 +13795,8 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                     {
                         resistance: spec.resistance,
                         referenceVoltage: spec.referenceVoltage,
+                        signalFloor: spec.signalFloor,
+                        signalCeiling: spec.signalCeiling,
                         wire: context.wire
                     }
                 ))
@@ -14912,7 +15084,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                         const control = m2CircuitBreakerPanel.getBreaker(id);
                         if (!control) throw new Error('Missing circuit breaker control: ' + id);
                         const synchronize = () => {
-                            control.setClosed(breaker.closed, false);
+                            control.setClosed(breaker.closed);
                             control.setConducting(breaker.conducting);
                         };
                         control.host.addEventListener('breakercommand', event => {
@@ -15400,7 +15572,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 render() {
                     const selector = this.bus.selector;
                     const ready = this.bus.schematic.readieLamp.energized;
-                    this.knob.style.transform = 'translate(-49.5%, -55.2%) rotate(' + this.angles[selector.index] + 'deg)';
+                    topKnobModel.paint(this.knob, this.angles[selector.index], 'knob', 'translate(-49.5%, -55.2%)');
                     this.light.src = m2VersionedAssetUrl(
                         ready ? '/m/img/lightforalignon.png' : '/m/img/lightforalignoff.png'
                     );
@@ -19051,7 +19223,7 @@ $ndSongDurations = m2_nd_song_durations(array_map(
                 const songId = activeSongId();
                 applySettings(songId ? effectiveSongSettings(songId) : persistedGlobalSettings, songId);
             };
-            window.__npTerminalResetGlobal = () => applySettings(persistedGlobalSettings, '', 'manual');
+            window.__npTerminalResetGlobal = () => applySettings({ ...persistedGlobalSettings, sectionWindow: '' }, '', 'manual');
             const pendingTerminalWrites = new Set();
             const globalDatabase = () => new Promise((resolve, reject) => {
                 const request = indexedDB.open('mTerminal', 1);
